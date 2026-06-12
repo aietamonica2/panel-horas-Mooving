@@ -1,0 +1,3 @@
+# Cloudflare Pages redirects (si necesitas rutas especiales)
+# Por defecto, sirve index.html para cualquier ruta
+/* /index.html 200
