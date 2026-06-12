@@ -1,127 +1,203 @@
 # Panel de Operaciones Mooving
 
-Panel interactivo para análisis de carga de trabajo, disponibilidad del equipo y distribución de horas por cliente y proyecto.
+Aplicación web moderna para análisis interactivo de carga de trabajo, disponibilidad del equipo y distribución de horas por cliente y proyecto.
 
-## Características
+**[Ver en vivo](https://panel-horas-mooving.pages.dev)**
 
-- 📊 **Dashboard interactivo** con KPIs en tiempo real
-- 🎛️ **Filtros multi-select** por meses, categorías y usuarios
-- 📤 **Carga de archivos CSV** dinámicamente
-- 📅 **Disponibilidad mensual** con cálculo de horas libres
-- ⏰ **Bolsa de Horas** - desglose de Tareas Internas y Reuniones
-- 📈 **Gráficos dinámicos** con Chart.js
-- 💼 **Distribución de carga** por empleado y cliente
-- 📱 **Diseño responsivo** para mobile y desktop
+## 🚀 Características
 
-## Requisitos del CSV
+- 📊 **Dashboard Interactivo** - KPIs en tiempo real (Total Horas, Promedio Diario, Usuarios Activos, Clientes Únicos)
+- 🎛️ **Filtros Multi-Select** - Filtra por meses, categorías y usuarios simultáneamente
+- 📤 **Carga de CSV** - Carga dinámicamente datos desde archivos CSV
+- 💼 **Distribución de Carga** - Análisis detallado por empleado y cliente
+- 📅 **Disponibilidad Mensual** - Cálculo automático de horas libres
+- ⏰ **Bolsa de Horas** - Desglose de Tareas Internas y Reuniones de Equipo
+- 📈 **Gráficos Dinámicos** - Tendencias mensuales, top usuarios, top clientes
+- 📱 **Diseño Responsivo** - Funciona perfectamente en mobile y desktop
+- 🔒 **Type-Safe** - TypeScript en frontend y backend
 
-El archivo CSV debe contener las siguientes columnas:
+## 🏗️ Arquitectura
 
-- `Proyecto` - Nombre del proyecto (ej: "Tareas Internas", "SENDA")
-- `Cliente` - Nombre del cliente
-- `Usuario` - Nombre del usuario/empleado
-- `Duración (decimal)` - Horas en formato decimal
-- `Fecha de inicio` - Formato DD/MM/YYYY
-
-Ejemplo:
-```
-Proyecto,Cliente,Usuario,Duración (decimal),Fecha de inicio
-Tareas Internas,Interno,monica.aieta,2.5,15/06/2026
-SENDA,Interno,mateo.nardo,4.0,15/06/2026
-```
-
-## Uso
-
-1. Abre `index.html` en tu navegador
-2. Carga un archivo CSV con el botón "📤 Cargar CSV"
-3. Usa los filtros para analizar datos específicos:
-   - Selecciona meses (Ctrl/Cmd + Click para múltiples)
-   - Selecciona categorías
-   - Elige un usuario específico
-4. Clickea "Aplicar Filtros" para actualizar el análisis
-
-## Despliegue en Cloudflare Pages
-
-### Opción 1: Desde GitHub (Recomendado)
-
-1. **Sube el repositorio a GitHub:**
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit: Panel Operaciones Mooving"
-   git branch -M main
-   git remote add origin https://github.com/tu-usuario/panel-mooving.git
-   git push -u origin main
-   ```
-
-2. **Conecta con Cloudflare Pages:**
-   - Ve a [Cloudflare Pages](https://pages.cloudflare.com/)
-   - Conecta tu cuenta GitHub
-   - Selecciona el repositorio `panel-mooving`
-   - En "Build Settings": 
-     - **Build command**: (dejar vacío, es HTML estático)
-     - **Build output directory**: `/` (raíz)
-   - Clickea "Save and Deploy"
-
-3. Tu sitio estará disponible en: `https://tu-proyecto.pages.dev`
-
-### Opción 2: Despliegue Manual
-
-1. **Crea un repositorio en GitHub** (sin clonarlo)
-2. **Sube los archivos manualmente** desde GitHub.com
-3. **Conecta a Cloudflare Pages** apuntando a ese repositorio
-
-## Estructura del Proyecto
+### Monorepo con NPM Workspaces
 
 ```
 panel-mooving/
-├── index.html           # Página principal
-├── README.md            # Este archivo
-└── wrangler.toml        # Configuración (opcional, para Workers)
+├── apps/
+│   ├── web/              # Vue 3 + Vite SPA
+│   └── api/              # Hono + Cloudflare Workers
+├── documentation/        # Documentación técnica
+├── VERSION              # Versionamiento semántico
+└── CHANGELOG.md         # Registro de cambios
 ```
 
-## Tecnologías
+### Tech Stack
 
-- HTML5
-- CSS3 (con variables CSS personalizadas)
-- JavaScript (vanilla, sin dependencias externas)
-- Chart.js 4.5.0 (CDN)
+**Frontend:**
+- Vue 3 (TypeScript)
+- Vite
+- Pinia (State Management)
+- TailwindCSS
+- Chart.js
+- Vue Router
 
-## Características de Datos
+**Backend:**
+- Hono
+- Cloudflare Workers
+- Cloudflare D1 (SQLite)
+- Zod (Validation)
+- TypeScript
 
-### Cálculo de Disponibilidad
-- **Horas esperadas**: 8h/día × días hábiles del mes
-- **Días hábiles**: Lunes a viernes, menos feriados argentinos
-- **Tiempo libre**: Horas esperadas - Horas registradas
+## 📋 Requisitos
 
-### Bolsa de Horas
-- Identifica automáticamente "Tareas Internas" y "Reuniones de Equipo"
-- Desglose por usuario y mes
-- Facilita el seguimiento de tiempo en actividades administrativas
+- Node.js 18+
+- npm 9+ (con npm Workspaces)
+- Cuenta Cloudflare (para despliegue)
+- Git
 
-### Distribución de Carga
-- Muestra cómo se distribuyen las horas de cada empleado por cliente
-- Calcula porcentajes automáticamente
-- Ordenado por total de horas
+## 🛠️ Instalación y Desarrollo
 
-## Navegador Compatible
+### 1. Clonar el repositorio
 
-- Chrome/Edge 90+
-- Firefox 88+
-- Safari 14+
-- Dispositivos móviles con navegadores modernos
+```bash
+git clone https://github.com/aietamonica2/panel-horas-Mooving.git
+cd panel-horas-Mooving
+```
 
-## Notas
+### 2. Instalar dependencias
 
-- Los datos se cargan en memoria del navegador
-- No requiere servidor backend
-- Soporta archivos CSV hasta ~10MB
-- Los datos se pierden al recargar la página (se puede guardar el CSV localmente)
+```bash
+npm install
+```
 
-## Soporte
+Esto instalará todas las dependencias en ambos workspaces (`apps/web` y `apps/api`).
 
-Para reportar problemas o sugerencias, crea un issue en el repositorio de GitHub.
+### 3. Ejecutar en desarrollo
 
-## Licencia
+```bash
+npm run dev
+```
 
-MIT License - Ver LICENSE para detalles
+Esto inicia:
+- Frontend: http://localhost:5173
+- Backend: http://localhost:8787
+
+### 4. Construir para producción
+
+```bash
+npm run build
+```
+
+### 5. Tests
+
+```bash
+npm run test          # Ejecutar tests una vez
+npm run test:watch   # Ejecutar tests en modo watch
+```
+
+## 📊 Formato del CSV
+
+El archivo CSV debe contener las siguientes columnas:
+
+| Campo | Tipo | Ejemplo |
+|-------|------|---------|
+| Proyecto | String | "Tareas Internas", "SENDA" |
+| Cliente | String | "Interno", "Camuzzi" |
+| Usuario | String | "monica.aieta" |
+| Duración (decimal) | Number | 2.5 |
+| Fecha de inicio | Date (DD/MM/YYYY) | 15/06/2026 |
+| Grupo | String | "operaciones" |
+
+### Ejemplo de CSV
+
+```csv
+Proyecto,Cliente,Usuario,Duración (decimal),Fecha de inicio,Grupo
+Tareas Internas,Interno,monica.aieta,2.5,15/06/2026,operaciones
+SENDA,Interno,mateo.nardo,4.0,15/06/2026,desarrollo
+Camuzzi,Camuzzi,felipe.gutierrez,3.0,16/06/2026,operaciones
+```
+
+## 🚀 Despliegue
+
+### Despliegue en Cloudflare Pages
+
+El proyecto está configurado para despliegue automático desde GitHub:
+
+1. **Frontend** se despliega automáticamente a Cloudflare Pages
+2. **Backend** se despliega a Cloudflare Workers
+
+#### Requisitos previos
+
+- Repositorio conectado a Cloudflare Pages
+- Variables de entorno configuradas en Cloudflare
+
+#### Despliegue Manual
+
+```bash
+npm run deploy
+```
+
+Esto:
+1. Construye ambos apps
+2. Despliega el backend a Cloudflare Workers
+3. Despliega el frontend a Cloudflare Pages
+
+## 📚 Documentación
+
+- **[Architecture](./documentation/architecture/README.md)** - Arquitectura técnica del proyecto
+- **[Database Schema](./documentation/database/schema.sql)** - Esquema de D1
+- **[CHANGELOG](./CHANGELOG.md)** - Historial de versiones
+
+## 🤝 Contribuir
+
+Las contribuciones son bienvenidas. Por favor:
+
+1. Crea un branch: `git checkout -b feature/tu-feature`
+2. Haz commit de tus cambios: `git commit -m "feat: descripción"`
+3. Actualiza la versión: Edita `/VERSION` (Semantic Versioning)
+4. Actualiza el changelog: Edita `/CHANGELOG.md`
+5. Ejecuta tests: `npm run test`
+6. Haz push: `git push origin feature/tu-feature`
+7. Abre un Pull Request
+
+## 📝 Convenciones de Código
+
+### Naming
+
+- **Componentes Vue**: `PascalCase.vue` (e.g., `Dashboard.vue`)
+- **Composables**: `camelCase.ts` (e.g., `useDataProcessing.ts`)
+- **Stores**: `{name}Store.ts` (e.g., `dataStore.ts`)
+- **Variables**: `camelCase` en inglés
+- **Constantes**: `UPPER_SNAKE_CASE`
+
+### Versionamiento
+
+Sigue [Semantic Versioning](https://semver.org/):
+- `MAJOR.MINOR.PATCH` (e.g., `1.0.0`)
+- Incrementa `PATCH` para bug fixes
+- Incrementa `MINOR` para nuevas features
+- Incrementa `MAJOR` para cambios breaking
+
+Cada cambio debe:
+1. Actualizar `/VERSION`
+2. Agregar entrada en `/CHANGELOG.md`
+
+## 🐛 Reporte de Bugs
+
+Si encuentras un bug:
+
+1. Describe el problema claramente
+2. Incluye pasos para reproducirlo
+3. Comparte tu versión y navegador
+4. Abre un issue en GitHub
+
+## 📄 Licencia
+
+MIT License - Ver [LICENSE](./LICENSE) para detalles.
+
+## 👥 Autor
+
+Creado por [Mooving Tech](https://moovingtech.com)
+
+---
+
+**¿Preguntas?** Abre un issue o contacta al equipo de desarrollo.
