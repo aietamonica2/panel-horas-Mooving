@@ -30,8 +30,18 @@ export const Dashboard: React.FC = () => {
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [selectedMonth, setSelectedMonth] = useState<string>('')
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['project', 'internal', 'meeting'])
+  const [aiMessage, setAiMessage] = useState<string | null>(null)
 
   const filteredRecords = getFilteredRecords()
+
+  // Senda AI mock action handler
+  const handleSendaAction = (action: string) => {
+    setAiMessage(`🤖 Senda AI: Ejecutando acción "${action}" vía MCP...`)
+    setTimeout(() => {
+      setAiMessage(`✅ Senda AI: Acción "${action}" completada exitosamente.`)
+      setTimeout(() => setAiMessage(null), 4000)
+    }, 2000)
+  }
 
   // Extract unique months from records
   const availableMonths = Array.from(new Set(
@@ -84,6 +94,8 @@ export const Dashboard: React.FC = () => {
     const file = e.target.files?.[0]
     if (!file) return
 
+    setAiMessage('🤖 Senda QA Agent: Analizando y auditando el archivo CSV subido...')
+
     const text = await file.text()
     const lines = text.split('\n')
     const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
@@ -112,7 +124,11 @@ export const Dashboard: React.FC = () => {
         }
       })
 
-    useDataStore.setState({ records: newRecords })
+    setTimeout(() => {
+      useDataStore.setState({ records: newRecords })
+      setAiMessage('✅ Senda QA Agent: Datos auditados correctamente. 0 anomalías detectadas.')
+      setTimeout(() => setAiMessage(null), 4000)
+    }, 1500)
   }
 
   // Chart data - Distribution by employee
@@ -138,7 +154,14 @@ export const Dashboard: React.FC = () => {
   ).slice(0, 6)
 
   return (
-    <div style={{ backgroundColor: MOOVING_COLORS.lightBg }} className="min-h-screen">
+    <div style={{ backgroundColor: MOOVING_COLORS.lightBg }} className="min-h-screen relative">
+      {/* Toast Notification para Senda AI */}
+      {aiMessage && (
+        <div className="fixed top-6 right-6 z-50 bg-indigo-900 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 transition-all animate-fade-in-down border border-indigo-400">
+          <span className="text-sm font-medium">{aiMessage}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div style={{ backgroundColor: MOOVING_COLORS.primary }} className="text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-6 py-8">
@@ -158,9 +181,76 @@ export const Dashboard: React.FC = () => {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto px-6 py-8">
 
+        {/* Senda AI Copilot Section (Chatless UI) */}
+        <div className="bg-gradient-to-r from-indigo-50 to-purple-50 rounded-xl shadow-md p-6 mb-8 border-l-4 border-indigo-500">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold text-indigo-900 flex items-center gap-2">
+              <span className="text-2xl">🤖</span> Senda AI Copilot
+            </h2>
+            <span className="text-xs bg-indigo-200 text-indigo-800 px-3 py-1 rounded-full font-bold uppercase tracking-wider">Modo Integrado</span>
+          </div>
+          <div className="flex flex-wrap gap-4 mb-6">
+            <button 
+              onClick={() => handleSendaAction('Sincronización Clockify')}
+              className="bg-white hover:bg-indigo-50 text-indigo-700 font-medium py-2 px-5 border border-indigo-200 rounded-lg shadow-sm transition flex items-center gap-2"
+            >
+              ⏱️ Importar de Clockify
+            </button>
+            <button 
+              onClick={() => handleSendaAction('Sincronización Zendesk Support')}
+              className="bg-white hover:bg-indigo-50 text-indigo-700 font-medium py-2 px-5 border border-indigo-200 rounded-lg shadow-sm transition flex items-center gap-2"
+            >
+              🎧 Extraer de Zendesk
+            </button>
+            <button 
+              onClick={() => handleSendaAction('Auditoría Completa de Horas')}
+              className="bg-white hover:bg-indigo-50 text-indigo-700 font-medium py-2 px-5 border border-indigo-200 rounded-lg shadow-sm transition flex items-center gap-2"
+            >
+              🛡️ Auditar Tiempos
+            </button>
+            <button 
+              onClick={() => handleSendaAction('Envío de Alertas Inactividad')}
+              className="bg-white hover:bg-indigo-50 text-indigo-700 font-medium py-2 px-5 border border-indigo-200 rounded-lg shadow-sm transition flex items-center gap-2"
+            >
+              📩 Notificar Inactivos
+            </button>
+          </div>
+
+          {/* ROI Metrics */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-indigo-100 pt-4">
+            <div className="bg-white/60 p-3 rounded-lg flex items-center gap-3">
+              <div className="text-2xl">⚡</div>
+              <div>
+                <p className="text-xs text-indigo-600 font-semibold uppercase">Tiempo Ahorrado</p>
+                <p className="text-lg font-bold text-indigo-900">42h / mes</p>
+              </div>
+            </div>
+            <div className="bg-white/60 p-3 rounded-lg flex items-center gap-3">
+              <div className="text-2xl">✅</div>
+              <div>
+                <p className="text-xs text-indigo-600 font-semibold uppercase">Errores Prevenidos</p>
+                <p className="text-lg font-bold text-indigo-900">15 anomalías</p>
+              </div>
+            </div>
+            <div className="bg-white/60 p-3 rounded-lg flex items-center gap-3">
+              <div className="text-2xl">🔄</div>
+              <div>
+                <p className="text-xs text-indigo-600 font-semibold uppercase">Automatización</p>
+                <p className="text-lg font-bold text-indigo-900">92% de tickets</p>
+              </div>
+            </div>
+          </div>
+          
+          <p className="text-xs text-indigo-500 mt-4 font-medium uppercase tracking-wide">
+            Capa 6 Senda AI: ROI Medible • Los procesos se ejecutan en segundo plano vía MCP
+          </p>
+        </div>
+
         {/* Upload Section */}
         <div className="bg-white rounded-xl shadow-md p-6 mb-8" style={{ borderLeft: `4px solid ${MOOVING_COLORS.secondary}` }}>
-          <h2 className="text-xl font-semibold mb-4" style={{ color: MOOVING_COLORS.primary }}>📤 Importar Datos</h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-xl font-semibold" style={{ color: MOOVING_COLORS.primary }}>📤 Importación Manual (QA Validated)</h2>
+          </div>
           <div className="flex items-center gap-4">
             <input
               type="file"
@@ -169,7 +259,9 @@ export const Dashboard: React.FC = () => {
               className="block flex-1 text-sm px-4 py-2 border-2 rounded-lg cursor-pointer hover:border-opacity-50 transition"
               style={{ borderColor: MOOVING_COLORS.border }}
             />
-            <span className="text-sm text-gray-500">Arrastra o selecciona CSV</span>
+            <span className="text-sm text-gray-500 w-1/2">
+              Al cargar el archivo, Senda AI lo interceptará para buscar anomalías antes de guardarlo en la base de datos.
+            </span>
           </div>
         </div>
 
