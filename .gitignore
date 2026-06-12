@@ -1,4 +1,4 @@
-# Node modules
+# Dependencies
 node_modules/
 npm-debug.log
 yarn-error.log
@@ -7,6 +7,12 @@ yarn-error.log
 .env
 .env.local
 .env.*.local
+.dev.vars
+
+# Build outputs
+dist/
+build/
+.vite/
 
 # IDE
 .vscode/
@@ -16,10 +22,14 @@ yarn-error.log
 *~
 .DS_Store
 
-# Build outputs
-dist/
-build/
+# Testing
+coverage/
+.nyc_output/
 
-# Local Cloudflare
+# Cloudflare
 .wrangler/
 wrangler.toml.local
+
+# Logs
+*.log
+logs/
