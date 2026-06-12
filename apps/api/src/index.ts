@@ -25,7 +25,7 @@ app.get('/', (c) => {
   const response: ApiResponse = {
     success: true,
     data: {
-      message: 'Senda API v1.0.0',
+      message: 'Panel Horas API v1.0.0',
       endpoints: ['/api/health', '/api/data/records', '/api/data/upload'],
     },
     timestamp: new Date().toISOString(),

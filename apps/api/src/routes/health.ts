@@ -3,10 +3,10 @@
  * Minimal dependency, used for uptime monitoring
  */
 
-import { Router } from 'hono'
+import { Hono } from 'hono'
 import { HonoContext, ApiResponse } from '../types'
 
-export const healthRouter = new Router()
+export const healthRouter = new Hono()
 
 healthRouter.get('/health', async (c: HonoContext): Promise<Response> => {
   const response: ApiResponse = {

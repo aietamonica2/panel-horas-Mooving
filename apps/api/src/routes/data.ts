@@ -3,12 +3,12 @@
  * CSV upload, data validation, retrieval
  */
 
-import { Router } from 'hono'
+import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { HonoContext, ApiResponse, TimeRecordPayload } from '../types'
 
-export const dataRouter = new Router()
+export const dataRouter = new Hono()
 
 // Validation schema for time records
 const TimeRecordSchema = z.object({
