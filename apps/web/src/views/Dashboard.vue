@@ -131,11 +131,27 @@
       </div>
     </div>
 
-    <!-- Tables and Charts will go here -->
+    <!-- Data Status -->
     <div class="card p-6">
-      <h2 class="text-lg font-semibold text-slate-900 mb-4">📊 Data loaded and ready for visualization</h2>
-      <p class="text-slate-600">Filtered records: {{ filteredRecords.length }}</p>
+      <h2 class="text-lg font-semibold text-slate-900 mb-4">📊 Estado de Datos</h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <p class="text-sm text-slate-600">Registros Cargados</p>
+          <p class="text-2xl font-bold text-indigo-600">{{ allRecords.length }}</p>
+        </div>
+        <div>
+          <p class="text-sm text-slate-600">Registros Filtrados</p>
+          <p class="text-2xl font-bold text-pink-600">{{ filteredRecords.length }}</p>
+        </div>
+        <div>
+          <p class="text-sm text-slate-600">Versión del Panel</p>
+          <p class="text-2xl font-bold text-green-600">v1.0.0</p>
+        </div>
+      </div>
     </div>
+
+    <!-- Documentation Viewer Component -->
+    <DocumentationViewer />
   </div>
 </template>
 
@@ -144,6 +160,7 @@ import { ref, computed } from 'vue'
 import { useDataStore } from '@/stores/dataStore'
 import { useDataProcessing } from '@/composables/useDataProcessing'
 import { MONTH_NAMES } from '@/utils/constants'
+import DocumentationViewer from '@/components/DocumentationViewer.vue'
 import type { TimeRecord } from '@/types'
 
 const store = useDataStore()
@@ -154,6 +171,7 @@ const selectedCategories = ref<string[]>([])
 const selectedUser = ref<string>('')
 const uploadStatus = ref<{ type: 'success' | 'error'; message: string } | null>(null)
 
+const allRecords = computed(() => store.allRecords)
 const availableMonths = computed(() => store.availableMonths)
 const availableCategories = computed(() => store.availableCategories)
 const availableUsers = computed(() => store.availableUsers)
