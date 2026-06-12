@@ -1,26 +1,8 @@
-name = "panel-mooving-api"
-type = "service"
-account_id = "3a24c3aa1d8f806d2e716dbdfa88811f"
-compatibility_date = "2026-06-12"
-
-[env.production]
-route = "https://api.panel-mooving.com/*"
-
-[env.development]
-route = "http://localhost:8787/*"
+name = "panel-horas-api"
+main = "src/index.ts"
+compatibility_date = "2024-01-22"
 
 [[d1_databases]]
 binding = "DB"
-database_name = "panel-mooving"
-database_id = ""
-
-[env.production.d1_databases]
-- {binding = "DB", database_name = "panel-mooving-prod", database_id = ""}
-
-[build]
-command = "npm run build"
-cwd = "."
-main = "dist/index.js"
-
-[env.development.build]
-watch_paths = ["src/**/*.ts"]
+database_name = "panel-mooving-v1"
+database_id = "4f55653f-0f00-4c7d-bf84-3be78e096bfa"
