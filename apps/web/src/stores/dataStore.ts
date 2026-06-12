@@ -1,71 +1,73 @@
-import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { TimeRecord, FilteredData } from '@/types'
+/**
+ * Zustand store for global application state
+ * Manages time records, employees, clients, and filters
+ */
 
-export const useDataStore = defineStore('data', () => {
-  const allRecords = ref<TimeRecord[]>([])
-  const selectedMonths = ref<string[]>([])
-  const selectedCategories = ref<string[]>([])
-  const selectedUser = ref<string>('')
+import { create } from 'zustand'
+import { AppState, TimeRecord, Employee, Client, FilterState } from '../types'
 
-  const availableMonths = computed(() => {
-    const months = new Set(allRecords.value.map(r => r.fecha_inicio.split('/')[1]))
-    return Array.from(months).sort((a, b) => parseInt(a) - parseInt(b))
-  })
+const initialState: AppState = {
+  records: [],
+  employees: [],
+  clients: [],
+  filters: {
+    dateRangeStart: '',
+    dateRangeEnd: '',
+    employees: [],
+    clients: [],
+    projects: [],
+    workTypes: [],
+  },
+  isLoading: false,
+  error: null,
+  version: 'v1.0.0',
+}
 
-  const availableCategories = computed(() => {
-    return Array.from(new Set(allRecords.value.map(r => r.cliente))).sort()
-  })
+export const useDataStore = create<AppState & {
+  setRecords: (records: TimeRecord[]) => void
+  setEmployees: (employees: Employee[]) => void
+  setClients: (clients: Client[]) => void
+  setFilters: (filters: Partial<FilterState>) => void
+  setLoading: (loading: boolean) => void
+  setError: (error: string | null) => void
+  clearFilters: () => void
+  getFilteredRecords: () => TimeRecord[]
+}>((set, get) => ({
+  ...initialState,
 
-  const availableUsers = computed(() => {
-    return Array.from(new Set(allRecords.value.map(r => r.usuario))).sort()
-  })
+  setRecords: (records) => set({ records }),
+  setEmployees: (employees) => set({ employees }),
+  setClients: (clients) => set({ clients }),
+  
+  setFilters: (filters) => set((state) => ({
+    filters: { ...state.filters, ...filters }
+  })),
 
-  const filteredRecords = computed(() => {
-    const months = selectedMonths.value.length > 0 ? selectedMonths.value : availableMonths.value
-    const categories = selectedCategories.value.length > 0 ? selectedCategories.value : availableCategories.value
+  setLoading: (loading) => set({ isLoading: loading }),
+  setError: (error) => set({ error }),
 
-    return allRecords.value.filter(r => {
-      const m = r.fecha_inicio.split('/')[1]
-      const c = r.cliente
-      const u = r.usuario
+  clearFilters: () => set({ filters: initialState.filters }),
 
-      if (!months.includes(m)) return false
-      if (!categories.includes(c)) return false
-      if (selectedUser.value && u !== selectedUser.value) return false
+  getFilteredRecords: () => {
+    const state = get()
+    let filtered = state.records
 
-      return true
-    })
-  })
+    if (state.filters.employees.length > 0) {
+      filtered = filtered.filter(r => state.filters.employees.includes(r.employee_id))
+    }
+    if (state.filters.clients.length > 0) {
+      filtered = filtered.filter(r => state.filters.clients.includes(r.client_id))
+    }
+    if (state.filters.workTypes.length > 0) {
+      filtered = filtered.filter(r => state.filters.workTypes.includes(r.work_type))
+    }
+    if (state.filters.dateRangeStart) {
+      filtered = filtered.filter(r => r.date >= state.filters.dateRangeStart)
+    }
+    if (state.filters.dateRangeEnd) {
+      filtered = filtered.filter(r => r.date <= state.filters.dateRangeEnd)
+    }
 
-  const loadRecords = (records: TimeRecord[]) => {
-    allRecords.value = records
-  }
-
-  const setSelectedMonths = (months: string[]) => {
-    selectedMonths.value = months
-  }
-
-  const setSelectedCategories = (categories: string[]) => {
-    selectedCategories.value = categories
-  }
-
-  const setSelectedUser = (user: string) => {
-    selectedUser.value = user
-  }
-
-  return {
-    allRecords,
-    filteredRecords,
-    selectedMonths,
-    selectedCategories,
-    selectedUser,
-    availableMonths,
-    availableCategories,
-    availableUsers,
-    loadRecords,
-    setSelectedMonths,
-    setSelectedCategories,
-    setSelectedUser,
-  }
-})
+    return filtered
+  },
+}))

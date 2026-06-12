@@ -1,203 +1,291 @@
 # Panel de Operaciones Mooving
 
-Aplicación web moderna para análisis interactivo de carga de trabajo, disponibilidad del equipo y distribución de horas por cliente y proyecto.
+**Version**: 1.0.0  
+**Status**: Production Ready ✅  
+**Last Updated**: 12 de Junio de 2026
 
-**[Ver en vivo](https://panel-horas-mooving.pages.dev)**
+Dashboard interactivo para análisis de operaciones y gestión de horas de Mooving, construido con React 18, Hono, y Cloudflare Workers.
 
-## 🚀 Características
+## 🚀 Quick Links
 
-- 📊 **Dashboard Interactivo** - KPIs en tiempo real (Total Horas, Promedio Diario, Usuarios Activos, Clientes Únicos)
-- 🎛️ **Filtros Multi-Select** - Filtra por meses, categorías y usuarios simultáneamente
-- 📤 **Carga de CSV** - Carga dinámicamente datos desde archivos CSV
-- 💼 **Distribución de Carga** - Análisis detallado por empleado y cliente
-- 📅 **Disponibilidad Mensual** - Cálculo automático de horas libres
-- ⏰ **Bolsa de Horas** - Desglose de Tareas Internas y Reuniones de Equipo
-- 📈 **Gráficos Dinámicos** - Tendencias mensuales, top usuarios, top clientes
-- 📱 **Diseño Responsivo** - Funciona perfectamente en mobile y desktop
-- 🔒 **Type-Safe** - TypeScript en frontend y backend
+- **Live Application**: https://panel-horas-mooving.pages.dev
+- **GitHub Repository**: https://github.com/aietamonica2/panel-horas-Mooving
+- **Documentation**: [documentation/](./documentation/)
+- **Architecture Guide**: [documentation/versions/v1.0.0/architecture.md](./documentation/versions/v1.0.0/architecture.md)
 
-## 🏗️ Arquitectura
+## 📋 Features
 
-### Monorepo con NPM Workspaces
+### Core Capabilities
+- **Interactive Dashboard** with real-time KPI updates
+- **CSV Upload** for bulk data import
+- **Multi-Criteria Filtering** by employee, client, project
+- **Dynamic Charts** using Recharts
+- **Distribution Analysis** across clients and projects
+- **Monthly Availability** tracking
+- **Hours Bank** with balance tracking
+- **Responsive Design** (desktop & mobile)
 
+### Technical Highlights
+- **Monorepo Structure** with NPM Workspaces
+- **React 18** + TypeScript frontend
+- **Hono** + Cloudflare Workers backend
+- **Cloudflare D1** SQLite database
+- **Multi-tenant Ready** architecture
+- **Full Type Safety** with Zod validation
+- **Testing Infrastructure** with Vitest
+
+## 🏗️ Architecture
+
+### Monorepo Structure
 ```
-panel-mooving/
+panel-senda/
 ├── apps/
-│   ├── web/              # Vue 3 + Vite SPA
-│   └── api/              # Hono + Cloudflare Workers
-├── documentation/        # Documentación técnica
-├── VERSION              # Versionamiento semántico
-└── CHANGELOG.md         # Registro de cambios
+│   ├── web/                # React frontend (Vite + React 18)
+│   └── api/                # Hono API (Cloudflare Workers)
+├── documentation/          # Versioned docs
+├── db/                     # Database schema
+├── package.json            # Root workspace
+└── VERSION                 # Current version (1.0.0)
 ```
 
 ### Tech Stack
 
-**Frontend:**
-- Vue 3 (TypeScript)
-- Vite
-- Pinia (State Management)
-- TailwindCSS
-- Chart.js
-- Vue Router
+**Frontend**
+- React 18 + TypeScript
+- Vite (build tool)
+- TailwindCSS (styling)
+- Zustand (state management)
+- Recharts (visualization)
 
-**Backend:**
-- Hono
-- Cloudflare Workers
-- Cloudflare D1 (SQLite)
-- Zod (Validation)
-- TypeScript
+**Backend**
+- Hono (framework)
+- Cloudflare Workers (runtime)
+- Cloudflare D1 (SQLite database)
+- Zod (validation)
 
-## 📋 Requisitos
+**Infrastructure**
+- Cloudflare Pages (frontend)
+- Cloudflare Workers (backend)
+- GitHub (version control)
 
+## 🚀 Getting Started
+
+### Prerequisites
 - Node.js 18+
-- npm 9+ (con npm Workspaces)
-- Cuenta Cloudflare (para despliegue)
-- Git
+- npm/pnpm
+- Wrangler CLI (`npm install -g wrangler`)
+- GitHub account (for deployment)
+- Cloudflare account (for Workers & Pages)
 
-## 🛠️ Instalación y Desarrollo
+### Local Development
 
-### 1. Clonar el repositorio
-
+1. **Clone repository**
 ```bash
 git clone https://github.com/aietamonica2/panel-horas-Mooving.git
 cd panel-horas-Mooving
+git checkout refactor/senda-migration
 ```
 
-### 2. Instalar dependencias
-
+2. **Install dependencies**
 ```bash
 npm install
 ```
 
-Esto instalará todas las dependencias en ambos workspaces (`apps/web` y `apps/api`).
-
-### 3. Ejecutar en desarrollo
-
+3. **Start development servers**
 ```bash
 npm run dev
 ```
-
-Esto inicia:
-- Frontend: http://localhost:5173
+- Frontend: http://localhost:3000
 - Backend: http://localhost:8787
 
-### 4. Construir para producción
-
+4. **Build for production**
 ```bash
 npm run build
 ```
 
-### 5. Tests
-
+5. **Run tests**
 ```bash
-npm run test          # Ejecutar tests una vez
-npm run test:watch   # Ejecutar tests en modo watch
+npm run test:all
 ```
 
-## 📊 Formato del CSV
+## 📊 Usage
 
-El archivo CSV debe contener las siguientes columnas:
+### Uploading CSV Data
 
-| Campo | Tipo | Ejemplo |
-|-------|------|---------|
-| Proyecto | String | "Tareas Internas", "SENDA" |
-| Cliente | String | "Interno", "Camuzzi" |
-| Usuario | String | "monica.aieta" |
-| Duración (decimal) | Number | 2.5 |
-| Fecha de inicio | Date (DD/MM/YYYY) | 15/06/2026 |
-| Grupo | String | "operaciones" |
+1. Navigate to Dashboard
+2. Click "📤 Importar CSV"
+3. Select CSV file with columns:
+   - Empleado
+   - Cliente
+   - Proyecto
+   - Duración (decimal)
+   - Fecha
+   - Descripción
 
-### Ejemplo de CSV
+4. Click "Subir" - data loads instantly
 
-```csv
-Proyecto,Cliente,Usuario,Duración (decimal),Fecha de inicio,Grupo
-Tareas Internas,Interno,monica.aieta,2.5,15/06/2026,operaciones
-SENDA,Interno,mateo.nardo,4.0,15/06/2026,desarrollo
-Camuzzi,Camuzzi,felipe.gutierrez,3.0,16/06/2026,operaciones
-```
+### Filtering Data
 
-## 🚀 Despliegue
+Use the filter panel to:
+- Select date range
+- Filter by employee(s)
+- Filter by client(s)
+- Filter by project(s)
+- Filter by work type
 
-### Despliegue en Cloudflare Pages
+KPIs update in real-time.
 
-El proyecto está configurado para despliegue automático desde GitHub:
+### Analyzing Metrics
 
-1. **Frontend** se despliega automáticamente a Cloudflare Pages
-2. **Backend** se despliega a Cloudflare Workers
+View key metrics:
+- **Total Horas**: Sum of all filtered records
+- **Promedio Diario**: Average hours per day
+- **Empleados**: Unique employees in filtered set
+- **Clientes**: Unique clients in filtered set
 
-#### Requisitos previos
+Charts and tables show distribution analysis.
 
-- Repositorio conectado a Cloudflare Pages
-- Variables de entorno configuradas en Cloudflare
+## 🔐 Security
 
-#### Despliegue Manual
+### Multi-Tenant Architecture
+- Every table includes `tenant_id`
+- JWT token validation
+- Tenant isolation in all queries
+- No cross-tenant data leakage
 
+### Secrets & Encryption
+- Secrets stored in Cloudflare env bindings
+- `.dev.vars` for local development
+- AES-256-GCM encryption at rest
+- No plaintext credentials in code
+
+### Input Validation
+- Zod schemas for all endpoints
+- TypeScript strict mode
+- CORS protection
+- SQL injection prevention
+
+## 📚 Documentation
+
+### For Users
+- [Release Notes](./documentation/versions/v1.0.0/release-notes.md)
+- [Quick Start Guide](./QUICK_START.md)
+
+### For Developers
+- [Architecture Guide](./documentation/versions/v1.0.0/architecture.md)
+- [Database Schema](./db/schema.sql)
+- [API Documentation](./documentation/api.md)
+- [Contributing Guide](./CONTRIBUTING.md)
+
+### Documentation Index
+- [Full Documentation](./documentation/INDEX.md)
+
+## 🔄 Version Management
+
+Current: **v1.0.0**
+
+### Updating Version
+
+1. Update `VERSION` file
+2. Update `CHANGELOG.md` with technical changes
+3. Update `CHANGELOG_FUNCTIONAL.md` with user-facing changes
+4. Create `documentation/versions/v{VERSION}/` with guides
+5. Update `apps/web/src/version.ts`
+6. Commit: `git commit -m "chore: Release v{VERSION}"`
+7. Tag: `git tag v{VERSION}`
+8. Deploy to production
+
+## 🧪 Testing
+
+### Run All Tests
 ```bash
-npm run deploy
+npm run test:all
 ```
 
-Esto:
-1. Construye ambos apps
-2. Despliega el backend a Cloudflare Workers
-3. Despliega el frontend a Cloudflare Pages
+### Test Specific Workspace
+```bash
+npm run test --workspace=senda-ui
+npm run test --workspace=senda-api
+```
 
-## 📚 Documentación
+### Coverage
+```bash
+npm run test -- --coverage
+```
 
-- **[Architecture](./documentation/architecture/README.md)** - Arquitectura técnica del proyecto
-- **[Database Schema](./documentation/database/schema.sql)** - Esquema de D1
-- **[CHANGELOG](./CHANGELOG.md)** - Historial de versiones
+## 🚀 Deployment
 
-## 🤝 Contribuir
+### Frontend (Cloudflare Pages)
+```bash
+npm run build --prefix apps/web
+cd apps/web
+npx wrangler pages deploy dist --project-name senda --branch main
+```
 
-Las contribuciones son bienvenidas. Por favor:
+### Backend (Cloudflare Workers)
+```bash
+npm run deploy --prefix apps/api
+```
 
-1. Crea un branch: `git checkout -b feature/tu-feature`
-2. Haz commit de tus cambios: `git commit -m "feat: descripción"`
-3. Actualiza la versión: Edita `/VERSION` (Semantic Versioning)
-4. Actualiza el changelog: Edita `/CHANGELOG.md`
-5. Ejecuta tests: `npm run test`
-6. Haz push: `git push origin feature/tu-feature`
-7. Abre un Pull Request
+### Database Migrations
+```bash
+# Create migration
+wrangler d1 migrations create <name> --prefix apps/api
 
-## 📝 Convenciones de Código
+# Test locally
+wrangler d1 migrations apply --local --prefix apps/api
 
-### Naming
+# Apply to production
+wrangler d1 migrations apply --remote --prefix apps/api
+```
 
-- **Componentes Vue**: `PascalCase.vue` (e.g., `Dashboard.vue`)
-- **Composables**: `camelCase.ts` (e.g., `useDataProcessing.ts`)
-- **Stores**: `{name}Store.ts` (e.g., `dataStore.ts`)
-- **Variables**: `camelCase` en inglés
-- **Constantes**: `UPPER_SNAKE_CASE`
+## 📝 Changelog
 
-### Versionamiento
+### v1.0.0 (Current)
+- ✨ Initial release with Senda architecture
+- ✨ React 18 + Hono monorepo
+- ✨ Multi-tenant ready
+- ✨ Comprehensive documentation
+- 🔒 Full security implementation
 
-Sigue [Semantic Versioning](https://semver.org/):
-- `MAJOR.MINOR.PATCH` (e.g., `1.0.0`)
-- Incrementa `PATCH` para bug fixes
-- Incrementa `MINOR` para nuevas features
-- Incrementa `MAJOR` para cambios breaking
+### v1.1.0 (Planned)
+- Export to Excel/PDF
+- Email notifications
+- Advanced filtering
+- Dark mode
 
-Cada cambio debe:
-1. Actualizar `/VERSION`
-2. Agregar entrada en `/CHANGELOG.md`
+### v2.0.0 (Future)
+- GraphQL API
+- Real-time WebSocket updates
+- Mobile app
+- Advanced analytics
 
-## 🐛 Reporte de Bugs
+[Full Changelog →](./CHANGELOG.md)
 
-Si encuentras un bug:
+## 🤝 Contributing
 
-1. Describe el problema claramente
-2. Incluye pasos para reproducirlo
-3. Comparte tu versión y navegador
-4. Abre un issue en GitHub
+1. Create feature branch: `git checkout -b feature/my-feature`
+2. Make changes and commit: `git commit -m "feat: Add my feature"`
+3. Push to branch: `git push origin feature/my-feature`
+4. Open Pull Request
 
-## 📄 Licencia
+See [CONTRIBUTING.md](./CONTRIBUTING.md) for detailed guidelines.
 
-MIT License - Ver [LICENSE](./LICENSE) para detalles.
+## 🐛 Known Issues
 
-## 👥 Autor
+None reported in v1.0.0
 
-Creado por [Mooving Tech](https://moovingtech.com)
+## 📞 Support
+
+- **GitHub Issues**: [Report bugs](https://github.com/aietamonica2/panel-horas-Mooving/issues)
+- **Email**: operaciones@moovingtech.com
+- **Documentation**: [See docs](./documentation/)
+
+## 📄 License
+
+MIT License - See [LICENSE](./LICENSE) file
 
 ---
 
-**¿Preguntas?** Abre un issue o contacta al equipo de desarrollo.
+**Built with ❤️ by Mooving Tech**  
+**Last Updated**: 12 de Junio de 2026

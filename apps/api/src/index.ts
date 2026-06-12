@@ -1,47 +1,58 @@
+/**
+ * Main Hono API Server
+ * Cloudflare Workers entry point
+ */
+
 import { Hono } from 'hono'
-import { cors } from 'hono/cors'
-import { logger } from 'hono/logger'
-import type { CloudflareBindings } from '@/types'
-import dataRoutes from '@/routes/data'
-import healthRoutes from '@/routes/health'
+import { cors } from './middleware/cors'
+import { auth } from './middleware/auth'
+import healthRouter from './routes/health'
+import dataRouter from './routes/data'
+import { HonoContext, ApiResponse, CloudflareEnv } from './types'
 
-const app = new Hono<{ Bindings: CloudflareBindings }>()
+const app = new Hono<{ Bindings: CloudflareEnv }>()
 
-// Middleware
-app.use(logger())
-app.use(
-  cors({
-    origin: ['http://localhost:5173', 'https://panel-horas-mooving.pages.dev'],
-    allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowHeaders: ['Content-Type', 'Authorization'],
-  })
-)
+// Global middleware
+app.use('*', cors)
+app.use('/api/*', auth)
 
 // Routes
-app.route('/api/data', dataRoutes)
-app.route('/api/health', healthRoutes)
+app.route('/api', healthRouter)
+app.route('/api/data', dataRouter)
 
-// Error handling
-app.onError((err, c) => {
-  console.error(err)
-  return c.json(
-    {
-      success: false,
-      error: err.message || 'Internal Server Error',
+// Root endpoint
+app.get('/', (c) => {
+  const response: ApiResponse = {
+    success: true,
+    data: {
+      message: 'Panel Horas API v1.0.0',
+      endpoints: ['/api/health', '/api/data/records', '/api/data/upload'],
     },
-    500
-  )
+    timestamp: new Date().toISOString(),
+    version: 'v1.0.0',
+  }
+  return c.json(response)
 })
 
 // 404 handler
 app.notFound((c) => {
-  return c.json(
-    {
-      success: false,
-      error: 'Not Found',
-    },
-    404
-  )
+  return c.json({
+    success: false,
+    error: 'Not found',
+    timestamp: new Date().toISOString(),
+    version: 'v1.0.0',
+  }, 404)
+})
+
+// Error handler
+app.onError((err, c) => {
+  console.error('API Error:', err)
+  return c.json({
+    success: false,
+    error: err instanceof Error ? err.message : 'Internal server error',
+    timestamp: new Date().toISOString(),
+    version: 'v1.0.0',
+  }, 500)
 })
 
 export default app

@@ -1,22 +1,25 @@
 {
-  "name": "panel-mooving",
+  "name": "panel-senda",
   "version": "1.0.0",
+  "description": "Panel de Operaciones Mooving - Senda Architecture",
   "private": true,
-  "type": "module",
   "workspaces": [
     "apps/web",
     "apps/api"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace apps/web & npm run dev --workspace apps/api",
-    "build": "npm run build --workspace apps/api && npm run build --workspace apps/web",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "deploy": "npm run deploy --workspace apps/api && npm run deploy --workspace apps/web"
+    "dev": "npm run dev --workspaces",
+    "build": "npm run build --workspaces",
+    "test:all": "npm run test --workspaces",
+    "test": "vitest",
+    "lint": "eslint . --ext .ts,.tsx,.js,.jsx",
+    "type-check": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0",
-    "vitest": "^1.0.0",
-    "typescript": "^5.3.0"
+    "@types/node": "^20.11.0",
+    "typescript": "^5.3.3",
+    "eslint": "^8.56.0",
+    "@typescript-eslint/eslint-plugin": "^6.17.0",
+    "@typescript-eslint/parser": "^6.17.0"
   }
 }

@@ -1,26 +1,41 @@
+/**
+ * Application version management
+ * Updated with each release to track deployments and changelog
+ */
+
 export const APP_VERSION = 'v1.0.0'
 export const RELEASE_DATE = '12 de Junio de 2026'
 export const RELEASE_NOTES = `
-## v1.0.0 - Lanzamiento Inicial
+v1.0.0 - 12 de Junio de 2026
 
-### Features
+✨ FEATURES
 - Dashboard interactivo con KPIs en tiempo real
-- Filtros multi-select por meses y categorías
 - Carga de archivos CSV
-- Análisis de datos en tiempo real
-- Disponibilidad mensual con cálculo de horas libres
-- Visualizaciones con Chart.js
-- Documentación versionada
+- Filtros multi-criterio
+- Análisis de distribución de carga
+- Disponibilidad mensual por empleado
+- Bolsa de horas
+- Gráficos dinámicos con Recharts
 
-### Security
-- TypeScript strict mode
-- Input validation con Zod
-- CORS security
-- Error handling centralizado
+🏗️ ARCHITECTURAL
+- Monorepo structure (apps/web + apps/api)
+- React 18 + TypeScript
+- Zustand for state management
+- TailwindCSS styling
+- Vite build tool
 
-### Infrastructure
-- Vue 3 + Vite frontend
-- Hono + Cloudflare Workers backend
-- Cloudflare D1 database
-- Testing con Vitest
+🔒 SECURITY
+- Multi-tenant ready architecture
+- JWT token validation
+- Input validation with Zod
+- CORS protection
+- Tenant isolation in all operations
+
+📚 DOCUMENTATION
+- Versioned documentation system
+- Architecture guide
+- Release notes
+- Database schema
+
+Anterior: Versión inicial de HTML estático v0.1.0
 `

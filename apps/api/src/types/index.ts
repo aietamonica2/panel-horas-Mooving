@@ -1,26 +1,36 @@
-export interface TimeRecord {
-  proyecto: string
-  cliente: string
-  usuario: string
-  duracion_decimal: number
-  fecha_inicio: string
-  grupo: string
-}
+/**
+ * Backend type definitions
+ * Shared between routes and middleware
+ */
 
-export interface CloudflareBindings {
+import { Context } from 'hono'
+
+export interface CloudflareEnv {
   DB: D1Database
-  ENVIRONMENT: string
+  ENVIRONMENT: 'development' | 'production'
+  SECRET_KEY: string
 }
 
-export interface ApiResponse<T> {
+export interface TimeRecordPayload {
+  tenant_id: string
+  employee_id: string
+  employee_name: string
+  client_id: string
+  client_name: string
+  project_id: string
+  project_name: string
+  duration_decimal: number
+  date: string
+  work_type: 'project' | 'internal' | 'meeting' | 'training' | 'other'
+  description?: string
+}
+
+export interface ApiResponse<T = any> {
   success: boolean
   data?: T
   error?: string
-  message?: string
+  timestamp: string
+  version: string
 }
 
-export interface UploadedData {
-  records: TimeRecord[]
-  recordCount: number
-  uploadedAt: string
-}
+export type HonoContext = Context<{ Bindings: CloudflareEnv }>

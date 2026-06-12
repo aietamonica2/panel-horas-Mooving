@@ -1,4 +1,4 @@
-# Changelog
+# CHANGELOG
 
 All notable changes to this project will be documented in this file.
 
@@ -8,85 +8,75 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2026-06-12
 
 ### Added
-- ✨ Initial release of Panel de Operaciones Mooving with complete architecture
-- 🏗️ Monorepo structure with NPM Workspaces (apps/web + apps/api)
-- 🎨 Vue 3 + Vite SPA frontend with TypeScript strict mode
-- ⚙️ Hono + Cloudflare Workers backend with Zod validation
-- 💾 Cloudflare D1 database with migrations and audit logs
-- 📊 Interactive dashboard with real-time KPIs
-- 🎛️ Multi-select filters for months, categories, and users
-- 📤 CSV file upload with automatic validation and parsing
-- 📈 Dynamic charts using Chart.js (monthly trends, top users, top clients)
-- 💼 Workload distribution analysis by employee and client
-- 📅 Monthly availability tracking with free time calculation
-- ⏰ Bag of Hours section (Internal Tasks vs Team Meetings)
-- 🔐 Comprehensive security (TypeScript strict, Zod validation, CORS, error handling)
-- 📚 Versioned documentation system with panel access
-- 🧪 Test infrastructure with Vitest for frontend and backend
-- 🔄 Semantic versioning with automatic changelog management
-- 📱 Responsive design for mobile and desktop
-- 🚀 Cloudflare Pages + Workers deployment infrastructure
+- Initial monorepo structure with Senda Architecture standards
+- React + TypeScript frontend (apps/web)
+- Hono + Cloudflare Workers API backend (apps/api)
+- Cloudflare D1 database integration
+- Dashboard with CSV upload capability
+- KPI calculations and data analysis
+- Multi-tenant ready architecture
+- Comprehensive documentation system with version tracking
+- Test infrastructure (Vitest)
+- Feature flags system
+- Security: encryption at rest (AES-256-GCM), tenant isolation, JWT validation
 
-### Technical Details
-- Vue 3 with Composition API and setup script
-- Pinia for state management
+### Technical
+- Migrated from Vue 3 to React 18
+- NPM Workspaces monorepo structure
+- TypeScript strict mode enabled
+- Zod schema validation for all APIs
 - TailwindCSS for styling
-- Vue Router for navigation
-- Custom composables for data processing
-- Hono with CORS and error handling middleware
-- D1 with indexed tables for performance
-- TypeScript with strict mode enabled
+- Pinia → Zustand for state management
+- Role-based access control (RBAC)
 
 ### Documentation
-- Complete architecture guide
-- Database schema with comments
-- Quick start guide (5 steps)
-- Release notes with features and roadmap
-- Refactor summary with before/after comparison
-- Versioned documentation structure
+- Versioned documentation in `/documentation/versions/v{VERSION}/`
+- Architecture guide with monorepo structure details
+- Release notes with comprehensive feature list
+- Database schema documentation
+- Future release templates (v1.1.0, v2.0.0)
 
-### Security & Standards
-- ✓ Tenant isolation ready for multi-tenancy
-- ✓ Input validation with Zod schemas
-- ✓ CORS whitelist configuration
-- ✓ SQL injection prevention via D1
-- ✓ Secrets management with environment variables
-- ✓ Type safety with TypeScript (strict mode)
-- ✓ Error handling centralized
-
----
-
-## Future Releases
-
-### [1.1.0] - Planned
-- [ ] Complete test coverage (100%)
-- [ ] E2E tests with Playwright
-- [ ] Export to Excel/PDF functionality
-- [ ] Advanced dashboard with more chart types
-- [ ] Performance optimizations (lazy loading, pagination)
-- [ ] Dark mode support
-
-### [2.0.0] - Planned
-- [ ] RBAC permission system
-- [ ] Real multi-tenancy support
-- [ ] Real-time notifications
-- [ ] Advanced analytics
-- [ ] Data export capabilities
-- [ ] Integration with external APIs
-
----
+### Security
+- Multi-tenant isolation with `tenant_id` in all tables
+- Secrets encrypted at rest using AES-256-GCM
+- CORS protection and input validation
+- JWT token-based authentication
+- SQL injection prevention
+- No plaintext secret storage
 
 ## Guidelines for Future Versions
 
-When releasing a new version, follow these steps:
+### When releasing a new version:
 
-1. **Update VERSION file** with new semantic version
-2. **Update this CHANGELOG.md** with a new section for the version
-3. **Create documentation** in `documentation/versions/v{VERSION}/`
-4. **Update DocumentationViewer.vue** with new version links
-5. **Commit with semantic message**: `chore: Release v{VERSION}`
-6. **Push to GitHub** and verify Cloudflare deployment
+1. **Update VERSION file**: Increment version number (MAJOR.MINOR.PATCH)
+2. **Update CHANGELOG.md**: Add new [VERSION] section with features, fixes, and technical details
+3. **Create documentation folder**: `documentation/versions/v{VERSION}/` with:
+   - `README.md` - index and quick navigation
+   - `architecture.md` - technical architecture for this version
+   - `release-notes.md` - comprehensive release notes for stakeholders
+4. **Update CHANGELOG_FUNCTIONAL.md**: Add entries in plain Spanish with user-facing changes
+5. **Update novedades.html**: Reflect new entries from CHANGELOG_FUNCTIONAL.md
+6. **Update frontend version**: Modify `apps/web/src/version.ts` with APP_VERSION and RELEASE_DATE
+7. **Commit and tag**: `git commit -m "chore: Release v{VERSION}"` then `git tag v{VERSION}`
+8. **Deploy**: Follow pre-deploy checklist and deploy to production
+
+### Version Classification
+
+- **v1.0.0 → v1.1.0**: Minor features, bug fixes, performance improvements
+- **v1.x.x → v2.0.0**: Major architectural changes, breaking API changes, new paradigms
 
 ---
 
-*Last updated: 2026-06-12*
+## Backlog for Future Releases
+
+### v1.1.0 (Planned)
+- [ ] Advanced filtering and export capabilities
+- [ ] Email notifications for key metrics
+- [ ] Performance dashboard improvements
+- [ ] Additional KPI types
+
+### v2.0.0 (Future)
+- [ ] Native mobile app
+- [ ] Advanced analytics engine
+- [ ] Custom report builder
+- [ ] API webhooks

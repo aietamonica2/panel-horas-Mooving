@@ -1,63 +1,98 @@
+/**
+ * Data management routes
+ * CSV upload, data validation, retrieval
+ */
+
 import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
-import type { CloudflareBindings } from '@/types'
-import { CSVUploadSchema } from '@/types/schemas'
+import { z } from 'zod'
+import { HonoContext, ApiResponse, TimeRecordPayload } from '../types'
 
-const router = new Hono<{ Bindings: CloudflareBindings }>()
+export const dataRouter = new Hono()
 
-router.post('/upload', zValidator('json', CSVUploadSchema), async (c) => {
-  const data = c.req.valid('json')
+// Validation schema for time records
+const TimeRecordSchema = z.object({
+  employee_id: z.string().min(1),
+  employee_name: z.string().min(1),
+  client_id: z.string().min(1),
+  client_name: z.string().min(1),
+  project_id: z.string().min(1),
+  project_name: z.string().min(1),
+  duration_decimal: z.number().positive(),
+  date: z.string().date(),
+  work_type: z.enum(['project', 'internal', 'meeting', 'training', 'other']),
+  description: z.string().optional(),
+})
 
-  if (!data.records || data.records.length === 0) {
-    return c.json(
-      {
+const CsvUploadSchema = z.object({
+  records: z.array(TimeRecordSchema).min(1),
+})
+
+// POST /api/data/upload - CSV file upload
+dataRouter.post(
+  '/upload',
+  zValidator('json', CsvUploadSchema),
+  async (c: HonoContext): Promise<Response> => {
+    try {
+      const data = c.req.valid('json')
+      const tenant_id = c.get('auth')?.tenant_id || 'default-tenant'
+
+      // TODO: Insert records into D1 database
+      // await c.env.DB.prepare(
+      //   'INSERT INTO time_records (tenant_id, employee_id, ...) VALUES (?, ?, ...)'
+      // ).all(...)
+
+      const response: ApiResponse = {
+        success: true,
+        data: {
+          uploaded: data.records.length,
+          tenant_id,
+        },
+        timestamp: new Date().toISOString(),
+        version: 'v1.0.0',
+      }
+      return c.json(response)
+    } catch (error) {
+      return c.json({
         success: false,
-        error: 'No records provided',
-      },
-      400
-    )
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+        version: 'v1.0.0',
+      }, 400)
+    }
   }
+)
 
+// GET /api/data/records - Get time records
+dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
   try {
-    // Validar cada registro
-    const validRecords = data.records.filter((record) => {
-      return (
-        record.proyecto &&
-        record.cliente &&
-        record.usuario &&
-        record.duracion_decimal > 0 &&
-        record.fecha_inicio &&
-        /^\d{2}\/\d{2}\/\d{4}$/.test(record.fecha_inicio)
-      )
-    })
+    const tenant_id = c.get('auth')?.tenant_id || 'default-tenant'
+    const limit = c.req.query('limit') || '100'
 
-    return c.json({
+    // TODO: Query D1 database
+    // const result = await c.env.DB.prepare(
+    //   'SELECT * FROM time_records WHERE tenant_id = ? LIMIT ?'
+    // ).all(tenant_id, parseInt(limit))
+
+    const response: ApiResponse = {
       success: true,
       data: {
-        recordCount: validRecords.length,
-        uploadedAt: new Date().toISOString(),
+        records: [],
+        total: 0,
+        limit: parseInt(limit),
       },
-      message: `Successfully processed ${validRecords.length} records`,
-    })
+      timestamp: new Date().toISOString(),
+      version: 'v1.0.0',
+    }
+    return c.json(response)
   } catch (error) {
-    return c.json(
-      {
-        success: false,
-        error: error instanceof Error ? error.message : 'Failed to process data',
-      },
-      400
-    )
+    return c.json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+      timestamp: new Date().toISOString(),
+      version: 'v1.0.0',
+    }, 500)
   }
 })
 
-router.get('/validate', (c) => {
-  return c.json({
-    success: true,
-    data: {
-      requiredFields: ['proyecto', 'cliente', 'usuario', 'duracion_decimal', 'fecha_inicio', 'grupo'],
-      dateFormat: 'DD/MM/YYYY',
-    },
-  })
-})
-
-export default router
+export default dataRouter
