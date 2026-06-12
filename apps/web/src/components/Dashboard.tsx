@@ -11,6 +11,11 @@ import { FilterPanel } from './FilterPanel'
 import { DistributionTable } from './DistributionTable'
 import { AvailabilityMetrics } from './AvailabilityMetrics'
 import { TimeBagSection } from './TimeBagSection'
+import { EmployeeWorkloadBreakdown } from './EmployeeWorkloadBreakdown'
+import { ClientMonthlyDistribution } from './ClientMonthlyDistribution'
+import { EmployeeAvailability } from './EmployeeAvailability'
+import { BagOfHoursTable } from './BagOfHoursTable'
+import { AnalyticsCharts } from './AnalyticsCharts'
 
 const MOOVING_COLORS = {
   primary: '#1a5f7a',    // Mooving dark blue
@@ -337,6 +342,55 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* Executive Insights (C-Level) */}
+        {filteredRecords.length > 0 && (
+          <div className="bg-gradient-to-r from-gray-900 to-slate-800 rounded-xl shadow-xl p-6 mb-8 text-white">
+            <div className="flex items-center justify-between mb-6 border-b border-gray-700 pb-4">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <span className="text-yellow-400">👑</span> Métricas Ejecutivas (C-Level)
+              </h2>
+              <span className="text-xs bg-gray-700 px-3 py-1 rounded-full uppercase tracking-widest text-gray-300">Confidencial</span>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Facturabilidad */}
+              <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/5">
+                <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Índice de Facturabilidad</p>
+                <div className="flex items-end gap-3">
+                  <p className="text-3xl font-bold text-green-400">
+                    {totalHours > 0 ? ((filteredRecords.filter(r => r.work_type === 'project').reduce((acc, r) => acc + r.duration_hours, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
+                  </p>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">Objetivo saludable: &gt; 75%</p>
+              </div>
+
+              {/* Fuga de Capital / Overhead */}
+              <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/5">
+                <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Carga de Overhead</p>
+                <div className="flex items-end gap-3">
+                  <p className="text-3xl font-bold text-red-400">
+                    {totalHours > 0 ? ((filteredRecords.filter(r => r.work_type !== 'project').reduce((acc, r) => acc + r.duration_hours, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
+                  </p>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">Tiempo en reuniones internas / tareas no facturables</p>
+              </div>
+
+              {/* Cliente Riesgoso / Vampiro */}
+              <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/5">
+                <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Concentración de Riesgo</p>
+                <div className="flex items-end gap-3">
+                  <p className="text-xl font-bold text-yellow-400 truncate">
+                    {clientData.sort((a, b) => b.value - a.value)[0]?.name || 'N/A'}
+                  </p>
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  Consume el {totalHours > 0 ? ((clientData.sort((a, b) => b.value - a.value)[0]?.value || 0) / totalHours * 100).toFixed(1) : '0.0'}% del tiempo total
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Charts Section */}
         {filteredRecords.length > 0 && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
@@ -413,6 +467,41 @@ export const Dashboard: React.FC = () => {
               title="📂 Distribución por Proyecto"
               groupBy="project"
             />
+          </div>
+        )}
+
+        {/* Employee Workload Breakdown - NEW in Phase 2 */}
+        {records.length > 0 && (
+          <div className="mt-8">
+            <EmployeeWorkloadBreakdown records={filteredRecords} />
+          </div>
+        )}
+
+        {/* Client Monthly Distribution - NEW in Phase 2 */}
+        {records.length > 0 && (
+          <div className="mt-8">
+            <ClientMonthlyDistribution records={filteredRecords} />
+          </div>
+        )}
+
+        {/* Employee Availability - NEW in Phase 2 */}
+        {records.length > 0 && (
+          <div className="mt-8">
+            <EmployeeAvailability records={filteredRecords} />
+          </div>
+        )}
+
+        {/* Bag of Hours Table - NEW in Phase 2 */}
+        {records.length > 0 && (
+          <div className="mt-8">
+            <BagOfHoursTable records={filteredRecords} />
+          </div>
+        )}
+
+        {/* Analytics Charts - NEW in Phase 2 */}
+        {records.length > 0 && (
+          <div className="mt-8">
+            <AnalyticsCharts records={filteredRecords} />
           </div>
         )}
 
