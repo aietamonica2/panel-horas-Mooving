@@ -8,7 +8,7 @@
 
 CREATE TABLE IF NOT EXISTS time_records (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
   employee_id TEXT NOT NULL,
   employee_name TEXT NOT NULL,
   client_id TEXT NOT NULL,
@@ -21,15 +21,16 @@ CREATE TABLE IF NOT EXISTS time_records (
   date TEXT NOT NULL,
   work_type TEXT CHECK(work_type IN ('project', 'internal', 'meeting', 'training', 'other')) NOT NULL,
   description TEXT,
+  is_billable INTEGER DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_time_records_tenant ON time_records(tenant_id);
-CREATE INDEX idx_time_records_tenant_created ON time_records(tenant_id, created_at);
-CREATE INDEX idx_time_records_employee ON time_records(tenant_id, employee_id);
-CREATE INDEX idx_time_records_client ON time_records(tenant_id, client_id);
-CREATE INDEX idx_time_records_date ON time_records(tenant_id, date);
+CREATE INDEX idx_time_records_company ON time_records(company_id);
+CREATE INDEX idx_time_records_company_created ON time_records(company_id, created_at);
+CREATE INDEX idx_time_records_employee ON time_records(company_id, employee_id);
+CREATE INDEX idx_time_records_client ON time_records(company_id, client_id);
+CREATE INDEX idx_time_records_date ON time_records(company_id, date);
 
 -- ============================================================================
 -- Employees Table
@@ -37,7 +38,7 @@ CREATE INDEX idx_time_records_date ON time_records(tenant_id, date);
 
 CREATE TABLE IF NOT EXISTS employees (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
   name TEXT NOT NULL,
   email TEXT NOT NULL,
   department TEXT,
@@ -46,8 +47,8 @@ CREATE TABLE IF NOT EXISTS employees (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_employees_tenant ON employees(tenant_id);
-CREATE INDEX idx_employees_email ON employees(tenant_id, email);
+CREATE INDEX idx_employees_company ON employees(company_id);
+CREATE INDEX idx_employees_email ON employees(company_id, email);
 
 -- ============================================================================
 -- Clients Table
@@ -55,7 +56,7 @@ CREATE INDEX idx_employees_email ON employees(tenant_id, email);
 
 CREATE TABLE IF NOT EXISTS clients (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
   name TEXT NOT NULL,
   industry TEXT,
   is_active INTEGER DEFAULT 1,
@@ -63,8 +64,8 @@ CREATE TABLE IF NOT EXISTS clients (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_clients_tenant ON clients(tenant_id);
-CREATE INDEX idx_clients_name ON clients(tenant_id, name);
+CREATE INDEX idx_clients_company ON clients(company_id);
+CREATE INDEX idx_clients_name ON clients(company_id, name);
 
 -- ============================================================================
 -- Projects Table
@@ -72,7 +73,7 @@ CREATE INDEX idx_clients_name ON clients(tenant_id, name);
 
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
   client_id TEXT NOT NULL,
   name TEXT NOT NULL,
   description TEXT,
@@ -83,8 +84,8 @@ CREATE TABLE IF NOT EXISTS projects (
   FOREIGN KEY (client_id) REFERENCES clients(id)
 );
 
-CREATE INDEX idx_projects_tenant ON projects(tenant_id);
-CREATE INDEX idx_projects_client ON projects(tenant_id, client_id);
+CREATE INDEX idx_projects_company ON projects(company_id);
+CREATE INDEX idx_projects_client ON projects(company_id, client_id);
 
 -- ============================================================================
 -- Audit Logs Table (Compliance & Security)
@@ -92,7 +93,7 @@ CREATE INDEX idx_projects_client ON projects(tenant_id, client_id);
 
 CREATE TABLE IF NOT EXISTS audit_logs (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
   action TEXT NOT NULL,
   resource_type TEXT NOT NULL,
@@ -103,9 +104,9 @@ CREATE TABLE IF NOT EXISTS audit_logs (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_audit_logs_tenant ON audit_logs(tenant_id);
-CREATE INDEX idx_audit_logs_user ON audit_logs(tenant_id, user_id);
-CREATE INDEX idx_audit_logs_created ON audit_logs(tenant_id, created_at);
+CREATE INDEX idx_audit_logs_company ON audit_logs(company_id);
+CREATE INDEX idx_audit_logs_user ON audit_logs(company_id, user_id);
+CREATE INDEX idx_audit_logs_created ON audit_logs(company_id, created_at);
 
 -- ============================================================================
 -- Feature Flags Table
@@ -113,16 +114,16 @@ CREATE INDEX idx_audit_logs_created ON audit_logs(tenant_id, created_at);
 
 CREATE TABLE IF NOT EXISTS feature_flags (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT,
+  company_id TEXT,
   feature_code TEXT NOT NULL,
   status TEXT CHECK(status IN ('off', 'preview', 'on')) DEFAULT 'off',
   description TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(tenant_id, feature_code)
+  UNIQUE(company_id, feature_code)
 );
 
-CREATE INDEX idx_feature_flags_tenant ON feature_flags(tenant_id);
+CREATE INDEX idx_feature_flags_company ON feature_flags(company_id);
 
 -- ============================================================================
 -- Tenant Feature Overrides Table
@@ -130,12 +131,12 @@ CREATE INDEX idx_feature_flags_tenant ON feature_flags(tenant_id);
 
 CREATE TABLE IF NOT EXISTS tenant_feature_overrides (
   id TEXT PRIMARY KEY,
-  tenant_id TEXT NOT NULL,
+  company_id TEXT NOT NULL,
   feature_code TEXT NOT NULL,
   override_status TEXT CHECK(override_status IN ('on', 'off')) NOT NULL,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(tenant_id, feature_code)
+  UNIQUE(company_id, feature_code)
 );
 
-CREATE INDEX idx_overrides_tenant ON tenant_feature_overrides(tenant_id);
+CREATE INDEX idx_overrides_company ON tenant_feature_overrides(company_id);

@@ -35,18 +35,18 @@ dataRouter.post(
   async (c: HonoContext): Promise<Response> => {
     try {
       const data = c.req.valid('json')
-      const tenant_id = c.get('auth')?.tenant_id || 'default-tenant'
+      const company_id = c.get('auth')?.company_id || 'default-tenant'
 
       // TODO: Insert records into D1 database
       // await c.env.DB.prepare(
-      //   'INSERT INTO time_records (tenant_id, employee_id, ...) VALUES (?, ?, ...)'
+      //   'INSERT INTO time_records (company_id, employee_id, ...) VALUES (?, ?, ...)'
       // ).all(...)
 
       const response: ApiResponse = {
         success: true,
         data: {
           uploaded: data.records.length,
-          tenant_id,
+          company_id,
         },
         timestamp: new Date().toISOString(),
         version: 'v1.0.0',
@@ -66,13 +66,13 @@ dataRouter.post(
 // GET /api/data/records - Get time records
 dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
   try {
-    const tenant_id = c.get('auth')?.tenant_id || 'default-tenant'
+    const company_id = c.get('auth')?.company_id || 'default-tenant'
     const limit = c.req.query('limit') || '100'
 
     // TODO: Query D1 database
     // const result = await c.env.DB.prepare(
-    //   'SELECT * FROM time_records WHERE tenant_id = ? LIMIT ?'
-    // ).all(tenant_id, parseInt(limit))
+    //   'SELECT * FROM time_records WHERE company_id = ? LIMIT ?'
+    // ).all(company_id, parseInt(limit))
 
     const response: ApiResponse = {
       success: true,

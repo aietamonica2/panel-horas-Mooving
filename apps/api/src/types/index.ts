@@ -12,7 +12,7 @@ export interface CloudflareEnv {
 }
 
 export interface TimeRecordPayload {
-  tenant_id: string
+  company_id: string
   employee_id: string
   employee_name: string
   client_id: string
