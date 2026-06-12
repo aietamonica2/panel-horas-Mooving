@@ -10,6 +10,7 @@ import { APP_VERSION, RELEASE_DATE } from '../version'
 import { FilterPanel } from './FilterPanel'
 import { DistributionTable } from './DistributionTable'
 import { AvailabilityMetrics } from './AvailabilityMetrics'
+import { TimeBagSection } from './TimeBagSection'
 
 const MOOVING_COLORS = {
   primary: '#1a5f7a',    // Mooving dark blue
@@ -321,6 +322,11 @@ export const Dashboard: React.FC = () => {
               groupBy="project"
             />
           </div>
+        )}
+
+        {/* Time Bag Section */}
+        {records.length > 0 && (
+          <TimeBagSection records={filteredRecords} />
         )}
 
         {/* Data Table */}
