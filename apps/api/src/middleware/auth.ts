@@ -38,8 +38,11 @@ export const auth = async (c: HonoContext, next: Next) => {
     return c.json({ success: false, error: 'Unauthorized' }, 401)
   }
   
-  // Token validation would happen here
-  // For now, we'll accept any token
+  // Verify token matches the simple password
+  if (token !== 'mooving2025') {
+    return c.json({ success: false, error: 'Unauthorized' }, 401)
+  }
+  
   c.set('auth', {
     tenant_id: 'default-tenant',
     user_id: 'default-user',

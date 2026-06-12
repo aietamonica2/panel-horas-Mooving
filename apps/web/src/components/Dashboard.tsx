@@ -7,6 +7,9 @@ import React, { useState } from 'react'
 import { useDataStore } from '../stores/dataStore'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { APP_VERSION, RELEASE_DATE } from '../version'
+import { FilterPanel } from './FilterPanel'
+import { DistributionTable } from './DistributionTable'
+import { AvailabilityMetrics } from './AvailabilityMetrics'
 
 const MOOVING_COLORS = {
   primary: '#1a5f7a',    // Mooving dark blue
@@ -22,10 +25,54 @@ const MOOVING_COLORS = {
 const CHART_COLORS = ['#1a5f7a', '#f97316', '#10b981', '#0ea5e9', '#8b5cf6', '#ec4899']
 
 export const Dashboard: React.FC = () => {
-  const { records, filters, setFilters, getFilteredRecords } = useDataStore()
+  const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
   const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [selectedMonth, setSelectedMonth] = useState<string>('')
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(['project', 'internal', 'meeting'])
 
   const filteredRecords = getFilteredRecords()
+
+  // Extract unique months from records
+  const availableMonths = Array.from(new Set(
+    records.map(r => r.date.substring(5, 7))
+  )).sort()
+
+  // Get unique categories
+  const categories = Array.from(new Set(records.map(r => r.work_type)))
+
+  // Filter by month and category
+  const applyFilters = () => {
+    if (selectedMonth) {
+      setFilters({ dateRangeStart: `2026-${selectedMonth}-01`, dateRangeEnd: `2026-${selectedMonth}-31` })
+    }
+    if (selectedCategories.length > 0) {
+      setFilters({ workTypes: selectedCategories })
+    }
+  }
+
+  // Reset filters
+  const handleResetFilters = () => {
+    setSelectedMonth('')
+    setSelectedCategories(['project', 'internal', 'meeting'])
+    clearFilters()
+  }
+
+  // Apply filters on change
+  React.useEffect(() => {
+    if (selectedMonth) {
+      setFilters({ dateRangeStart: `2026-${selectedMonth}-01`, dateRangeEnd: `2026-${selectedMonth}-31` })
+    } else {
+      setFilters({ dateRangeStart: '', dateRangeEnd: '' })
+    }
+  }, [selectedMonth, setFilters])
+
+  React.useEffect(() => {
+    if (selectedCategories.length > 0) {
+      setFilters({ workTypes: selectedCategories })
+    } else {
+      setFilters({ workTypes: [] })
+    }
+  }, [selectedCategories, setFilters])
 
   const totalHours = filteredRecords.reduce((sum, r) => sum + r.duration_hours, 0)
   const avgHours = filteredRecords.length > 0 ? (totalHours / filteredRecords.length).toFixed(2) : '0.00'
@@ -124,6 +171,19 @@ export const Dashboard: React.FC = () => {
             <span className="text-sm text-gray-500">Arrastra o selecciona CSV</span>
           </div>
         </div>
+
+        {/* Filter Panel */}
+        {records.length > 0 && (
+          <FilterPanel
+            selectedMonth={selectedMonth}
+            selectedCategories={selectedCategories}
+            availableMonths={availableMonths}
+            categories={categories}
+            onMonthChange={setSelectedMonth}
+            onCategoriesChange={setSelectedCategories}
+            onReset={handleResetFilters}
+          />
+        )}
 
         {/* KPIs Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -230,19 +290,45 @@ export const Dashboard: React.FC = () => {
                       <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                     ))}
                   </Pie>
-                  <Tooltip formatter={(value) => `${value.toFixed(1)}h`} />
+                  <Tooltip formatter={(value) => `${Number(value).toFixed(1)}h`} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
           </div>
         )}
 
+        {/* Availability Metrics */}
+        {filteredRecords.length > 0 && (
+          <AvailabilityMetrics records={filteredRecords} />
+        )}
+
+        {/* Distribution Tables */}
+        {filteredRecords.length > 0 && (
+          <div className="space-y-8">
+            <DistributionTable
+              records={filteredRecords}
+              title="📋 Distribución por Cliente"
+              groupBy="client"
+            />
+            <DistributionTable
+              records={filteredRecords}
+              title="👤 Distribución por Empleado"
+              groupBy="employee"
+            />
+            <DistributionTable
+              records={filteredRecords}
+              title="📂 Distribución por Proyecto"
+              groupBy="project"
+            />
+          </div>
+        )}
+
         {/* Data Table */}
         {filteredRecords.length > 0 && (
-          <div className="bg-white rounded-xl shadow-md overflow-hidden">
+          <div className="bg-white rounded-xl shadow-md overflow-hidden mt-8">
             <div className="px-6 py-4 border-b" style={{ borderColor: MOOVING_COLORS.border }}>
               <h3 className="text-lg font-semibold" style={{ color: MOOVING_COLORS.primary }}>
-                Últimos Registros
+                📅 Últimos Registros
               </h3>
             </div>
             <div className="overflow-x-auto">
@@ -253,6 +339,7 @@ export const Dashboard: React.FC = () => {
                     <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>Cliente</th>
                     <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>Proyecto</th>
                     <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>Horas</th>
+                    <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>Tipo</th>
                     <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>Fecha</th>
                   </tr>
                 </thead>
@@ -273,6 +360,11 @@ export const Dashboard: React.FC = () => {
                         <span className="font-semibold" style={{ color: MOOVING_COLORS.secondary }}>
                           {record.duration_hours.toFixed(2)}h
                         </span>
+                      </td>
+                      <td className="px-6 py-3 text-gray-600">
+                        {record.work_type === 'project' && '🏢 Proyecto'}
+                        {record.work_type === 'internal' && '⚙️ Interna'}
+                        {record.work_type === 'meeting' && '👥 Reunión'}
                       </td>
                       <td className="px-6 py-3 text-gray-500">{record.date}</td>
                     </tr>
