@@ -37,10 +37,23 @@ dataRouter.post(
       const data = c.req.valid('json')
       const company_id = c.get('auth')?.company_id || 'default-tenant'
 
-      // TODO: Insert records into D1 database
-      // await c.env.DB.prepare(
-      //   'INSERT INTO time_records (company_id, employee_id, ...) VALUES (?, ?, ...)'
-      // ).all(...)
+      // Insert records into D1 database
+      for (const record of data.records) {
+        const id = crypto.randomUUID()
+        await c.env.DB.prepare(`
+          INSERT INTO time_records (
+            id, company_id, employee_id, employee_name, client_id, client_name,
+            project_id, project_name, duration_decimal, duration_hours, duration_minutes,
+            date, work_type, description
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          id, company_id, record.employee_id, record.employee_name,
+          record.client_id, record.client_name, record.project_id, record.project_name,
+          record.duration_decimal, Math.floor(record.duration_decimal),
+          Math.round((record.duration_decimal % 1) * 60),
+          record.date, record.work_type, record.description || ''
+        ).run()
+      }
 
       const response: ApiResponse = {
         success: true,
@@ -109,16 +122,16 @@ dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
     const company_id = c.get('auth')?.company_id || 'default-tenant'
     const limit = c.req.query('limit') || '100'
 
-    // TODO: Query D1 database
-    // const result = await c.env.DB.prepare(
-    //   'SELECT * FROM time_records WHERE company_id = ? LIMIT ?'
-    // ).all(company_id, parseInt(limit))
+    // Query D1 database
+    const result = await c.env.DB.prepare(
+      'SELECT * FROM time_records WHERE company_id = ? ORDER BY date DESC LIMIT ?'
+    ).bind(company_id, parseInt(limit)).all()
 
     const response: ApiResponse = {
       success: true,
       data: {
-        records: [],
-        total: 0,
+        records: result.results || [],
+        total: result.results?.length || 0,
         limit: parseInt(limit),
       },
       timestamp: new Date().toISOString(),
