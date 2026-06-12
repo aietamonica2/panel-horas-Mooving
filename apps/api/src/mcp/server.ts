@@ -41,70 +41,66 @@ export const TOOL_REGISTRY = {
     return { metrics: results };
   },
 
-  sync_zendesk_hours: async (params: any, c: HonoContext) => {
-    // Mock integration: Simulates fetching recent solved tickets from Zendesk
-    // and extracting time-tracking data.
+  sync_clockify_hours: async (params: any, c: HonoContext) => {
+    // Mock integration: API de Clockify
     const { company_id, days_back = 7 } = params;
     return {
       success: true,
-      message: `Fetched Zendesk tickets from the last ${days_back} days.`,
+      message: `Horas de operaciones extraídas desde Clockify para los últimos ${days_back} días.`,
+      records_fetched: 110,
+      total_hours: 850.5,
+      source: 'clockify'
+    };
+  },
+
+  sync_zendesk_tickets: async (params: any, c: HonoContext) => {
+    // Mock integration: API de Zendesk para esfuerzo de soporte
+    const { company_id, days_back = 7 } = params;
+    return {
+      success: true,
+      message: `Tickets de soporte cerrados extraídos desde Zendesk para los últimos ${days_back} días.`,
       tickets_processed: 45,
-      extracted_hours: 120.5,
-      records_ready_for_audit: true
+      total_hours: 120.5,
+      source: 'zendesk'
     };
   },
 
   audit_timesheet: async (params: any, c: HonoContext) => {
-    // Simulates an audit on the extracted records (CSV or Zendesk)
-    const { records } = params;
+    // Valida inconsistencias unificando datos de ambas plataformas
+    const { clockify_records, zendesk_records } = params;
     let anomalies = [];
     
-    if (records && Array.isArray(records)) {
-      records.forEach((r, idx) => {
-        if (r.duration_hours > 12) {
-          anomalies.push({ index: idx, issue: `Exceeds 12 hours in a single day (${r.duration_hours}h)`, user: r.employee_name });
-        }
-        if (!r.project_id) {
-          anomalies.push({ index: idx, issue: 'Missing project assignment', user: r.employee_name });
-        }
-      });
-    }
+    // Lógica simulada de validación de negocio cruzada
+    anomalies.push({ issue: 'Exceso de 12 horas sumando Clockify + Zendesk el 10/06', user: 'monica.aieta' });
 
     return {
       status: anomalies.length > 0 ? 'requires_review' : 'clean',
-      total_records: records?.length || 0,
       anomalies_found: anomalies
     };
   },
 
   send_inactivity_alerts: async (params: any, c: HonoContext) => {
-    // Simulates finding users who haven't logged hours recently and sending Slack/Email alerts
-    const db = c.env.DB;
-    const { company_id, days_threshold = 7 } = params;
+    // Simula envío de alertas usando Cloudflare Email Routing
+    const { company_id, users } = params;
     
-    // In a real app, query users table left join time_records where date > now - threshold
     return {
       success: true,
-      alerts_sent: 3,
-      users_alerted: ['fede.mooving', 'alex.mooving', 'juan.perez'],
-      channel: 'Slack & Email'
+      alerts_sent: users?.length || 3,
+      channel: 'Cloudflare Email Routing',
+      message: 'Alertas despachadas exitosamente a los usuarios inactivos.'
     };
   },
 
   write_time_records: async (params: any, c: HonoContext) => {
-    // Secure write access for Senda after human confirmation
+    // Inserta datos en Cloudflare D1 clasificando el origen
     const db = c.env.DB;
-    const { company_id, records } = params; // array of records
+    const { company_id, records, source } = params;
     
-    if (!records || !Array.isArray(records)) {
-      throw new Error('Records array is required');
-    }
-
-    // In a real scenario, we would use a D1 batch insert
     return {
       success: true,
-      inserted_count: records.length,
-      message: 'Records securely written to database post-audit.'
+      inserted_count: records?.length || 0,
+      source: source || 'mixed',
+      message: 'Datos auditados guardados con éxito en la base de datos (Cloudflare D1).'
     };
   }
 };
