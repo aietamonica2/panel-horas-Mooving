@@ -16,6 +16,7 @@ import { ClientMonthlyDistribution } from './ClientMonthlyDistribution'
 import { EmployeeAvailability } from './EmployeeAvailability'
 import { BagOfHoursTable } from './BagOfHoursTable'
 import { AnalyticsCharts } from './AnalyticsCharts'
+import { QuickLogModal } from './QuickLogModal'
 
 const MOOVING_COLORS = {
   primary: '#1a5f7a',    // Mooving dark blue
@@ -33,6 +34,7 @@ const CHART_COLORS = ['#1a5f7a', '#f97316', '#10b981', '#0ea5e9', '#8b5cf6', '#e
 export const Dashboard: React.FC = () => {
   const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
   const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [isQuickLogOpen, setIsQuickLogOpen] = useState(false)
   const [selectedMonth, setSelectedMonth] = useState<string>('')
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['project', 'internal', 'meeting'])
   const [aiMessage, setAiMessage] = useState<string | null>(null)
@@ -195,6 +197,12 @@ export const Dashboard: React.FC = () => {
             <span className="text-xs bg-indigo-200 text-indigo-800 px-3 py-1 rounded-full font-bold uppercase tracking-wider">Modo Integrado</span>
           </div>
           <div className="flex flex-wrap gap-4 mb-6">
+            <button 
+              onClick={() => setIsQuickLogOpen(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-5 border border-indigo-700 rounded-lg shadow-sm transition flex items-center gap-2"
+            >
+              ⚡ Carga Rápida
+            </button>
             <button 
               onClick={() => handleSendaAction('Sincronización Clockify')}
               className="bg-white hover:bg-indigo-50 text-indigo-700 font-medium py-2 px-5 border border-indigo-200 rounded-lg shadow-sm transition flex items-center gap-2"
@@ -565,11 +573,16 @@ export const Dashboard: React.FC = () => {
         {/* Empty State */}
         {filteredRecords.length === 0 && records.length === 0 && (
           <div className="bg-white rounded-xl shadow-md p-12 text-center">
-            <p className="text-3xl mb-4">📁</p>
+            <p className="text-3xl mb-4">📭</p>
             <h3 className="text-xl font-semibold text-gray-700 mb-2">No hay datos</h3>
             <p className="text-gray-500">Carga un archivo CSV para comenzar a analizar</p>
           </div>
         )}
+
+        <QuickLogModal 
+          isOpen={isQuickLogOpen} 
+          onClose={() => setIsQuickLogOpen(false)} 
+        />
       </div>
     </div>
   )

@@ -63,6 +63,46 @@ dataRouter.post(
   }
 )
 
+// POST /api/data/records - Carga manual de horas (Fase 5)
+dataRouter.post(
+  '/records',
+  zValidator('json', TimeRecordSchema),
+  async (c: HonoContext): Promise<Response> => {
+    try {
+      const data = c.req.valid('json')
+      const company_id = c.get('auth')?.company_id || 'default-tenant'
+      const currentUserRole = 'admin' // MOCK: Esto vendría del JWT en un entorno real
+      const currentUserId = 'mock-user-123'
+      
+      // Validación RBAC: Solo administradores pueden cargar horas para otros empleados
+      if (currentUserRole !== 'admin' && data.employee_id !== currentUserId) {
+        return c.json({ success: false, error: 'No tienes permisos para cargar horas a nombre de otro empleado' }, 403)
+      }
+
+      const id = crypto.randomUUID()
+
+      await c.env.DB.prepare(`
+        INSERT INTO time_records (
+          id, company_id, employee_id, employee_name, client_id, client_name, project_id, project_name, 
+          duration_decimal, duration_hours, duration_minutes, date, work_type, description
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id, company_id, data.employee_id, data.employee_name, data.client_id, data.client_name, data.project_id, data.project_name,
+        data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || ''
+      ).run()
+
+      return c.json({
+        success: true,
+        data: { id, message: 'Registro creado exitosamente' },
+        timestamp: new Date().toISOString(),
+        version: 'v1.0.0'
+      })
+    } catch (error) {
+      return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+    }
+  }
+)
+
 // GET /api/data/records - Get time records
 dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
   try {
