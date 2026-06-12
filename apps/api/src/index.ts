@@ -8,6 +8,7 @@ import { cors } from './middleware/cors'
 import { auth } from './middleware/auth'
 import healthRouter from './routes/health'
 import dataRouter from './routes/data'
+import mcpRouter from './routes/mcp'
 import { HonoContext, ApiResponse, CloudflareEnv } from './types'
 
 const app = new Hono<{ Bindings: CloudflareEnv }>()
@@ -19,6 +20,7 @@ app.use('/api/*', auth)
 // Routes
 app.route('/api', healthRouter)
 app.route('/api/data', dataRouter)
+app.route('/api/mcp', mcpRouter)
 
 // Root endpoint
 app.get('/', (c) => {

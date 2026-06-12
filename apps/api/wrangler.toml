@@ -6,3 +6,8 @@ compatibility_date = "2024-01-22"
 binding = "DB"
 database_name = "panel-mooving-v1"
 database_id = "4f55653f-0f00-4c7d-bf84-3be78e096bfa"
+
+[vars]
+ENVIRONMENT = "development"
+SENDA_BASE_URL = "https://sendaqa.telar.ai/api"
+
