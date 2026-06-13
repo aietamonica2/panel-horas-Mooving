@@ -36,6 +36,44 @@ export const Dashboard: React.FC = () => {
   const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false)
+/**
+ * Main Dashboard Component - Mooving Style
+ * Professional operations dashboard with modern design
+ */
+
+import React, { useState } from 'react'
+import { useDataStore } from '../stores/dataStore'
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
+import { APP_VERSION, RELEASE_DATE } from '../version'
+import { FilterPanel } from './FilterPanel'
+import { DistributionTable } from './DistributionTable'
+import { AvailabilityMetrics } from './AvailabilityMetrics'
+import { TimeBagSection } from './TimeBagSection'
+import { EmployeeWorkloadBreakdown } from './EmployeeWorkloadBreakdown'
+import { ClientMonthlyDistribution } from './ClientMonthlyDistribution'
+import { EmployeeAvailability } from './EmployeeAvailability'
+import { BagOfHoursTable } from './BagOfHoursTable'
+import { AnalyticsCharts } from './AnalyticsCharts'
+import { QuickLogModal } from './QuickLogModal'
+import { api } from '../api'
+
+const MOOVING_COLORS = {
+  primary: '#1a5f7a',    // Mooving dark blue
+  secondary: '#f97316',  // Mooving orange
+  success: '#10b981',    // Green
+  warning: '#f59e0b',    // Amber
+  info: '#0ea5e9',       // Light blue
+  danger: '#ef4444',     // Red
+  lightBg: '#f8fafc',    // Light background
+  border: '#e2e8f0',     // Border color
+}
+
+const CHART_COLORS = ['#1a5f7a', '#f97316', '#10b981', '#0ea5e9', '#8b5cf6', '#ec4899']
+
+export const Dashboard: React.FC = () => {
+  const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
+  const [csvFile, setCsvFile] = useState<File | null>(null)
+  const [isQuickLogOpen, setIsQuickLogOpen] = useState(false)
   
   // Multi-select filter states
   const [selectedMonths, setSelectedMonths] = useState<string[]>([])
@@ -44,16 +82,53 @@ export const Dashboard: React.FC = () => {
   const [selectedProjects, setSelectedProjects] = useState<string[]>([])
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['project', 'internal', 'meeting', 'training', 'other'])
   const [aiMessage, setAiMessage] = useState<string | null>(null)
+  const [auditResults, setAuditResults] = useState<{ status: string; anomalies_found: { issue: string; user: string }[] } | null>(null)
+  const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
 
   const filteredRecords = getFilteredRecords()
 
-  // Senda AI mock action handler
-  const handleSendaAction = (action: string) => {
-    setAiMessage(`🤖 Senda AI: Ejecutando acción "${action}" vía MCP...`)
-    setTimeout(() => {
-      setAiMessage(`✅ Senda AI: Acción "${action}" completada exitosamente.`)
-      setTimeout(() => setAiMessage(null), 4000)
-    }, 2000)
+  // Senda AI action handler via MCP
+  const handleSendaAction = async (action: string) => {
+    let toolName = ''
+    let params: any = {}
+    
+    if (action === 'Sincronización Clockify') {
+      toolName = 'sync_clockify_hours'
+    } else if (action === 'Sincronización Zendesk Support') {
+      toolName = 'sync_zendesk_tickets'
+    } else if (action === 'Auditoría Completa de Horas') {
+      toolName = 'audit_timesheet'
+    } else if (action === 'Envío de Alertas Inactividad') {
+      toolName = 'send_inactivity_alerts'
+      params = { users: ['monica.aieta', 'federico.gomez'] }
+    } else {
+      return
+    }
+
+    setAiMessage(`🤖 Senda AI: Ejecutando herramienta ${toolName}...`)
+    
+    try {
+      const res = await api.callMcpTool(toolName, params)
+      const data = await res.json()
+      
+      if (data.success) {
+        if (toolName === 'audit_timesheet') {
+          setAuditResults(data.result)
+          setIsAuditModalOpen(true)
+          setAiMessage(`✅ Senda AI: Auditoría finalizada. Estado: ${data.result.status}`)
+        } else {
+          setAiMessage(`✅ Senda AI: ${data.result.message || 'Completado con éxito'}`)
+          await fetchRecords()
+        }
+      } else {
+        setAiMessage(`❌ Error: ${data.error || 'No se pudo completar la operación'}`)
+      }
+    } catch (err) {
+      console.error(err)
+      setAiMessage('❌ Error de conexión al ejecutar herramienta.')
+    } finally {
+      setTimeout(() => setAiMessage(null), 6000)
+    }
   }
 
   // Reset filters
@@ -615,6 +690,59 @@ export const Dashboard: React.FC = () => {
           isOpen={isQuickLogOpen} 
           onClose={() => setIsQuickLogOpen(false)} 
         />
+
+        {/* Modal de Auditoría */}
+        {isAuditModalOpen && auditResults && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
+              <div className="bg-gradient-to-r from-indigo-900 to-slate-800 p-4 flex justify-between items-center text-white">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <span className="text-2xl">🛡️</span> Reporte de Auditoría de Horas
+                </h2>
+                <button onClick={() => setIsAuditModalOpen(false)} className="text-gray-300 hover:text-white transition">
+                  ✕
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className={`p-4 rounded-lg flex items-center gap-3 ${auditResults.status === 'clean' ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-amber-50 text-amber-800 border border-amber-200'}`}>
+                  <span className="text-2xl">{auditResults.status === 'clean' ? '✅' : '⚠️'}</span>
+                  <div>
+                    <h3 className="font-bold uppercase text-xs tracking-wider">
+                      Estado: {auditResults.status === 'clean' ? 'Limpio' : 'Requiere Revisión'}
+                    </h3>
+                    <p className="text-sm">
+                      {auditResults.status === 'clean' 
+                        ? 'No se detectaron excesos de horas diarias en el período auditado.' 
+                        : `Se encontraron ${auditResults.anomalies_found.length} registros con posibles anomalías.`}
+                    </p>
+                  </div>
+                </div>
+
+                {auditResults.anomalies_found.length > 0 && (
+                  <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-100">
+                    {auditResults.anomalies_found.map((anomaly, idx) => (
+                      <div key={idx} className="p-3 hover:bg-gray-50 flex justify-between items-center text-sm">
+                        <span className="font-semibold text-gray-700">{anomaly.user}</span>
+                        <span className="text-red-600 bg-red-50 px-2 py-1 rounded font-medium border border-red-100">
+                          {anomaly.issue}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="pt-2 flex justify-end">
+                  <button 
+                    onClick={() => setIsAuditModalOpen(false)}
+                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow font-medium transition"
+                  >
+                    Entendido
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

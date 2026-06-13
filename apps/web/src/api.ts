@@ -24,5 +24,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: getHeaders()
+  }),
+  callMcpTool: (toolName: string, params: any) => fetch(`${API_BASE}/api/mcp/u/default-user/tools/call`, {
+    method: 'POST',
+    body: JSON.stringify({ toolName, params }),
+    headers: getHeaders()
   })
 }
