@@ -19,5 +19,10 @@ export const api = {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: getHeaders()
+  }),
+  createRecord: (payload: any) => fetch(`${API_BASE}/api/data/records`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: getHeaders()
   })
 }

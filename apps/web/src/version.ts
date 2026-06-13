@@ -3,39 +3,18 @@
  * Updated with each release to track deployments and changelog
  */
 
-export const APP_VERSION = 'v1.0.0'
+export const APP_VERSION = 'v1.0.1'
 export const RELEASE_DATE = '12 de Junio de 2026'
 export const RELEASE_NOTES = `
-v1.0.0 - 12 de Junio de 2026
+v1.0.1 - 12 de Junio de 2026
 
-✨ FEATURES
-- Dashboard interactivo con KPIs en tiempo real
-- Carga de archivos CSV
-- Filtros multi-criterio
-- Análisis de distribución de carga
-- Disponibilidad mensual por empleado
-- Bolsa de horas
-- Gráficos dinámicos con Recharts
+🐛 FIXES
+- Se resolvieron los problemas de inicialización del esquema en Cloudflare D1.
+- Se conectó la API para recuperar los registros existentes en base de datos.
+- Se solucionó la desincronización de company_id/tenant entre la base de datos (semilla) y el middleware de autenticación del API.
+- Se integró la subida de archivos CSV directamente a la base de datos D1 del Workers.
+- Se habilitó la carga de horas manuales (Quick Log) conectada al backend real.
+- Corrección de errores en pruebas unitarias del backend en entornos de test sin variables de entorno definidas.
 
-🏗️ ARCHITECTURAL
-- Monorepo structure (apps/web + apps/api)
-- React 18 + TypeScript
-- Zustand for state management
-- TailwindCSS styling
-- Vite build tool
-
-🔒 SECURITY
-- Multi-tenant ready architecture
-- JWT token validation
-- Input validation with Zod
-- CORS protection
-- Tenant isolation in all operations
-
-📚 DOCUMENTATION
-- Versioned documentation system
-- Architecture guide
-- Release notes
-- Database schema
-
-Anterior: Versión inicial de HTML estático v0.1.0
+Anterior: Versión inicial v1.0.0
 `

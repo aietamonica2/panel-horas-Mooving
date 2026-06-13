@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.1] - 2026-06-12
+
+### Fixed
+- Fixed schema initialization in Cloudflare D1 database.
+- Hooked up frontend API call (`api.listRecords()`) to load database records on mount.
+- Fixed tenant isolation company ID mismatch between auth middleware (`mooving-default`) and seed data.
+- Fixed CSV upload handler to send parsed records directly to Cloudflare D1 via backend API.
+- Fixed Quick Manual Log to persist data on D1 through backend endpoint.
+- Corrected unit test suite environment runtime configuration.
+
 ## [1.0.0] - 2026-06-12
 
 ### Added

@@ -1,4 +1,6 @@
 import React, { useState } from 'react'
+import { api } from '../api'
+import { useDataStore } from '../stores/dataStore'
 
 interface QuickLogModalProps {
   isOpen: boolean
@@ -13,19 +15,51 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
     description: ''
   })
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   if (!isOpen) return null
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setLoading(true)
+    setError(null)
     
-    // Aquí iría el POST a /api/data/records
-    // Por ahora simulamos la carga para el MVP
-    setTimeout(() => {
+    try {
+      const dur = parseFloat(formData.duration)
+      const payload = {
+        employee_id: 'emp_monica',
+        employee_name: 'monica.aieta',
+        client_id: 'cli_mooving',
+        client_name: 'Mooving',
+        project_id: formData.project_name.toLowerCase().replace(/\s+/g, '-'),
+        project_name: formData.project_name,
+        duration_decimal: isNaN(dur) ? 1.0 : dur,
+        date: new Date().toISOString().split('T')[0],
+        work_type: formData.work_type === 'support' ? 'project' : formData.work_type,
+        description: formData.description
+      }
+
+      const res = await api.createRecord(payload)
+      const json = await res.json()
+      if (res.ok && json.success) {
+        // Refresh store
+        const refreshRes = await api.listRecords()
+        if (refreshRes.ok) {
+          const refreshJson = await refreshRes.json()
+          if (refreshJson.success && refreshJson.data?.records) {
+            useDataStore.setState({ records: refreshJson.data.records })
+          }
+        }
+        onClose()
+      } else {
+        setError(json.error || 'Error al registrar horas')
+      }
+    } catch (err) {
+      console.error(err)
+      setError('Error de conexión con el servidor')
+    } finally {
       setLoading(false)
-      onClose()
-    }, 800)
+    }
   }
 
   return (
@@ -41,6 +75,11 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
         </div>
         
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {error && (
+            <div className="bg-red-50 text-red-700 p-3 rounded-lg border border-red-200 text-sm font-medium">
+              ⚠️ {error}
+            </div>
+          )}
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tarea</label>
             <select 

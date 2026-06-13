@@ -24,9 +24,9 @@ export const auth = async (c: HonoContext, next: Next) => {
   const token = c.req.header('Authorization')?.replace('Bearer ', '')
   
   // For development, allow requests without token
-  if (!token && c.env.ENVIRONMENT === 'development') {
+  if (!token && (!c.env || c.env.ENVIRONMENT === 'development')) {
     c.set('auth', {
-      company_id: 'default-tenant',
+      company_id: 'mooving-default',
       user_id: 'default-user',
       role: 'admin',
     })
@@ -44,7 +44,7 @@ export const auth = async (c: HonoContext, next: Next) => {
   }
   
   c.set('auth', {
-    company_id: 'default-tenant',
+    company_id: 'mooving-default',
     user_id: 'default-user',
     role: 'admin',
   })

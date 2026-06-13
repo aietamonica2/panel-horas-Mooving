@@ -15,7 +15,7 @@ healthRouter.get('/health', async (c: HonoContext): Promise<Response> => {
       status: 'ok',
       timestamp: new Date().toISOString(),
       version: 'v1.0.0',
-      environment: c.env.ENVIRONMENT,
+      environment: c.env?.ENVIRONMENT || 'development',
     },
     timestamp: new Date().toISOString(),
     version: 'v1.0.0',

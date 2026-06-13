@@ -2,6 +2,14 @@
 
 Cambios visibles para administradores y usuarios finales.
 
+## [1.0.1] - 12 de Junio de 2026
+
+### 🐛 Correcciones
+- **Carga de Datos en Vivo**: Se corrigió el problema donde la plataforma mostraba "No hay datos" por defecto. Ahora los datos almacenados en Cloudflare D1 se cargan automáticamente al iniciar la sesión.
+- **Persistencia de CSV**: Los archivos CSV subidos a través de la interfaz ahora se guardan de forma permanente en la base de datos remota de Cloudflare en lugar de quedar solo en la memoria del navegador.
+- **Registro Manual**: El botón de "Carga Rápida" ahora persiste las horas ingresadas directamente en la base de datos D1 del Workers.
+- **Alineación de Clientes y Empresas**: Se solucionó la desincronización en el identificador de la compañía (tenant ID) que impedía recuperar los datos del demo precargados en el D1.
+
 ## [1.0.0] - 12 de Junio de 2026
 
 ### ✨ Novedades

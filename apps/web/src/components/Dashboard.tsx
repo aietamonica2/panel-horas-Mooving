@@ -17,6 +17,7 @@ import { EmployeeAvailability } from './EmployeeAvailability'
 import { BagOfHoursTable } from './BagOfHoursTable'
 import { AnalyticsCharts } from './AnalyticsCharts'
 import { QuickLogModal } from './QuickLogModal'
+import { api } from '../api'
 
 const MOOVING_COLORS = {
   primary: '#1a5f7a',    // Mooving dark blue
@@ -75,6 +76,25 @@ export const Dashboard: React.FC = () => {
     clearFilters()
   }
 
+  const fetchRecords = async () => {
+    try {
+      const res = await api.listRecords()
+      if (res.ok) {
+        const json = await res.json()
+        if (json.success && json.data?.records) {
+          useDataStore.setState({ records: json.data.records })
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching records:', err)
+    }
+  }
+
+  // Load records on mount
+  React.useEffect(() => {
+    fetchRecords()
+  }, [])
+
   // Apply filters on change
   React.useEffect(() => {
     if (selectedMonth) {
@@ -103,39 +123,53 @@ export const Dashboard: React.FC = () => {
 
     setAiMessage('🤖 Senda QA Agent: Analizando y auditando el archivo CSV subido...')
 
-    const text = await file.text()
-    const lines = text.split('\n')
-    const headers = lines[0].split(',').map(h => h.trim().toLowerCase())
+    try {
+      const text = await file.text()
+      const lines = text.split('\n')
+      const recordsToUpload = lines.slice(1)
+        .filter(line => line.trim())
+        .map(line => {
+          const values = line.split(',').map(v => v.trim())
+          const dur = parseFloat(values[6])
+          
+          // Validate work_type to fit the enum: 'project' | 'internal' | 'meeting' | 'training' | 'other'
+          let wt = values[8] || 'project'
+          if (!['project', 'internal', 'meeting', 'training', 'other'].includes(wt)) {
+            wt = 'project'
+          }
 
-    const newRecords = lines.slice(1)
-      .filter(line => line.trim())
-      .map(line => {
-        const values = line.split(',').map(v => v.trim())
-        return {
-          id: Math.random().toString(36).substr(2, 9),
-          tenant_id: 'default',
-          employee_id: values[0],
-          employee_name: values[1],
-          client_id: values[2],
-          client_name: values[3],
-          project_id: values[4],
-          project_name: values[5],
-          duration_decimal: parseFloat(values[6]),
-          duration_hours: Math.floor(parseFloat(values[6])),
-          duration_minutes: Math.round((parseFloat(values[6]) % 1) * 60),
-          date: values[7],
-          work_type: 'project' as const,
-          description: values[8] || '',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        }
-      })
+          return {
+            employee_id: values[0] || 'unknown-emp',
+            employee_name: values[1] || 'Unknown Employee',
+            client_id: values[2] || 'unknown-client',
+            client_name: values[3] || 'Unknown Client',
+            project_id: values[4] || 'unknown-project',
+            project_name: values[5] || 'Unknown Project',
+            duration_decimal: isNaN(dur) ? 1.0 : dur,
+            date: values[7] || new Date().toISOString().split('T')[0],
+            work_type: wt as any,
+            description: values[9] || ''
+          }
+        })
 
-    setTimeout(() => {
-      useDataStore.setState({ records: newRecords })
-      setAiMessage('✅ Senda QA Agent: Datos auditados correctamente. 0 anomalías detectadas.')
-      setTimeout(() => setAiMessage(null), 4000)
-    }, 1500)
+      if (recordsToUpload.length === 0) {
+        setAiMessage('❌ Error: El archivo CSV está vacío.')
+        return
+      }
+
+      const res = await api.uploadCSV({ records: recordsToUpload })
+      const json = await res.json()
+      if (res.ok && json.success) {
+        setAiMessage(`✅ Senda QA Agent: Se subieron y guardaron ${json.data.uploaded} registros.`)
+        await fetchRecords()
+      } else {
+        setAiMessage(`❌ Error al subir: ${json.error || 'Error de validación'}`)
+      }
+    } catch (err) {
+      setAiMessage(`❌ Error de conexión: ${err instanceof Error ? err.message : 'Error'}`)
+    } finally {
+      setTimeout(() => setAiMessage(null), 5000)
+    }
   }
 
   // Chart data - Distribution by employee

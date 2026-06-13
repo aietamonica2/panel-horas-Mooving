@@ -35,7 +35,7 @@ dataRouter.post(
   async (c: HonoContext): Promise<Response> => {
     try {
       const data = c.req.valid('json')
-      const company_id = c.get('auth')?.company_id || 'default-tenant'
+      const company_id = c.get('auth')?.company_id || 'mooving-default'
 
       // Insert records into D1 database
       for (const record of data.records) {
@@ -83,7 +83,7 @@ dataRouter.post(
   async (c: HonoContext): Promise<Response> => {
     try {
       const data = c.req.valid('json')
-      const company_id = c.get('auth')?.company_id || 'default-tenant'
+      const company_id = c.get('auth')?.company_id || 'mooving-default'
       const currentUserRole = 'admin' // MOCK: Esto vendría del JWT en un entorno real
       const currentUserId = 'mock-user-123'
       
@@ -119,7 +119,7 @@ dataRouter.post(
 // GET /api/data/records - Get time records
 dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
   try {
-    const company_id = c.get('auth')?.company_id || 'default-tenant'
+    const company_id = c.get('auth')?.company_id || 'mooving-default'
     const limit = c.req.query('limit') || '100'
 
     // Query D1 database
