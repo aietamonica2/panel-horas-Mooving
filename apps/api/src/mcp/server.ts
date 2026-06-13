@@ -172,6 +172,89 @@ export const TOOL_REGISTRY = {
       source: source || 'mixed',
       message: 'Datos auditados guardados con éxito en la base de datos (Cloudflare D1).'
     };
+  },
+
+  parse_natural_language_hours: async (params: any, c: HonoContext) => {
+    const { text, company_id } = params;
+    if (!text) {
+      throw new Error('El texto es requerido para procesar.');
+    }
+    
+    const textLower = text.toLowerCase();
+    
+    // Default values
+    let employee_id = 'emp_monica';
+    let employee_name = 'monica.aieta';
+    let client_id = 'cli_mooving';
+    let client_name = 'Mooving';
+    let project_id = 'proj_moov_core';
+    let project_name = 'Senda Core';
+    let duration = 4.0;
+    let work_type = 'project';
+    let description = text;
+
+    // Extract employee
+    if (textLower.includes('fede') || textLower.includes('gomez') || textLower.includes('federico')) {
+      employee_id = 'emp_fede';
+      employee_name = 'federico.gomez';
+    } else if (textLower.includes('santi') || textLower.includes('perez') || textLower.includes('santiago')) {
+      employee_id = 'emp_santi';
+      employee_name = 'santiago.perez';
+    } else if (textLower.includes('moni') || textLower.includes('aieta') || textLower.includes('monica')) {
+      employee_id = 'emp_monica';
+      employee_name = 'monica.aieta';
+    }
+
+    // Extract client/project
+    if (textLower.includes('camuzzi')) {
+      client_id = 'cli_camuzzi';
+      client_name = 'Camuzzi';
+      project_id = 'proj_cam_web';
+      project_name = 'Portal Web';
+    } else if (textLower.includes('ypf')) {
+      client_id = 'cli_ypf';
+      client_name = 'YPF';
+      project_id = 'proj_ypf_mig';
+      project_name = 'Migración SAP';
+    } else if (textLower.includes('senda') || textLower.includes('core')) {
+      client_id = 'cli_mooving';
+      client_name = 'Mooving';
+      project_id = 'proj_moov_core';
+      project_name = 'Senda Core';
+    }
+
+    // Extract duration (e.g. 5.5h, 4h, 6 horas)
+    const durationMatch = textLower.match(/(\d+(\.\d+)?)\s*(h|hora)/);
+    if (durationMatch) {
+      duration = parseFloat(durationMatch[1]);
+    }
+
+    // Work type detection
+    if (textLower.includes('reunion') || textLower.includes('reunión') || textLower.includes('meeting') || textLower.includes('call')) {
+      work_type = 'meeting';
+    } else if (textLower.includes('soporte') || textLower.includes('incidente') || textLower.includes('ticket') || textLower.includes('zendesk')) {
+      work_type = 'other';
+    } else if (textLower.includes('capacitacion') || textLower.includes('capacitación') || textLower.includes('training')) {
+      work_type = 'training';
+    } else if (textLower.includes('interna') || textLower.includes('internal')) {
+      work_type = 'internal';
+    }
+
+    return {
+      success: true,
+      parsed: {
+        employee_id,
+        employee_name,
+        client_id,
+        client_name,
+        project_id,
+        project_name,
+        duration_decimal: duration,
+        date: new Date().toISOString().split('T')[0],
+        work_type,
+        description
+      }
+    };
   }
 };
 

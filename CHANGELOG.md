@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] - 2026-06-13
+
+### Added
+- Integrated frontend with actual MCP backend tools (`sync_clockify_hours`, `sync_zendesk_tickets`, `audit_timesheet`).
+- Added NLP tool `parse_natural_language_hours` to parser text inputs using Senda AI.
+- Redesigned `QuickLogModal.tsx` with clean nested manual dropdowns and a dedicated Senda AI NLP tab for quick imports.
+
 ## [1.0.3] - 2026-06-12
 
 ### Added

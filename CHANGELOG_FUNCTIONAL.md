@@ -2,6 +2,14 @@
 
 Cambios visibles para administradores y usuarios finales.
 
+## [1.0.4] - 13 de Junio de 2026
+
+### ✨ Novedades
+- **Carga de Horas Inteligente con Senda AI**: Se incorporó una pestaña de Carga con Senda AI en el modal de Carga Rápida que permite ingresar tareas mediante lenguaje natural (ej. *"Trabajé 4.5 horas en Camuzzi Portal Web resolviendo incidentes"*). La frase es procesada automáticamente mostrando una previsualización interactiva de los datos para confirmación.
+- **Selectores de Carga Manual Amigables**: Se reemplazaron los campos de texto libre de Carga Rápida por selectores predefinidos de empleados, clientes y proyectos (con selección inteligente de proyectos anidada al cliente seleccionado) para eliminar errores tipográficos al registrar horas.
+- **Vinculación con Clockify y Zendesk**: Los botones del asistente Senda AI en la interfaz ejecutan procesos reales de extracción e importación sobre la base de datos D1.
+- **Auditoría de Horas en Tiempo Real**: El botón de auditar tiempos analiza los registros reales guardados en la base de datos Cloudflare D1 e informa mediante un modal interactivo cualquier anomalía detectada (como excesos de 12 horas diarias por empleado).
+
 ## [1.0.3] - 12 de Junio de 2026
 
 ### ✨ Novedades

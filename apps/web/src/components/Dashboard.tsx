@@ -36,44 +36,7 @@ export const Dashboard: React.FC = () => {
   const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false)
-/**
- * Main Dashboard Component - Mooving Style
- * Professional operations dashboard with modern design
- */
 
-import React, { useState } from 'react'
-import { useDataStore } from '../stores/dataStore'
-import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
-import { APP_VERSION, RELEASE_DATE } from '../version'
-import { FilterPanel } from './FilterPanel'
-import { DistributionTable } from './DistributionTable'
-import { AvailabilityMetrics } from './AvailabilityMetrics'
-import { TimeBagSection } from './TimeBagSection'
-import { EmployeeWorkloadBreakdown } from './EmployeeWorkloadBreakdown'
-import { ClientMonthlyDistribution } from './ClientMonthlyDistribution'
-import { EmployeeAvailability } from './EmployeeAvailability'
-import { BagOfHoursTable } from './BagOfHoursTable'
-import { AnalyticsCharts } from './AnalyticsCharts'
-import { QuickLogModal } from './QuickLogModal'
-import { api } from '../api'
-
-const MOOVING_COLORS = {
-  primary: '#1a5f7a',    // Mooving dark blue
-  secondary: '#f97316',  // Mooving orange
-  success: '#10b981',    // Green
-  warning: '#f59e0b',    // Amber
-  info: '#0ea5e9',       // Light blue
-  danger: '#ef4444',     // Red
-  lightBg: '#f8fafc',    // Light background
-  border: '#e2e8f0',     // Border color
-}
-
-const CHART_COLORS = ['#1a5f7a', '#f97316', '#10b981', '#0ea5e9', '#8b5cf6', '#ec4899']
-
-export const Dashboard: React.FC = () => {
-  const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
-  const [csvFile, setCsvFile] = useState<File | null>(null)
-  const [isQuickLogOpen, setIsQuickLogOpen] = useState(false)
   
   // Multi-select filter states
   const [selectedMonths, setSelectedMonths] = useState<string[]>([])
