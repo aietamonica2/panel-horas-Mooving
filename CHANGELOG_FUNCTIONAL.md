@@ -2,6 +2,11 @@
 
 Cambios visibles para administradores y usuarios finales.
 
+## [1.0.2] - 12 de Junio de 2026
+
+### 🐛 Correcciones
+- **Selector de Mes Completo**: Se corrigió una limitación en la API que solo devolvía los últimos 100 registros. Al ampliar el límite a 5000, ahora se cargan correctamente todos los meses disponibles (de Enero a Junio) y todos los datos históricos del equipo en el panel principal.
+
 ## [1.0.1] - 12 de Junio de 2026
 
 ### 🐛 Correcciones

@@ -120,7 +120,7 @@ dataRouter.post(
 dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
   try {
     const company_id = c.get('auth')?.company_id || 'mooving-default'
-    const limit = c.req.query('limit') || '100'
+    const limit = c.req.query('limit') || '5000'
 
     // Query D1 database
     const result = await c.env.DB.prepare(
