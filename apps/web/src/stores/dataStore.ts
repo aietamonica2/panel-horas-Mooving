@@ -17,6 +17,7 @@ const initialState: AppState = {
     clients: [],
     projects: [],
     workTypes: [],
+    months: [],
   },
   isLoading: false,
   error: null,
@@ -57,6 +58,12 @@ export const useDataStore = create<AppState & {
     }
     if (state.filters.clients.length > 0) {
       filtered = filtered.filter(r => state.filters.clients.includes(r.client_id))
+    }
+    if (state.filters.projects.length > 0) {
+      filtered = filtered.filter(r => state.filters.projects.includes(r.project_id))
+    }
+    if (state.filters.months.length > 0) {
+      filtered = filtered.filter(r => state.filters.months.includes(r.date.substring(5, 7)))
     }
     if (state.filters.workTypes.length > 0) {
       filtered = filtered.filter(r => state.filters.workTypes.includes(r.work_type))

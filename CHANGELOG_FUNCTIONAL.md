@@ -2,6 +2,12 @@
 
 Cambios visibles para administradores y usuarios finales.
 
+## [1.0.3] - 12 de Junio de 2026
+
+### ✨ Novedades
+- **Filtros Multi-Selección Premium**: Rediseño de los selectores de Meses, Clientes, Empleados y Proyectos a menús desplegables que permiten seleccionar múltiples casillas a la vez y disponen de buscadores de texto internos.
+- **Anidamiento Reactivo (Filtros Inteligentes)**: Los selectores se adaptan dinámicamente entre sí. Si seleccionas un cliente, los filtros de empleados y proyectos se reducirán automáticamente para mostrar solo los que tienen relación con ese cliente, previniendo la selección de filtros vacíos.
+
 ## [1.0.2] - 12 de Junio de 2026
 
 ### 🐛 Correcciones

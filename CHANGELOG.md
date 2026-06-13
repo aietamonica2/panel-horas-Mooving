@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-06-12
+
+### Added
+- Multi-select dropdown filters for Months, Clients, Employees, and Projects using a custom `MultiSelectDropdown` component.
+- Implemented nested/reactive filtering logic (cascading selection options calculated based on other active filters).
+- Added comprehensive unit testing suite in `dataStore.test.ts` to validate multi-select filtering logic.
+
 ## [1.0.2] - 2026-06-12
 
 ### Fixed

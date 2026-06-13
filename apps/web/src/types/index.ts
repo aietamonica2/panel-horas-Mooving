@@ -59,6 +59,7 @@ export interface FilterState {
   clients: string[]
   projects: string[]
   workTypes: string[]
+  months: string[]
 }
 
 export interface AppState {

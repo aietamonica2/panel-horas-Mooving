@@ -3,14 +3,15 @@
  * Updated with each release to track deployments and changelog
  */
 
-export const APP_VERSION = 'v1.0.2'
+export const APP_VERSION = 'v1.0.3'
 export const RELEASE_DATE = '12 de Junio de 2026'
 export const RELEASE_NOTES = `
-v1.0.2 - 12 de Junio de 2026
+v1.0.3 - 12 de Junio de 2026
 
-🐛 FIXES
-- Se amplió el límite de la API de 100 a 5000 registros para mostrar el historial completo (Enero a Junio).
-- Se corrigió la inconsistencia en el filtro de meses en el selector del panel.
+✨ FEATURES
+- Filtros multi-selección con buscadores internos para Meses, Clientes, Empleados y Proyectos.
+- Anidamiento reactivo e inteligente entre selectores para evitar combinaciones sin datos.
+- Pruebas unitarias de filtros añadidas al dataStore.
 
-Anterior: Versión v1.0.1
+Anterior: Versión v1.0.2
 `

@@ -11,6 +11,7 @@ export const cors = async (c: HonoContext, next: Next) => {
   
   const allowedOrigins = [
     'https://panel-horas-web.pages.dev',
+    'https://panel-horas-mooving.pages.dev',
     'http://localhost:5173',
     'http://localhost:4173'
   ]

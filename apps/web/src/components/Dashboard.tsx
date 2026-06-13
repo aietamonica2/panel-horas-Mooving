@@ -36,8 +36,13 @@ export const Dashboard: React.FC = () => {
   const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false)
-  const [selectedMonth, setSelectedMonth] = useState<string>('')
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['project', 'internal', 'meeting'])
+  
+  // Multi-select filter states
+  const [selectedMonths, setSelectedMonths] = useState<string[]>([])
+  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
+  const [selectedClients, setSelectedClients] = useState<string[]>([])
+  const [selectedProjects, setSelectedProjects] = useState<string[]>([])
+  const [selectedCategories, setSelectedCategories] = useState<string[]>(['project', 'internal', 'meeting', 'training', 'other'])
   const [aiMessage, setAiMessage] = useState<string | null>(null)
 
   const filteredRecords = getFilteredRecords()
@@ -51,28 +56,13 @@ export const Dashboard: React.FC = () => {
     }, 2000)
   }
 
-  // Extract unique months from records
-  const availableMonths = Array.from(new Set(
-    records.map(r => r.date.substring(5, 7))
-  )).sort()
-
-  // Get unique categories
-  const categories = Array.from(new Set(records.map(r => r.work_type)))
-
-  // Filter by month and category
-  const applyFilters = () => {
-    if (selectedMonth) {
-      setFilters({ dateRangeStart: `2026-${selectedMonth}-01`, dateRangeEnd: `2026-${selectedMonth}-31` })
-    }
-    if (selectedCategories.length > 0) {
-      setFilters({ workTypes: selectedCategories })
-    }
-  }
-
   // Reset filters
   const handleResetFilters = () => {
-    setSelectedMonth('')
-    setSelectedCategories(['project', 'internal', 'meeting'])
+    setSelectedMonths([])
+    setSelectedEmployees([])
+    setSelectedClients([])
+    setSelectedProjects([])
+    setSelectedCategories(['project', 'internal', 'meeting', 'training', 'other'])
     clearFilters()
   }
 
@@ -95,21 +85,25 @@ export const Dashboard: React.FC = () => {
     fetchRecords()
   }, [])
 
-  // Apply filters on change
+  // Sync state filters to Zustand store
   React.useEffect(() => {
-    if (selectedMonth) {
-      setFilters({ dateRangeStart: `2026-${selectedMonth}-01`, dateRangeEnd: `2026-${selectedMonth}-31` })
-    } else {
-      setFilters({ dateRangeStart: '', dateRangeEnd: '' })
-    }
-  }, [selectedMonth, setFilters])
+    setFilters({ months: selectedMonths })
+  }, [selectedMonths, setFilters])
 
   React.useEffect(() => {
-    if (selectedCategories.length > 0) {
-      setFilters({ workTypes: selectedCategories })
-    } else {
-      setFilters({ workTypes: [] })
-    }
+    setFilters({ employees: selectedEmployees })
+  }, [selectedEmployees, setFilters])
+
+  React.useEffect(() => {
+    setFilters({ clients: selectedClients })
+  }, [selectedClients, setFilters])
+
+  React.useEffect(() => {
+    setFilters({ projects: selectedProjects })
+  }, [selectedProjects, setFilters])
+
+  React.useEffect(() => {
+    setFilters({ workTypes: selectedCategories })
   }, [selectedCategories, setFilters])
 
   const totalHours = filteredRecords.reduce((sum, r) => sum + r.duration_hours, 0)
@@ -312,14 +306,18 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* Filter Panel */}
         {records.length > 0 && (
           <FilterPanel
-            selectedMonth={selectedMonth}
+            records={records}
+            selectedMonths={selectedMonths}
+            selectedEmployees={selectedEmployees}
+            selectedClients={selectedClients}
+            selectedProjects={selectedProjects}
             selectedCategories={selectedCategories}
-            availableMonths={availableMonths}
-            categories={categories}
-            onMonthChange={setSelectedMonth}
+            onMonthsChange={setSelectedMonths}
+            onEmployeesChange={setSelectedEmployees}
+            onClientsChange={setSelectedClients}
+            onProjectsChange={setSelectedProjects}
             onCategoriesChange={setSelectedCategories}
             onReset={handleResetFilters}
           />
