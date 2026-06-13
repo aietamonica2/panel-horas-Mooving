@@ -9,7 +9,7 @@
   ],
   "scripts": {
     "dev": "npm run dev --workspaces",
-    "build": "npm run build --workspaces",
+    "build": "npm run build -w apps/web",
     "test:all": "npm run test --workspaces",
     "test": "vitest",
     "lint": "eslint . --ext .ts,.tsx,.js,.jsx",

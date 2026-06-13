@@ -4,6 +4,7 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
+    "build": "echo 'No build step required for API'",
     "deploy": "wrangler deploy",
     "test": "vitest",
     "db:migrate": "wrangler d1 migrations apply",
