@@ -13,7 +13,9 @@
     "forceConsistentCasingInFileNames": true,
     "declaration": true,
     "declarationMap": true,
-    "sourceMap": true
+    "sourceMap": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "react"
   },
   "include": ["apps/**/*.ts", "apps/**/*.tsx"],
   "exclude": ["node_modules", "dist"]

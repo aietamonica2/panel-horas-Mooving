@@ -3,12 +3,16 @@
  * Shared between routes and middleware
  */
 
+/// <reference types="@cloudflare/workers-types" />
+
 import { Context } from 'hono'
 
 export interface CloudflareEnv {
   DB: D1Database
   ENVIRONMENT: 'development' | 'production'
-  SECRET_KEY: string
+  SECRET_KEY?: string
+  SENDA_BASE_URL?: string
+  [key: string]: any
 }
 
 export interface TimeRecordPayload {
@@ -33,4 +37,5 @@ export interface ApiResponse<T = any> {
   version: string
 }
 
-export type HonoContext = Context<{ Bindings: CloudflareEnv }>
+export type AppEnv = { Bindings: CloudflareEnv }
+export type HonoContext = Context<AppEnv>
