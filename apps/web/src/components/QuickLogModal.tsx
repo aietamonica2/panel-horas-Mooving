@@ -35,6 +35,7 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
     project_id: 'proj_moov_core',
     duration: '4.0',
     work_type: 'project',
+    date: new Date().toISOString().split('T')[0],
     description: ''
   })
 
@@ -80,7 +81,7 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
         project_id: manualData.project_id,
         project_name: selectedProj?.name || 'Unknown',
         duration_decimal: isNaN(dur) ? 1.0 : dur,
-        date: new Date().toISOString().split('T')[0],
+        date: manualData.date || new Date().toISOString().split('T')[0],
         work_type: manualData.work_type,
         description: manualData.description
       }
@@ -256,6 +257,18 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
                     ))}
                   </select>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Fecha</label>
+                <input
+                  type="date"
+                  required
+                  max={new Date().toISOString().split('T')[0]}
+                  className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-800 focus:ring-2 focus:ring-orange-500 outline-none"
+                  value={manualData.date}
+                  onChange={e => setManualData({ ...manualData, date: e.target.value })}
+                />
               </div>
 
               <div>
