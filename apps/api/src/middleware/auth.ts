@@ -40,6 +40,12 @@ export const auth = async (c: HonoContext, next: Next) => {
     return
   }
 
+  // Allow MCP endpoints to bypass JWT check (Senda AI uses API keys, not JWTs)
+  if (c.req.path.startsWith('/api/mcp')) {
+    await next()
+    return
+  }
+
   if (!token) {
     return c.json({ success: false, error: 'Unauthorized' }, 401)
   }
