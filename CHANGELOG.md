@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.0] - 2026-06-14
+
+### Added
+- Panel Analítico Personal en "Mis Horas" (MyTime.tsx) con gráficas interactiva usando Recharts.
+- Herramienta MCP `get_employee_insights` para que Senda IA actúe como coach de productividad.
+- Filtro de seguridad (aislamiento de datos) en el endpoint `GET /api/data/records` para usuarios no administradores.
+- Cumplimiento de brand guideline: "Preguntar a Senda".
+
 ## [1.3.0] - 2026-06-13
 
 ### Added

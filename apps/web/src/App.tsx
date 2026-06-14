@@ -63,8 +63,8 @@ export function App() {
       {/* Senda Chat Widget Integration */}
       <senda-chat 
         api-key={import.meta.env.VITE_SENDA_API_KEY || ''} 
-        space="operaciones-mooving" 
-        title="Senda Mooving Assistant"
+        space="tramia" 
+        title="Preguntar a Senda"
       ></senda-chat>
     </div>
   )
