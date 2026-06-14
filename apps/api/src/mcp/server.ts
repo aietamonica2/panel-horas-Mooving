@@ -157,6 +157,48 @@ export const TOOL_REGISTRY = {
     return { metrics: results };
   },
 
+  get_employee_insights: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { company_id, employee_id, month } = params;
+    
+    // Assume 160h standard month for full time
+    const expected_monthly_hours = 160;
+
+    let query = 'SELECT * FROM time_records WHERE company_id = ? AND employee_id = ?';
+    const queryParams: any[] = [company_id || c.get('auth')?.company_id || 'mooving-default', employee_id];
+
+    if (month) {
+      query += ' AND strftime("%Y-%m", date) = ?';
+      queryParams.push(month);
+    } else {
+      // Default to current month
+      query += ' AND strftime("%Y-%m", date) = strftime("%Y-%m", "now")';
+    }
+
+    const { results } = await db.prepare(query).bind(...queryParams).all();
+    
+    const total_hours = results.reduce((acc: number, r: any) => acc + (r.duration_decimal || 0), 0);
+    const unique_days = new Set(results.map((r: any) => r.date)).size;
+    const avg_per_day = unique_days > 0 ? (total_hours / unique_days).toFixed(1) : 0;
+    
+    // Most common clients
+    const clients: Record<string, number> = {};
+    results.forEach((r: any) => {
+      clients[r.client_name] = (clients[r.client_name] || 0) + (r.duration_decimal || 0);
+    });
+    
+    return {
+      employee_id,
+      month_evaluated: month || 'current',
+      total_hours_loaded: total_hours,
+      expected_monthly_hours,
+      gap_hours: Math.max(0, expected_monthly_hours - total_hours),
+      average_hours_per_active_day: Number(avg_per_day),
+      top_clients: clients,
+      insight_message: `El empleado ha cargado ${total_hours}h este mes. Su meta es ${expected_monthly_hours}h. Le faltan ${Math.max(0, expected_monthly_hours - total_hours)}h.`
+    };
+  },
+
   sync_clockify_hours: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';

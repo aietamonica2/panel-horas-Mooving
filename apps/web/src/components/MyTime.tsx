@@ -1,16 +1,23 @@
-import React, { useState } from 'react'
-import { api } from '../api'
+import React, { useState, useEffect } from 'react';
+import { api } from '../api';
+import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { Clock, CheckCircle, ListTodo } from 'lucide-react';
 
 const MOOVING_COLORS = {
   primary: '#1a5f7a',
   secondary: '#f97316',
   lightBg: '#f8fafc',
   border: '#e2e8f0',
-}
+};
+
+const CHART_COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899'];
 
 export const MyTime: React.FC = () => {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [message, setMessage] = useState('')
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [message, setMessage] = useState('');
+  const [records, setRecords] = useState<any[]>([]);
+  const [loadingRecords, setLoadingRecords] = useState(true);
+  
   const [formData, setFormData] = useState({
     client_name: '',
     project_name: '',
@@ -18,156 +25,240 @@ export const MyTime: React.FC = () => {
     date: new Date().toISOString().split('T')[0],
     work_type: 'project',
     description: ''
-  })
+  });
+
+  const fetchRecords = async () => {
+    setLoadingRecords(true);
+    try {
+      const res = await api.getRecords(100);
+      const data = await res.json();
+      if (data.success) {
+        setRecords(data.data.records);
+      }
+    } catch (err) {
+      console.error('Error fetching records:', err);
+    } finally {
+      setLoadingRecords(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchRecords();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsSubmitting(true)
-    setMessage('Guardando...')
+    e.preventDefault();
+    setIsSubmitting(true);
+    setMessage('Guardando...');
     
     try {
-      const userEmail = localStorage.getItem('mooving_user_email') || 'unknown@moovingtech.com'
-      const userName = userEmail.split('@')[0]
-      const userId = 'emp_' + userName.replace('.', '_')
+      const userEmail = localStorage.getItem('mooving_user_email') || 'unknown@moovingtech.com';
+      const userName = userEmail.split('@')[0];
+      const userId = 'emp_' + userName.replace('.', '_');
 
       const payload = {
         employee_id: userId,
         employee_name: userName,
-        client_id: 'cli_' + formData.client_name.toLowerCase().replace(/\s/g, ''),
+        client_id: 'cli_' + formData.client_name.toLowerCase().replace(/\\s/g, ''),
         client_name: formData.client_name,
-        project_id: 'proj_' + formData.project_name.toLowerCase().replace(/\s/g, ''),
+        project_id: 'proj_' + formData.project_name.toLowerCase().replace(/\\s/g, ''),
         project_name: formData.project_name,
         duration_decimal: Number(formData.duration_decimal),
         date: formData.date,
         work_type: formData.work_type,
         description: formData.description
-      }
+      };
 
-      const res = await api.addRecord(payload)
-      const data = await res.json()
+      const res = await api.addRecord(payload);
+      const data = await res.json();
       if (data.success) {
-        setMessage('✅ ¡Horas guardadas con éxito!')
-        // Reset form partially
-        setFormData(prev => ({ ...prev, duration_decimal: 1.0, description: '' }))
+        setMessage('✅ ¡Horas guardadas con éxito!');
+        setFormData(prev => ({ ...prev, duration_decimal: 1.0, description: '' }));
+        fetchRecords(); // Refresca los datos tras guardar
       } else {
-        setMessage('❌ Error al guardar las horas.')
+        setMessage('❌ Error al guardar las horas.');
       }
     } catch (err) {
-      setMessage('❌ Error de red.')
+      setMessage('❌ Error de red.');
     } finally {
-      setIsSubmitting(false)
-      setTimeout(() => setMessage(''), 3000)
+      setIsSubmitting(false);
+      setTimeout(() => setMessage(''), 3000);
     }
-  }
+  };
+
+  // --- Analíticas Computadas ---
+  const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
+  const thisMonthRecords = records.filter(r => r.date.startsWith(currentMonth));
+  
+  const totalHoursThisMonth = thisMonthRecords.reduce((acc, r) => acc + (r.duration_decimal || 0), 0);
+  const expectedHours = 160;
+  const progress = Math.min(100, Math.round((totalHoursThisMonth / expectedHours) * 100));
+
+  // Datos para el gráfico de Donas (Clientes)
+  const clientsData = Object.values(
+    thisMonthRecords.reduce((acc: any, r: any) => {
+      acc[r.client_name] = acc[r.client_name] || { name: r.client_name, value: 0 };
+      acc[r.client_name].value += r.duration_decimal;
+      return acc;
+    }, {})
+  ) as any[];
 
   return (
-    <div style={{ backgroundColor: MOOVING_COLORS.lightBg }} className="min-h-screen relative p-8">
-      <div className="max-w-4xl mx-auto">
-        <h2 className="text-3xl font-bold mb-2" style={{ color: MOOVING_COLORS.primary }}>Mi Registro de Horas</h2>
-        <p className="text-gray-600 mb-8">Registra tu actividad de forma manual o utilizando el asistente Senda AI en la esquina inferior derecha.</p>
+    <div className="flex-1 bg-slate-50 overflow-auto p-8">
+      <div className="max-w-6xl mx-auto space-y-8">
         
-        <div className="bg-white rounded-xl shadow-md p-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.client_name}
-                  onChange={e => setFormData(p => ({ ...p, client_name: e.target.value }))}
-                  className="w-full border rounded-lg p-2" 
-                  placeholder="Ej: Mooving"
-                />
+        {/* Cabecera y Formulario */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          
+          <div className="lg:col-span-2 space-y-8">
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                <Clock className="w-6 h-6 text-indigo-600" />
+                Registrar Horas
+              </h2>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Cliente</label>
+                    <input type="text" required value={formData.client_name} onChange={e => setFormData(p => ({ ...p, client_name: e.target.value }))} className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500" placeholder="Ej: Mooving" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Proyecto</label>
+                    <input type="text" required value={formData.project_name} onChange={e => setFormData(p => ({ ...p, project_name: e.target.value }))} className="w-full border rounded-lg p-2 focus:ring-2 focus:ring-indigo-500" placeholder="Ej: Senda Core" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
+                    <input type="date" required value={formData.date} onChange={e => setFormData(p => ({ ...p, date: e.target.value }))} className="w-full border rounded-lg p-2" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Duración (horas)</label>
+                    <input type="number" required step="0.5" min="0.5" max="24" value={formData.duration_decimal} onChange={e => setFormData(p => ({ ...p, duration_decimal: Number(e.target.value) }))} className="w-full border rounded-lg p-2" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tarea</label>
+                    <select className="w-full border rounded-lg p-2 bg-white" value={formData.work_type} onChange={e => setFormData(p => ({ ...p, work_type: e.target.value }))}>
+                      <option value="project">Proyecto (Facturable)</option>
+                      <option value="internal">Gestión Interna</option>
+                      <option value="meeting">Reunión</option>
+                      <option value="training">Capacitación</option>
+                      <option value="other">Soporte/Otro</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Descripción / Notas</label>
+                  <textarea value={formData.description} onChange={e => setFormData(p => ({ ...p, description: e.target.value }))} className="w-full border rounded-lg p-2" rows={2} placeholder="Describe las tareas realizadas..." />
+                </div>
+
+                <div className="flex items-center justify-between pt-4 border-t">
+                  <span className="text-sm font-medium text-indigo-600">{message}</span>
+                  <button type="submit" disabled={isSubmitting} className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-6 rounded-lg shadow-sm transition disabled:opacity-50">
+                    {isSubmitting ? 'Guardando...' : 'Cargar Horas'}
+                  </button>
+                </div>
+              </form>
+            </div>
+            
+            {/* Historial */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
+                <ListTodo className="w-5 h-5 text-indigo-600" />
+                Tu Historial (Últimas Entradas)
+              </h2>
+              {loadingRecords ? (
+                <div className="text-center py-8 text-gray-500">Cargando registros...</div>
+              ) : records.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">No has registrado horas todavía.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-y border-gray-200 text-sm text-gray-600">
+                        <th className="py-3 px-4 font-medium">Fecha</th>
+                        <th className="py-3 px-4 font-medium">Cliente</th>
+                        <th className="py-3 px-4 font-medium">Proyecto</th>
+                        <th className="py-3 px-4 font-medium">Horas</th>
+                        <th className="py-3 px-4 font-medium hidden sm:table-cell">Descripción</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-sm">
+                      {records.slice(0, 10).map((r, i) => (
+                        <tr key={i} className="hover:bg-gray-50">
+                          <td className="py-3 px-4 font-medium text-gray-900">{r.date}</td>
+                          <td className="py-3 px-4">{r.client_name}</td>
+                          <td className="py-3 px-4 text-gray-500">{r.project_name}</td>
+                          <td className="py-3 px-4 font-semibold text-indigo-600">{r.duration_decimal}h</td>
+                          <td className="py-3 px-4 text-gray-500 truncate max-w-xs hidden sm:table-cell" title={r.description}>{r.description || '-'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Analítica */}
+          <div className="space-y-6">
+            <div className="bg-indigo-600 text-white rounded-xl shadow-sm p-6 relative overflow-hidden">
+              <div className="relative z-10">
+                <h3 className="text-indigo-100 font-medium mb-1">Horas este mes</h3>
+                <div className="text-4xl font-bold mb-4">{totalHoursThisMonth.toFixed(1)} <span className="text-lg font-normal text-indigo-200">/ {expectedHours}h</span></div>
+                
+                <div className="w-full bg-indigo-900/50 rounded-full h-2.5 mb-2">
+                  <div className="bg-white h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
+                </div>
+                <p className="text-sm text-indigo-200">{progress}% de tu meta mensual</p>
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Proyecto</label>
-                <input 
-                  type="text" 
-                  required
-                  value={formData.project_name}
-                  onChange={e => setFormData(p => ({ ...p, project_name: e.target.value }))}
-                  className="w-full border rounded-lg p-2" 
-                  placeholder="Ej: Senda Core"
-                />
-              </div>
+              <CheckCircle className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" />
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fecha</label>
-                <input 
-                  type="date" 
-                  required
-                  value={formData.date}
-                  onChange={e => setFormData(p => ({ ...p, date: e.target.value }))}
-                  className="w-full border rounded-lg p-2" 
-                />
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <h3 className="text-gray-800 font-bold mb-4">Distribución por Cliente</h3>
+              <div className="h-48 w-full">
+                {clientsData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={clientsData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} paddingAngle={5} dataKey="value">
+                        {clientsData.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <RechartsTooltip formatter={(value: number) => [`${value}h`, 'Horas']} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-sm text-gray-400">Sin datos este mes</div>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Duración (horas)</label>
-                <input 
-                  type="number" 
-                  required
-                  step="0.5"
-                  min="0.5"
-                  max="24"
-                  value={formData.duration_decimal}
-                  onChange={e => setFormData(p => ({ ...p, duration_decimal: Number(e.target.value) }))}
-                  className="w-full border rounded-lg p-2" 
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tipo de Tarea</label>
-                <select 
-                  className="w-full border rounded-lg p-2 bg-white"
-                  value={formData.work_type}
-                  onChange={e => setFormData(p => ({ ...p, work_type: e.target.value }))}
-                >
-                  <option value="project">Proyecto (Facturable)</option>
-                  <option value="internal">Gestión Interna</option>
-                  <option value="meeting">Reunión</option>
-                  <option value="training">Capacitación</option>
-                  <option value="other">Soporte/Otro</option>
-                </select>
+              <div className="mt-4 space-y-2">
+                {clientsData.map((client, i) => (
+                  <div key={i} className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
+                      <span className="text-gray-600">{client.name}</span>
+                    </div>
+                    <span className="font-medium">{client.value}h</span>
+                  </div>
+                ))}
               </div>
             </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Descripción / Notas</label>
-              <textarea 
-                value={formData.description}
-                onChange={e => setFormData(p => ({ ...p, description: e.target.value }))}
-                className="w-full border rounded-lg p-2" 
-                rows={3}
-                placeholder="Describe brevemente las tareas realizadas..."
-              />
+            
+            <div className="bg-emerald-50 border border-emerald-100 rounded-xl p-5">
+              <h4 className="font-semibold text-emerald-800 mb-2">🤖 Pregúntale a Senda</h4>
+              <p className="text-sm text-emerald-700 leading-relaxed">
+                El widget puede decirte cómo vas. Prueba preguntarle: <br/>
+                <strong className="mt-1 block">"¿Cuántas horas tengo cargadas este mes y cuántas me faltan?"</strong>
+              </p>
             </div>
-
-            <div className="flex items-center justify-between pt-4 border-t">
-              <span className="text-sm font-medium text-indigo-600">{message}</span>
-              <button 
-                type="submit" 
-                disabled={isSubmitting}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-6 rounded-lg shadow-sm transition disabled:opacity-50"
-              >
-                {isSubmitting ? 'Guardando...' : 'Cargar Horas'}
-              </button>
-            </div>
-          </form>
+          </div>
         </div>
 
-        <div className="mt-8 bg-indigo-50 border border-indigo-100 rounded-xl p-6 text-indigo-900">
-          <h3 className="text-lg font-semibold flex items-center gap-2 mb-2">
-            <span className="text-2xl">🤖</span> Tip: Usa el Asistente Senda
-          </h3>
-          <p className="text-sm">
-            En lugar de llenar el formulario manualmente, abre el chat en la esquina inferior y di: 
-            <strong>"Ayer trabajé 4 horas para Camuzzi en la integración web"</strong>. 
-            Senda detectará automáticamente el proyecto, el cliente, las horas y la fecha, y lo guardará por ti.
-          </p>
-        </div>
       </div>
     </div>
-  )
-}
+  );
+};

@@ -120,13 +120,25 @@ dataRouter.post(
 // GET /api/data/records - Get time records
 dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
   try {
-    const company_id = c.get('auth')?.company_id || 'mooving-default'
+    const authPayload = c.get('auth')
+    const company_id = authPayload?.company_id || 'mooving-default'
     const limit = c.req.query('limit') || '5000'
+    const currentUserRole = authPayload?.role || 'employee'
+    const currentUserId = authPayload?.user_id
+
+    let query = 'SELECT * FROM time_records WHERE company_id = ?'
+    const params: any[] = [company_id]
+
+    if (currentUserRole !== 'admin' && currentUserId) {
+      query += ' AND employee_id = ?'
+      params.push(currentUserId)
+    }
+
+    query += ' ORDER BY date DESC LIMIT ?'
+    params.push(parseInt(limit))
 
     // Query D1 database
-    const result = await c.env.DB.prepare(
-      'SELECT * FROM time_records WHERE company_id = ? ORDER BY date DESC LIMIT ?'
-    ).bind(company_id, parseInt(limit)).all()
+    const result = await c.env.DB.prepare(query).bind(...params).all()
 
     const response: ApiResponse = {
       success: true,
