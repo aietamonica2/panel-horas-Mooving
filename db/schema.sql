@@ -103,6 +103,20 @@ CREATE INDEX idx_projects_company ON projects(company_id);
 CREATE INDEX idx_projects_client ON projects(company_id, client_id);
 
 -- ============================================================================
+-- Categories Table
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS categories (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_categories_company ON categories(company_id);
+
+-- ============================================================================
 -- Audit Logs Table (Compliance & Security)
 -- ============================================================================
 

@@ -22,6 +22,7 @@ const TimeRecordSchema = z.object({
   date: z.string().date(),
   work_type: z.enum(['project', 'internal', 'meeting', 'training', 'other']),
   description: z.string().optional(),
+  source: z.string().optional(),
 })
 
 const CsvUploadSchema = z.object({
@@ -97,11 +98,11 @@ dataRouter.post(
       await c.env.DB.prepare(`
         INSERT INTO time_records (
           id, company_id, employee_id, employee_name, client_id, client_name, project_id, project_name, 
-          duration_decimal, duration_hours, duration_minutes, date, work_type, description
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          duration_decimal, duration_hours, duration_minutes, date, work_type, description, source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         id, company_id, data.employee_id, data.employee_name, data.client_id, data.client_name, data.project_id, data.project_name,
-        data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || ''
+        data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || '', data.source || 'manual'
       ).run()
 
       return c.json({

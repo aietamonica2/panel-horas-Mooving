@@ -607,6 +607,7 @@ export const Dashboard: React.FC = () => {
                     <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>Proyecto</th>
                     <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>Horas</th>
                     <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>Tipo</th>
+                    <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>Origen</th>
                     <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>Fecha</th>
                     <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>Acciones</th>
                   </tr>
@@ -633,6 +634,17 @@ export const Dashboard: React.FC = () => {
                         {record.work_type === 'project' && '🏢 Proyecto'}
                         {record.work_type === 'internal' && '⚙️ Interna'}
                         {record.work_type === 'meeting' && '👥 Reunión'}
+                      </td>
+                      <td className="px-6 py-3 text-center">
+                        {record.source === 'senda_ai' ? (
+                          <span className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded text-xs font-bold">🤖 Senda AI</span>
+                        ) : record.source === 'zendesk' ? (
+                          <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded text-xs font-bold">🎧 Zendesk</span>
+                        ) : record.source === 'clockify' ? (
+                          <span className="bg-sky-100 text-sky-700 px-2 py-1 rounded text-xs font-bold">⏱️ Clockify</span>
+                        ) : (
+                          <span className="bg-slate-100 text-slate-700 px-2 py-1 rounded text-xs font-bold">📋 Manual</span>
+                        )}
                       </td>
                       <td className="px-6 py-3 text-gray-500">{record.date}</td>
                       <td className="px-6 py-3 text-center">

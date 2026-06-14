@@ -1,6 +1,122 @@
 import { HonoContext } from '../types';
 
 export const TOOL_REGISTRY = {
+  get_clients: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { results } = await db.prepare('SELECT * FROM clients WHERE company_id = ?').bind(company_id).all();
+    return { clients: results };
+  },
+  create_client: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { company_id, name } = params;
+    const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
+    const id = 'cli_' + crypto.randomUUID().split('-')[0];
+    await db.prepare('INSERT INTO clients (id, company_id, name) VALUES (?, ?, ?)')
+      .bind(id, cid, name).run();
+    return { success: true, client_id: id };
+  },
+  update_client: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id, name } = params;
+    await db.prepare('UPDATE clients SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .bind(name, id).run();
+    return { success: true };
+  },
+  delete_client: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id } = params;
+    await db.prepare('DELETE FROM clients WHERE id = ?').bind(id).run();
+    return { success: true };
+  },
+
+  get_projects: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { results } = await db.prepare('SELECT * FROM projects WHERE company_id = ?').bind(company_id).all();
+    return { projects: results };
+  },
+  create_project: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { company_id, client_id, name } = params;
+    const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
+    const id = 'proj_' + crypto.randomUUID().split('-')[0];
+    await db.prepare('INSERT INTO projects (id, company_id, client_id, name) VALUES (?, ?, ?, ?)')
+      .bind(id, cid, client_id, name).run();
+    return { success: true, project_id: id };
+  },
+  update_project: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id, client_id, name } = params;
+    await db.prepare('UPDATE projects SET client_id = ?, name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .bind(client_id, name, id).run();
+    return { success: true };
+  },
+  delete_project: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id } = params;
+    await db.prepare('DELETE FROM projects WHERE id = ?').bind(id).run();
+    return { success: true };
+  },
+
+  get_employees: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { results } = await db.prepare('SELECT * FROM employees WHERE company_id = ?').bind(company_id).all();
+    return { employees: results };
+  },
+  create_employee: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { company_id, name, email } = params;
+    const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
+    const id = 'emp_' + crypto.randomUUID().split('-')[0];
+    await db.prepare('INSERT INTO employees (id, company_id, name, email) VALUES (?, ?, ?, ?)')
+      .bind(id, cid, name, email || null).run();
+    return { success: true, employee_id: id };
+  },
+  update_employee: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id, name, email } = params;
+    await db.prepare('UPDATE employees SET name = ?, email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .bind(name, email || null, id).run();
+    return { success: true };
+  },
+  delete_employee: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id } = params;
+    await db.prepare('DELETE FROM employees WHERE id = ?').bind(id).run();
+    return { success: true };
+  },
+
+  get_categories: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { results } = await db.prepare('SELECT * FROM categories WHERE company_id = ?').bind(company_id).all();
+    return { categories: results };
+  },
+  create_category: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { company_id, name } = params;
+    const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
+    const id = crypto.randomUUID().split('-')[0];
+    await db.prepare('INSERT INTO categories (id, company_id, name) VALUES (?, ?, ?)')
+      .bind(id, cid, name).run();
+    return { success: true, category_id: id };
+  },
+  update_category: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id, name } = params;
+    await db.prepare('UPDATE categories SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .bind(name, id).run();
+    return { success: true };
+  },
+  delete_category: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id } = params;
+    await db.prepare('DELETE FROM categories WHERE id = ?').bind(id).run();
+    return { success: true };
+  },
+
   get_time_records: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { company_id, month, employee_id } = params;
@@ -196,11 +312,34 @@ export const TOOL_REGISTRY = {
   write_time_records: async (params: any, c: HonoContext) => {
     // Inserta datos en Cloudflare D1 clasificando el origen
     const { company_id, records, source } = params;
+    const db = c.env.DB;
+    
+    if (!records || !Array.isArray(records)) {
+      throw new Error('No records provided');
+    }
+    
+    let inserted = 0;
+    for (const record of records) {
+        const id = crypto.randomUUID();
+        await db.prepare(`
+          INSERT INTO time_records (
+            id, company_id, employee_id, employee_name, client_id, client_name,
+            project_id, project_name, duration_decimal, duration_hours, duration_minutes,
+            date, work_type, description, source
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).bind(
+          id, company_id || 'mooving-default', record.employee_id, record.employee_name,
+          record.client_id, record.client_name, record.project_id, record.project_name,
+          record.duration_decimal, Math.floor(record.duration_decimal), Math.round((record.duration_decimal % 1) * 60),
+          record.date, record.work_type, record.description || '', source || 'senda_ai'
+        ).run();
+        inserted++;
+    }
     
     return {
       success: true,
-      inserted_count: records?.length || 0,
-      source: source || 'mixed',
+      inserted_count: inserted,
+      source: source || 'senda_ai',
       message: 'Datos auditados guardados con éxito en la base de datos (Cloudflare D1).'
     };
   },
@@ -216,10 +355,10 @@ export const TOOL_REGISTRY = {
     // Default values
     let employee_id = 'emp_monica';
     let employee_name = 'monica.aieta';
-    let client_id = 'cli_mooving';
-    let client_name = 'Mooving';
-    let project_id = 'proj_moov_core';
-    let project_name = 'Senda Core';
+    let client_id = '';
+    let client_name = '';
+    let project_id = '';
+    let project_name = '';
     let duration = 4.0;
     let work_type = 'project';
     let description = text;
@@ -247,11 +386,13 @@ export const TOOL_REGISTRY = {
       client_name = 'YPF';
       project_id = 'proj_ypf_mig';
       project_name = 'Migración SAP';
-    } else if (textLower.includes('senda') || textLower.includes('core')) {
+    } else if (textLower.includes('senda') || textLower.includes('core') || textLower.includes('mooving')) {
       client_id = 'cli_mooving';
       client_name = 'Mooving';
       project_id = 'proj_moov_core';
       project_name = 'Senda Core';
+    } else {
+      throw new Error('No pude identificar a qué cliente o proyecto corresponden las horas. Por favor, especifica el nombre del cliente (ej. Camuzzi, YPF, Mooving).');
     }
 
     // Extract duration (e.g. 5.5h, 4h, 6 horas)

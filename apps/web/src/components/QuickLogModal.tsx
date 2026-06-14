@@ -83,7 +83,8 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
         duration_decimal: isNaN(dur) ? 1.0 : dur,
         date: manualData.date || new Date().toISOString().split('T')[0],
         work_type: manualData.work_type,
-        description: manualData.description
+        description: manualData.description,
+        source: 'manual'
       }
 
       await saveRecord(payload)
@@ -123,7 +124,7 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
     setError(null)
     
     try {
-      await saveRecord(parsedPreview)
+      await saveRecord({ ...parsedPreview, source: 'senda_ai' })
     } catch (err) {
       console.error(err)
       setError('Error al guardar registro procesado.')
