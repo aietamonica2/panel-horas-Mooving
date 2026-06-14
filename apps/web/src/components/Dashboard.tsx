@@ -146,7 +146,7 @@ export const Dashboard: React.FC = () => {
     setFilters({ workTypes: selectedCategories })
   }, [selectedCategories, setFilters])
 
-  const totalHours = filteredRecords.reduce((sum, r) => sum + r.duration_hours, 0)
+  const totalHours = filteredRecords.reduce((sum, r) => sum + (r.duration_decimal || 0), 0)
   const avgHours = filteredRecords.length > 0 ? (totalHours / filteredRecords.length).toFixed(2) : '0.00'
   const uniqueEmployees = new Set(filteredRecords.map(r => r.employee_id)).size
   const uniqueClients = new Set(filteredRecords.map(r => r.client_id)).size
