@@ -1,24 +1,47 @@
 import React, { useState } from 'react'
+import { api } from '../api'
 
 interface LoginProps {
   onLoginSuccess: () => void
 }
 
 export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
+  const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [isShaking, setIsShaking] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (password === 'mooving2025') {
-      localStorage.setItem('mooving_auth', 'mooving2025')
-      onLoginSuccess()
-    } else {
-      setError('Contraseña incorrecta. Por favor intente de nuevo.')
-      setIsShaking(true)
-      setTimeout(() => setIsShaking(false), 500)
+    if (!email.includes('@')) {
+      setError('Por favor ingrese un email válido.')
+      return
+    }
+    
+    setIsLoading(true)
+    setError('')
+    
+    try {
+      const res = await api.login({ email, password })
+      const data = await res.json()
+      
+      if (data.success) {
+        localStorage.setItem('mooving_auth', data.data.token)
+        localStorage.setItem('mooving_user_email', data.data.user.email)
+        localStorage.setItem('mooving_user_name', data.data.user.name)
+        localStorage.setItem('mooving_user_role', data.data.user.role)
+        onLoginSuccess()
+      } else {
+        setError(data.error || 'Credenciales inválidas')
+        setIsShaking(true)
+        setTimeout(() => setIsShaking(false), 500)
+      }
+    } catch (err) {
+      setError('Error de conexión con el servidor')
+    } finally {
+      setIsLoading(false)
     }
   }
 
@@ -45,6 +68,23 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="block text-slate-300 text-sm font-semibold mb-2" htmlFor="email">
+              Correo Electrónico
+            </label>
+            <input
+              id="email"
+              type="email"
+              placeholder="tu.nombre@moovingtech.com"
+              value={email}
+              onChange={(e) => {
+                setEmail(e.target.value)
+                setError('')
+              }}
+              className="w-full bg-slate-950/50 border border-slate-700/60 rounded-xl py-3 px-4 text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-500/20 transition duration-200"
+            />
+          </div>
+
           <div>
             <label className="block text-slate-300 text-sm font-semibold mb-2" htmlFor="password">
               Contraseña de Acceso

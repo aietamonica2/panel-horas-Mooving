@@ -34,20 +34,30 @@ export const auth = async (c: HonoContext, next: Next) => {
     return
   }
   
+  // Allow auth/login to bypass JWT check
+  if (c.req.path === '/api/auth/login') {
+    await next()
+    return
+  }
+
   if (!token) {
     return c.json({ success: false, error: 'Unauthorized' }, 401)
   }
   
-  // Verify token matches the simple password
-  if (token !== 'mooving2025') {
-    return c.json({ success: false, error: 'Unauthorized' }, 401)
+  try {
+    const { verify } = await import('hono/jwt')
+    const decodedPayload = await verify(token, c.env.JWT_SECRET || 'mooving-dev-secret')
+    
+    c.set('auth', {
+      company_id: decodedPayload.company_id as string,
+      user_id: decodedPayload.user_id as string,
+      role: decodedPayload.role as string,
+      email: decodedPayload.email as string,
+      name: decodedPayload.name as string
+    })
+    
+    await next()
+  } catch (err) {
+    return c.json({ success: false, error: 'Token inválido o expirado' }, 401)
   }
-  
-  c.set('auth', {
-    company_id: 'mooving-default',
-    user_id: 'default-user',
-    role: 'admin',
-  })
-  
-  await next()
 }

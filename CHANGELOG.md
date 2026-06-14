@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-06-13
+
+### Added
+- Autenticación real mediante Json Web Tokens (JWT).
+- Base de datos de permisos y roles (RBAC) con soporte para Administradores y Empleados.
+- Rebranding completo de la herramienta "TimeCopilot" a "Mooving Assistant".
+- Menú de perfil y cierre de sesión en la interfaz principal.
+
+## [1.1.1] - 2026-06-13
+
+### Added
+- Columna "Acciones" y modal de edición/eliminación en el Dashboard para roles de Administrador.
+- Soporte para métodos HTTP PUT y DELETE en la API del frontend (`api.ts`).
+
+## [1.1.0] - 2026-06-13
+
+### Added
+- Integración productiva con la API real de Zendesk Support para la sincronización de tickets resueltos.
+- MVP de TimeCopilot (Carga Inteligente de Horas) con Senda AI Widget.
+- Control de roles en Frontend (Dashboard gerencial vs "Mis Horas" para empleados).
+- Documentación completa del proyecto (Arquitectura, MVP, y APIs) generada para el Challenge.
+
 ## [1.0.5] - 2026-06-13
 
 ### Added

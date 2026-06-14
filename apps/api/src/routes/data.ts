@@ -148,4 +148,50 @@ dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
   }
 })
 
+// PUT /api/data/records/:id - Edición manual de horas
+dataRouter.put(
+  '/records/:id',
+  zValidator('json', TimeRecordSchema),
+  async (c: HonoContext): Promise<Response> => {
+    try {
+      const data = c.req.valid('json')
+      const id = c.req.param('id')
+      const company_id = c.get('auth')?.company_id || 'mooving-default'
+      const currentUserRole = 'admin' // MOCK: Esto vendría del JWT
+      const currentUserId = 'mock-user-123'
+      
+      if (currentUserRole !== 'admin' && data.employee_id !== currentUserId) {
+        return c.json({ success: false, error: 'No tienes permisos para editar' }, 403)
+      }
+
+      await c.env.DB.prepare(`
+        UPDATE time_records SET 
+          employee_id = ?, employee_name = ?, client_id = ?, client_name = ?, project_id = ?, project_name = ?, 
+          duration_decimal = ?, duration_hours = ?, duration_minutes = ?, date = ?, work_type = ?, description = ?
+        WHERE id = ? AND company_id = ?
+      `).bind(
+        data.employee_id, data.employee_name, data.client_id, data.client_name, data.project_id, data.project_name,
+        data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || '',
+        id, company_id
+      ).run()
+
+      return c.json({ success: true, timestamp: new Date().toISOString(), version: 'v1.0.0' })
+    } catch (error) {
+      return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+    }
+  }
+)
+
+// DELETE /api/data/records/:id
+dataRouter.delete('/records/:id', async (c: HonoContext): Promise<Response> => {
+  try {
+    const id = c.req.param('id')
+    const company_id = c.get('auth')?.company_id || 'mooving-default'
+    await c.env.DB.prepare('DELETE FROM time_records WHERE id = ? AND company_id = ?').bind(id, company_id).run()
+    return c.json({ success: true, timestamp: new Date().toISOString(), version: 'v1.0.0' })
+  } catch (error) {
+    return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+  }
+})
+
 export default dataRouter

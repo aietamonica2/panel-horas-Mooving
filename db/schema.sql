@@ -25,8 +25,7 @@ CREATE TABLE IF NOT EXISTS time_records (
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-CREATE INDEX idx_time_records_company ON time_records(company_id);
+CREATE INDEX idx_time_records_company ON time_records(company_id);
 CREATE INDEX idx_time_records_company_created ON time_records(company_id, created_at);
 CREATE INDEX idx_time_records_employee ON time_records(company_id, employee_id);
 CREATE INDEX idx_time_records_client ON time_records(company_id, client_id);
@@ -41,6 +40,8 @@ CREATE TABLE IF NOT EXISTS employees (
   company_id TEXT NOT NULL,
   name TEXT NOT NULL,
   email TEXT NOT NULL,
+  password_hash TEXT,
+  role_id TEXT DEFAULT 'employee',
   department TEXT,
   is_active INTEGER DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -49,6 +50,21 @@ CREATE TABLE IF NOT EXISTS employees (
 
 CREATE INDEX idx_employees_company ON employees(company_id);
 CREATE INDEX idx_employees_email ON employees(company_id, email);
+
+-- ============================================================================
+-- Role Permissions Table (RBAC)
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS role_permissions (
+  id TEXT PRIMARY KEY,
+  role_id TEXT NOT NULL,
+  permission_key TEXT NOT NULL,
+  is_allowed INTEGER DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(role_id, permission_key)
+);
+
+CREATE INDEX idx_role_permissions_role ON role_permissions(role_id);
 
 -- ============================================================================
 -- Clients Table
@@ -70,7 +86,6 @@ CREATE INDEX idx_clients_name ON clients(company_id, name);
 -- ============================================================================
 -- Projects Table
 -- ============================================================================
-
 CREATE TABLE IF NOT EXISTS projects (
   id TEXT PRIMARY KEY,
   company_id TEXT NOT NULL,

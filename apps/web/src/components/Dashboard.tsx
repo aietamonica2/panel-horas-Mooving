@@ -17,6 +17,7 @@ import { EmployeeAvailability } from './EmployeeAvailability'
 import { BagOfHoursTable } from './BagOfHoursTable'
 import { AnalyticsCharts } from './AnalyticsCharts'
 import { QuickLogModal } from './QuickLogModal'
+import { EditRecordModal } from './EditRecordModal'
 import { api } from '../api'
 
 const MOOVING_COLORS = {
@@ -47,6 +48,7 @@ export const Dashboard: React.FC = () => {
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [auditResults, setAuditResults] = useState<{ status: string; anomalies_found: { issue: string; user: string }[] } | null>(null)
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
+  const [editingRecord, setEditingRecord] = useState<any | null>(null)
 
   const filteredRecords = getFilteredRecords()
 
@@ -606,6 +608,7 @@ export const Dashboard: React.FC = () => {
                     <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>Horas</th>
                     <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>Tipo</th>
                     <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>Fecha</th>
+                    <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>Acciones</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -632,6 +635,14 @@ export const Dashboard: React.FC = () => {
                         {record.work_type === 'meeting' && '👥 Reunión'}
                       </td>
                       <td className="px-6 py-3 text-gray-500">{record.date}</td>
+                      <td className="px-6 py-3 text-center">
+                        <button 
+                          onClick={() => setEditingRecord(record)}
+                          className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-md text-xs font-medium transition"
+                        >
+                          ✏️ Editar
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -652,6 +663,17 @@ export const Dashboard: React.FC = () => {
         <QuickLogModal 
           isOpen={isQuickLogOpen} 
           onClose={() => setIsQuickLogOpen(false)} 
+        />
+
+        <EditRecordModal
+          isOpen={!!editingRecord}
+          onClose={() => setEditingRecord(null)}
+          record={editingRecord}
+          onSuccess={() => {
+            fetchRecords()
+            setAiMessage('✅ Registro actualizado correctamente')
+            setTimeout(() => setAiMessage(null), 3000)
+          }}
         />
 
         {/* Modal de Auditoría */}

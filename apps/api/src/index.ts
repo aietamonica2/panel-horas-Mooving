@@ -17,7 +17,10 @@ const app = new Hono<{ Bindings: CloudflareEnv }>()
 app.use('*', cors)
 app.use('/api/*', auth)
 
+import authRouter from './routes/auth'
+
 // Routes
+app.route('/api/auth', authRouter)
 app.route('/api', healthRouter)
 app.route('/api/data', dataRouter)
 app.route('/api/mcp', mcpRouter)

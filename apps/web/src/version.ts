@@ -3,12 +3,13 @@
  * Updated with each release to track deployments and changelog
  */
 
-export const APP_VERSION = 'v1.0.5'
+export const APP_VERSION = 'v1.2.0'
 export const RELEASE_DATE = '13 de Junio de 2026'
 export const RELEASE_NOTES = `
-v1.0.5 - 13 de Junio de 2026
+v1.2.0 - 13 de Junio de 2026
 
 ✨ FEATURES
-- Campo selector de fecha en el formulario de Carga Rápida para registrar horas de días anteriores.
-- Documentación oficial de Senda integrada al repositorio.
+- Autenticación segura mediante Tokens (JWT) y perfiles de usuario.
+- Roles dinámicos (Administrador y Empleado).
+- Rebranding completo a Mooving Assistant.
 `

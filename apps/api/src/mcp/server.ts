@@ -86,29 +86,60 @@ export const TOOL_REGISTRY = {
   sync_zendesk_tickets: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const subdomain = c.env.ZENDESK_SUBDOMAIN;
+    const email = c.env.ZENDESK_EMAIL;
+    const token = c.env.ZENDESK_API_TOKEN;
 
-    const mockZendeskRecords = [
-      { employee_id: 'emp_monica', employee_name: 'monica.aieta', client_id: 'cli_camuzzi', client_name: 'Camuzzi', project_id: 'proj_support', project_name: 'Soporte Técnico', duration: 6.0, date: '2026-06-10', work_type: 'other', desc: 'Resolución Ticket #8491 [Zendesk]' },
-      { employee_id: 'emp_santi', employee_name: 'santiago.perez', client_id: 'cli_ypf', client_name: 'YPF', project_id: 'proj_support', project_name: 'Soporte Técnico', duration: 5.5, date: '2026-06-12', work_type: 'other', desc: 'Incidente de Integración Ticket #9021 [Zendesk]' }
-    ];
+    if (!subdomain || !email || !token) {
+      throw new Error('Faltan credenciales de Zendesk en las variables de entorno (ZENDESK_SUBDOMAIN, ZENDESK_EMAIL, ZENDESK_API_TOKEN).');
+    }
 
+    const authStr = btoa(`${email}/token:${token}`);
+    const url = `https://${subdomain}.zendesk.com/api/v2/search.json?query=type:ticket status:solved`;
+
+    let zendeskData;
+    try {
+      const resp = await fetch(url, {
+        headers: {
+          'Authorization': `Basic ${authStr}`,
+          'Accept': 'application/json'
+        }
+      });
+      if (!resp.ok) {
+        throw new Error(`Zendesk API error: ${resp.status} ${resp.statusText}`);
+      }
+      zendeskData = await resp.json() as any;
+    } catch (err: any) {
+      console.error('Error fetching from Zendesk:', err);
+      throw new Error('No se pudo conectar con Zendesk: ' + err.message);
+    }
+
+    const tickets = zendeskData.results || [];
     let inserted = 0;
-    for (const rec of mockZendeskRecords) {
-      const id = 'zen_' + crypto.randomUUID().substring(0, 8);
+    let total_hours = 0;
+
+    for (const ticket of tickets) {
+      const id = 'zen_' + ticket.id;
+      // Estimación básica: asumimos 1h por ticket resuelto
+      const duration = 1.0; 
+      const desc = `Resolución Ticket #${ticket.id} [Zendesk]: ${ticket.subject}`;
+      const dateStr = ticket.updated_at ? ticket.updated_at.split('T')[0] : new Date().toISOString().split('T')[0];
+
       try {
         await db.prepare(`
-          INSERT INTO time_records (
+          INSERT OR IGNORE INTO time_records (
             id, company_id, employee_id, employee_name, client_id, client_name,
             project_id, project_name, duration_decimal, duration_hours, duration_minutes,
             date, work_type, description
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          id, company_id, rec.employee_id, rec.employee_name,
-          rec.client_id, rec.client_name, rec.project_id, rec.project_name,
-          rec.duration, Math.floor(rec.duration), Math.round((rec.duration % 1) * 60),
-          rec.date, rec.work_type, rec.desc
+          id, company_id, 'emp_soporte', 'Agente Soporte',
+          'cli_varios', 'Varios', 'proj_support', 'Soporte Técnico',
+          duration, Math.floor(duration), Math.round((duration % 1) * 60),
+          dateStr, 'other', desc
         ).run();
         inserted++;
+        total_hours += duration;
       } catch (err) {
         console.error('Error inserting zendesk sync record:', err);
       }
@@ -117,9 +148,9 @@ export const TOOL_REGISTRY = {
     return {
       success: true,
       message: `Tickets de soporte procesados e importados de Zendesk para el tenant ${company_id}.`,
-      records_fetched: mockZendeskRecords.length,
+      records_fetched: tickets.length,
       records_inserted: inserted,
-      total_hours: mockZendeskRecords.reduce((acc, r) => acc + r.duration, 0),
+      total_hours: total_hours,
       source: 'zendesk'
     };
   },

@@ -12,6 +12,9 @@ export interface CloudflareEnv {
   ENVIRONMENT: 'development' | 'production'
   SECRET_KEY?: string
   SENDA_BASE_URL?: string
+  ZENDESK_SUBDOMAIN?: string
+  ZENDESK_EMAIL?: string
+  ZENDESK_API_TOKEN?: string
   [key: string]: any
 }
 

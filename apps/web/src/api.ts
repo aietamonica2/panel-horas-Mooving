@@ -9,6 +9,14 @@ const getHeaders = () => {
 }
 
 export const api = {
+  login: (payload: any) => fetch(`${API_BASE}/api/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+    headers: { 'Content-Type': 'application/json' }
+  }),
+  me: () => fetch(`${API_BASE}/api/auth/me`, {
+    headers: getHeaders()
+  }),
   health: () => fetch(`${API_BASE}/api/health`, {
     headers: getHeaders()
   }),
@@ -28,6 +36,15 @@ export const api = {
   callMcpTool: (toolName: string, params: any) => fetch(`${API_BASE}/api/mcp/u/default-user/tools/call`, {
     method: 'POST',
     body: JSON.stringify({ toolName, params }),
+    headers: getHeaders()
+  }),
+  updateRecord: (id: string, payload: any) => fetch(`${API_BASE}/api/data/records/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+    headers: getHeaders()
+  }),
+  deleteRecord: (id: string) => fetch(`${API_BASE}/api/data/records/${id}`, {
+    method: 'DELETE',
     headers: getHeaders()
   })
 }
