@@ -129,6 +129,10 @@ export const Login: React.FC<LoginProps> = ({ onLoginSuccess }) => {
           <p className="text-xs text-slate-500">
             © {new Date().getFullYear()} Mooving. Todos los derechos reservados.
           </p>
+          <p className="text-[10px] text-slate-600 mt-2 font-mono">
+            {/* @ts-ignore */}
+            v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'}
+          </p>
         </div>
       </div>
     </div>
