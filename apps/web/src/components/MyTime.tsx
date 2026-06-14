@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import { Clock, CheckCircle, ListTodo } from 'lucide-react';
+import { Clock, CheckCircle, ListTodo, Zap } from 'lucide-react';
+import { QuickLogModal } from './QuickLogModal';
 
 const MOOVING_COLORS = {
   primary: '#1a5f7a',
@@ -17,6 +18,7 @@ export const MyTime: React.FC = () => {
   const [message, setMessage] = useState('');
   const [records, setRecords] = useState<any[]>([]);
   const [loadingRecords, setLoadingRecords] = useState(true);
+  const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
   
   const [formData, setFormData] = useState({
     client_name: '',
@@ -112,10 +114,19 @@ export const MyTime: React.FC = () => {
           
           <div className="lg:col-span-2 space-y-8">
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
-              <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                <Clock className="w-6 h-6 text-indigo-600" />
-                Registrar Horas
-              </h2>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                  <Clock className="w-6 h-6 text-indigo-600" />
+                  Registrar Horas
+                </h2>
+                <button 
+                  onClick={() => setIsQuickLogOpen(true)}
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg shadow transition flex items-center gap-2 text-sm"
+                >
+                  <Zap className="w-4 h-4" />
+                  Carga Rápida (Senda AI)
+                </button>
+              </div>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -257,6 +268,14 @@ export const MyTime: React.FC = () => {
             </div>
           </div>
         </div>
+        
+        <QuickLogModal 
+          isOpen={isQuickLogOpen} 
+          onClose={() => {
+            setIsQuickLogOpen(false);
+            fetchRecords();
+          }} 
+        />
 
       </div>
     </div>

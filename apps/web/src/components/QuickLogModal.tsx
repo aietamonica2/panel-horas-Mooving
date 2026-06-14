@@ -7,23 +7,9 @@ interface QuickLogModalProps {
   onClose: () => void
 }
 
-const EMPLOYEES = [
-  { id: 'emp_monica', name: 'monica.aieta' },
-  { id: 'emp_fede', name: 'federico.gomez' },
-  { id: 'emp_santi', name: 'santiago.perez' }
-]
-
-const CLIENTS = [
-  { id: 'cli_camuzzi', name: 'Camuzzi' },
-  { id: 'cli_ypf', name: 'YPF' },
-  { id: 'cli_mooving', name: 'Mooving' }
-]
-
-const PROJECTS: Record<string, { id: string; name: string }[]> = {
-  cli_camuzzi: [{ id: 'proj_cam_web', name: 'Portal Web' }],
-  cli_ypf: [{ id: 'proj_ypf_mig', name: 'Migración SAP' }],
-  cli_mooving: [{ id: 'proj_moov_core', name: 'Senda Core' }]
-}
+interface Employee { id: string; name: string }
+interface Client { id: string; name: string }
+interface Project { id: string; client_id: string; name: string }
 
 export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose }) => {
   const [activeTab, setActiveTab] = useState<'manual' | 'senda'>('manual')
@@ -49,11 +35,50 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
 
   if (!isOpen) return null
 
+  const [employees, setEmployees] = useState<Employee[]>([])
+  const [clients, setClients] = useState<Client[]>([])
+  const [projects, setProjects] = useState<Project[]>([])
+  
+  const userRole = localStorage.getItem('mooving_user_role') || 'employee'
+  const isAdmin = userRole === 'admin'
+  const currentUserEmail = localStorage.getItem('mooving_user_email') || ''
+  const currentUserName = currentUserEmail.split('@')[0]
+  const currentUserId = 'emp_' + currentUserName.replace('.', '_')
+
+  React.useEffect(() => {
+    if (isOpen) {
+      Promise.all([
+        api.callMcpTool('get_employees', {}).then(res => res.json()),
+        api.callMcpTool('get_clients', {}).then(res => res.json()),
+        api.callMcpTool('get_projects', {}).then(res => res.json())
+      ]).then(([empRes, cliRes, projRes]) => {
+        if (empRes.success && empRes.result?.employees) {
+          const allEmps = empRes.result.employees;
+          setEmployees(isAdmin ? allEmps : allEmps.filter((e: any) => e.email === currentUserEmail || e.name === currentUserName));
+          if (!isAdmin) {
+            setManualData(prev => ({ ...prev, employee_id: currentUserId }));
+          } else if (allEmps.length > 0) {
+             setManualData(prev => ({ ...prev, employee_id: allEmps[0].id }));
+          }
+        }
+        if (cliRes.success && cliRes.result?.clients) {
+          setClients(cliRes.result.clients);
+          if (cliRes.result.clients.length > 0) {
+            setManualData(prev => ({ ...prev, client_id: cliRes.result.clients[0].id }));
+          }
+        }
+        if (projRes.success && projRes.result?.projects) {
+          setProjects(projRes.result.projects);
+        }
+      }).catch(err => console.error("Error fetching entities for modal", err));
+    }
+  }, [isOpen]);
+
   // Handle nested project options based on selected client
-  const availableProjects = PROJECTS[manualData.client_id] || []
+  const availableProjects = projects.filter(p => p.client_id === manualData.client_id)
 
   const handleClientChange = (clientId: string) => {
-    const defaultProj = PROJECTS[clientId]?.[0]?.id || ''
+    const defaultProj = projects.find(p => p.client_id === clientId)?.id || ''
     setManualData({
       ...manualData,
       client_id: clientId,
@@ -68,8 +93,8 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
     setSuccessMsg(null)
 
     try {
-      const selectedEmp = EMPLOYEES.find(e => e.id === manualData.employee_id)
-      const selectedCli = CLIENTS.find(c => c.id === manualData.client_id)
+      const selectedEmp = employees.find(e => e.id === manualData.employee_id) || { name: currentUserName }
+      const selectedCli = clients.find(c => c.id === manualData.client_id)
       const selectedProj = availableProjects.find(p => p.id === manualData.project_id)
       const dur = parseFloat(manualData.duration)
 
@@ -206,11 +231,12 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
                 <div>
                   <label className="block text-xs font-semibold text-gray-500 uppercase mb-1">Empleado</label>
                   <select
-                    className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-800 focus:ring-2 focus:ring-orange-500 outline-none"
+                    className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-800 focus:ring-2 focus:ring-orange-500 outline-none disabled:opacity-60"
                     value={manualData.employee_id}
                     onChange={e => setManualData({ ...manualData, employee_id: e.target.value })}
+                    disabled={!isAdmin}
                   >
-                    {EMPLOYEES.map(emp => (
+                    {employees.map(emp => (
                       <option key={emp.id} value={emp.id}>{emp.name}</option>
                     ))}
                   </select>
@@ -240,7 +266,7 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
                     value={manualData.client_id}
                     onChange={e => handleClientChange(e.target.value)}
                   >
-                    {CLIENTS.map(cli => (
+                    {clients.map(cli => (
                       <option key={cli.id} value={cli.id}>{cli.name}</option>
                     ))}
                   </select>

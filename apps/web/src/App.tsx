@@ -54,7 +54,7 @@ export function App() {
       />
       
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-y-auto">
         {currentView === 'dashboard' && isAdmin && <Dashboard />}
         {currentView === 'mytime' && <MyTime />}
         {currentView === 'documentation' && <Documentation />}

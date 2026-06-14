@@ -160,6 +160,18 @@ export const Dashboard: React.FC = () => {
     try {
       const text = await file.text()
       const lines = text.split('\n')
+      
+      // Fetch dynamic entities for mapping
+      const [empRes, cliRes, projRes] = await Promise.all([
+        api.callMcpTool('get_employees', {}).then(res => res.json()),
+        api.callMcpTool('get_clients', {}).then(res => res.json()),
+        api.callMcpTool('get_projects', {}).then(res => res.json())
+      ])
+      
+      const dbEmployees = empRes.success ? empRes.result.employees : []
+      const dbClients = cliRes.success ? cliRes.result.clients : []
+      const dbProjects = projRes.success ? projRes.result.projects : []
+
       const recordsToUpload = lines.slice(1)
         .filter(line => line.trim())
         .map(line => {
@@ -172,13 +184,21 @@ export const Dashboard: React.FC = () => {
             wt = 'project'
           }
 
+          const empName = values[1] || 'Unknown Employee';
+          const cliName = values[3] || 'Unknown Client';
+          const projName = values[5] || 'Unknown Project';
+
+          const matchedEmp = dbEmployees.find((e: any) => e.name.toLowerCase() === empName.toLowerCase())
+          const matchedCli = dbClients.find((c: any) => c.name.toLowerCase() === cliName.toLowerCase())
+          const matchedProj = dbProjects.find((p: any) => p.name.toLowerCase() === projName.toLowerCase())
+
           return {
-            employee_id: values[0] || 'unknown-emp',
-            employee_name: values[1] || 'Unknown Employee',
-            client_id: values[2] || 'unknown-client',
-            client_name: values[3] || 'Unknown Client',
-            project_id: values[4] || 'unknown-project',
-            project_name: values[5] || 'Unknown Project',
+            employee_id: matchedEmp ? matchedEmp.id : (values[0] || 'unknown-emp'),
+            employee_name: matchedEmp ? matchedEmp.name : empName,
+            client_id: matchedCli ? matchedCli.id : (values[2] || 'unknown-client'),
+            client_name: matchedCli ? matchedCli.name : cliName,
+            project_id: matchedProj ? matchedProj.id : (values[4] || 'unknown-project'),
+            project_name: matchedProj ? matchedProj.name : projName,
             duration_decimal: isNaN(dur) ? 1.0 : dur,
             date: values[7] || new Date().toISOString().split('T')[0],
             work_type: wt as any,
