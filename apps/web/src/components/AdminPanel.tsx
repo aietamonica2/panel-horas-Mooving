@@ -33,10 +33,10 @@ export function AdminPanel() {
       ]);
 
       setData({
-        employees: empRes.employees || [],
-        clients: cliRes.clients || [],
-        projects: projRes.projects || [],
-        categories: catRes.categories || [],
+        employees: empRes.result?.employees || [],
+        clients: cliRes.result?.clients || [],
+        projects: projRes.result?.projects || [],
+        categories: catRes.result?.categories || [],
       });
     } catch (err: any) {
       console.error(err);
