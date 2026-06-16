@@ -33,7 +33,6 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
   const [error, setError] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
-  if (!isOpen) return null
 
   const [employees, setEmployees] = useState<Employee[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -182,6 +181,8 @@ export const QuickLogModal: React.FC<QuickLogModalProps> = ({ isOpen, onClose })
       setError(json.error || 'Error al guardar el registro.')
     }
   }
+
+  if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
