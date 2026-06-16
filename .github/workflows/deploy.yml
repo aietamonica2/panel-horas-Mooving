@@ -36,7 +36,7 @@ jobs:
       - name: Deploy frontend to Cloudflare Pages
         run: |
           cd apps/web
-          npx wrangler pages deploy dist --project-name senda --branch main
+          npx wrangler pages deploy dist --project-name panel-horas-mooving --branch main
           cd ../..
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
