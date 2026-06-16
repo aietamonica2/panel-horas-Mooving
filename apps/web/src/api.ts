@@ -8,42 +8,54 @@ const getHeaders = () => {
   }
 }
 
+const customFetch = async (url: string, options: RequestInit = {}) => {
+  const res = await fetch(url, options)
+  if (res.status === 401) {
+    localStorage.removeItem('mooving_auth')
+    localStorage.removeItem('mooving_user_email')
+    localStorage.removeItem('mooving_user_name')
+    localStorage.removeItem('mooving_user_role')
+    window.location.reload()
+  }
+  return res
+}
+
 export const api = {
   login: (payload: any) => fetch(`${API_BASE}/api/auth/login`, {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: { 'Content-Type': 'application/json' }
   }),
-  me: () => fetch(`${API_BASE}/api/auth/me`, {
+  me: () => customFetch(`${API_BASE}/api/auth/me`, {
     headers: getHeaders()
   }),
-  health: () => fetch(`${API_BASE}/api/health`, {
+  health: () => customFetch(`${API_BASE}/api/health`, {
     headers: getHeaders()
   }),
-  listRecords: () => fetch(`${API_BASE}/api/data/records`, {
+  listRecords: () => customFetch(`${API_BASE}/api/data/records`, {
     headers: getHeaders()
   }),
-  uploadCSV: (payload: any) => fetch(`${API_BASE}/api/data/upload`, {
+  uploadCSV: (payload: any) => customFetch(`${API_BASE}/api/data/upload`, {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: getHeaders()
   }),
-  createRecord: (payload: any) => fetch(`${API_BASE}/api/data/records`, {
+  createRecord: (payload: any) => customFetch(`${API_BASE}/api/data/records`, {
     method: 'POST',
     body: JSON.stringify(payload),
     headers: getHeaders()
   }),
-  callMcpTool: (toolName: string, params: any) => fetch(`${API_BASE}/api/mcp/u/default-user/tools/call`, {
+  callMcpTool: (toolName: string, params: any) => customFetch(`${API_BASE}/api/mcp/u/default-user/tools/call`, {
     method: 'POST',
     body: JSON.stringify({ toolName, params }),
     headers: getHeaders()
   }),
-  updateRecord: (id: string, payload: any) => fetch(`${API_BASE}/api/data/records/${id}`, {
+  updateRecord: (id: string, payload: any) => customFetch(`${API_BASE}/api/data/records/${id}`, {
     method: 'PUT',
     body: JSON.stringify(payload),
     headers: getHeaders()
   }),
-  deleteRecord: (id: string) => fetch(`${API_BASE}/api/data/records/${id}`, {
+  deleteRecord: (id: string) => customFetch(`${API_BASE}/api/data/records/${id}`, {
     method: 'DELETE',
     headers: getHeaders()
   })
