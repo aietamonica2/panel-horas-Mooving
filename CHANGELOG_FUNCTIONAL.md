@@ -2,6 +2,11 @@
 
 Cambios visibles para administradores y usuarios finales.
 
+## [1.4.3] - 16 de Junio de 2026
+
+### 🐛 Correcciones
+- **Restablecimiento de la carga de registros**: Se corrigió un error que causaba que la vista "Mis Horas" fallara al intentar consultar o guardar datos debido a discrepancias en el cliente API. Esto causaba bloqueos de renderizado y aseguraba que el dashboard ahora cargue y muestre la información unificada de Mooving y DESA sin interrupciones.
+
 ## [1.4.2] - 16 de Junio de 2026
 
 ### ✨ Novedades

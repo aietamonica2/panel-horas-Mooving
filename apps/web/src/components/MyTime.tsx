@@ -32,7 +32,7 @@ export const MyTime: React.FC = () => {
   const fetchRecords = async () => {
     setLoadingRecords(true);
     try {
-      const res = await api.getRecords(100);
+      const res = await api.listRecords();
       const data = await res.json();
       if (data.success) {
         setRecords(data.data.records);
@@ -71,7 +71,7 @@ export const MyTime: React.FC = () => {
         description: formData.description
       };
 
-      const res = await api.addRecord(payload);
+      const res = await api.createRecord(payload);
       const data = await res.json();
       if (data.success) {
         setMessage('✅ ¡Horas guardadas con éxito!');
