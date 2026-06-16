@@ -9,6 +9,7 @@ import { Login } from './components/Login'
 import { MyTime } from './components/MyTime'
 import { Sidebar } from './components/Sidebar'
 import { Documentation } from './components/Documentation'
+import { AdminPanel } from './components/AdminPanel'
 
 declare global {
   namespace JSX {
@@ -27,7 +28,7 @@ export function App() {
   const userName = localStorage.getItem('mooving_user_name') || 'Usuario'
   const isAdmin = userRole === 'admin'
   
-  const [currentView, setCurrentView] = useState<'dashboard' | 'mytime' | 'documentation'>(isAdmin ? 'dashboard' : 'mytime')
+  const [currentView, setCurrentView] = useState<'dashboard' | 'mytime' | 'documentation' | 'admin'>(isAdmin ? 'dashboard' : 'mytime')
 
   const handleLogout = () => {
     localStorage.removeItem('mooving_auth')
@@ -46,7 +47,7 @@ export function App() {
       {/* Left Sidebar Navigation */}
       <Sidebar 
         currentView={currentView}
-        setCurrentView={setCurrentView}
+        setCurrentView={setCurrentView as any}
         isAdmin={isAdmin}
         userName={userName}
         userRole={userRole}
@@ -58,6 +59,7 @@ export function App() {
         {currentView === 'dashboard' && isAdmin && <Dashboard />}
         {currentView === 'mytime' && <MyTime />}
         {currentView === 'documentation' && <Documentation />}
+        {currentView === 'admin' && isAdmin && <AdminPanel />}
       </div>
 
       {/* Senda Chat Widget Integration */}

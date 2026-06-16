@@ -4,12 +4,13 @@ import {
   Clock, 
   BookOpen, 
   LogOut, 
-  UserCircle 
+  UserCircle,
+  Settings
 } from 'lucide-react';
 
 interface SidebarProps {
   currentView: string;
-  setCurrentView: (view: 'dashboard' | 'mytime' | 'documentation') => void;
+  setCurrentView: (view: 'dashboard' | 'mytime' | 'documentation' | 'admin') => void;
   isAdmin: boolean;
   userName: string;
   userRole: string;
@@ -43,17 +44,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
         
         {isAdmin && (
-          <button
-            onClick={() => setCurrentView('dashboard')}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
-              currentView === 'dashboard' 
-                ? 'bg-indigo-600/10 text-indigo-400 font-medium' 
-                : 'hover:bg-slate-800 hover:text-white'
-            }`}
-          >
-            <LayoutDashboard className="w-5 h-5" />
-            <span>Dashboard Admin</span>
-          </button>
+          <>
+            <button
+              onClick={() => setCurrentView('dashboard')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                currentView === 'dashboard' 
+                  ? 'bg-indigo-600/10 text-indigo-400 font-medium' 
+                  : 'hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <LayoutDashboard className="w-5 h-5" />
+              <span>Dashboard Admin</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('admin')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                currentView === 'admin' 
+                  ? 'bg-indigo-600/10 text-indigo-400 font-medium' 
+                  : 'hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <Settings className="w-5 h-5" />
+              <span>Administración</span>
+            </button>
+          </>
         )}
 
         <button

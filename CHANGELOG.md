@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.0] - 2026-06-16
+
+### Added
+- Vista interactiva de Administración en el Frontend (`AdminPanel.tsx`) para la gestión (CRUD) de Empleados, Clientes, Proyectos y Categorías de manera visual.
+- Integración nativa del Panel de Administración con las herramientas MCP del backend, unificando la lógica gráfica con las capacidades del LLM de Senda AI.
+
+### Removed
+- Eliminación y limpieza de proyecto obsoleto `panel-horas-web` en Cloudflare Pages, consolidando todo el sistema bajo `panel-horas-mooving`.
+
 ## [1.4.3] - 2026-06-16
 
 ### Fixed

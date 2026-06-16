@@ -2,6 +2,12 @@
 
 Cambios visibles para administradores y usuarios finales.
 
+## [1.5.0] - 16 de Junio de 2026
+
+### ✨ Novedades
+- **Panel de Administración Gráfica (CRUD)**: Los administradores ahora pueden gestionar Altas, Bajas y Modificaciones de Empleados, Clientes, Proyectos y Categorías de manera visual desde una nueva pestaña de Administración. Estas pantallas están integradas de manera nativa con Senda AI, lo que significa que un cambio realizado por un administrador en la web es instantáneamente asimilado por el asistente de inteligencia artificial, y viceversa.
+- **Consolidación de Infraestructura**: Se eliminaron los sitios web de prueba y se consolidó el panel únicamente en su dirección web oficial (`panel-horas-mooving`), previniendo fugas de datos y redundancias.
+
 ## [1.4.3] - 16 de Junio de 2026
 
 ### 🐛 Correcciones
