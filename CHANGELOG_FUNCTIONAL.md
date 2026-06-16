@@ -2,6 +2,12 @@
 
 Cambios visibles para administradores y usuarios finales.
 
+## [1.4.2] - 16 de Junio de 2026
+
+### ✨ Novedades
+- **Unificación del Cliente Mooving**: Se fusionaron las horas y proyectos que estaban asignados al cliente 'Interno' bajo la identidad del cliente único 'Mooving', consolidando las tareas de administración y soporte interno.
+- **Actualización de Conocimiento del Asistente**: Se actualizó el Glosario de Proyectos y Clientes v1.5 en el motor de conocimiento RAG de los agentes Senda QA para reflejar con precisión la nueva jerarquía de clientes, proyectos y equipos de trabajo.
+
 ## [1.0.4] - 13 de Junio de 2026
 
 ### ✨ Novedades

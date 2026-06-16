@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.4.2] - 2026-06-16
+
+### Changed
+- Unificación de los registros de tiempo y proyectos del cliente 'Interno' bajo el cliente principal 'Mooving'.
+
+### Added
+- Migración D1 `0009_merge_interno_client.sql` para fusionar el cliente 'interno' en 'mooving' y registrar el cliente de pruebas 'desa'.
+- Carga automática del Glosario de Proyectos y Clientes v1.5 en el almacenamiento de conocimiento RAG para todos los agentes de Senda QA.
+
 ## [1.4.1] - 2026-06-14
 
 ### Added

@@ -3,13 +3,12 @@
  * Updated with each release to track deployments and changelog
  */
 
-export const APP_VERSION = 'v1.2.0'
-export const RELEASE_DATE = '13 de Junio de 2026'
+export const APP_VERSION = 'v1.4.2'
+export const RELEASE_DATE = '16 de Junio de 2026'
 export const RELEASE_NOTES = `
-v1.2.0 - 13 de Junio de 2026
+v1.4.2 - 16 de Junio de 2026
 
-✨ FEATURES
-- Autenticación segura mediante Tokens (JWT) y perfiles de usuario.
-- Roles dinámicos (Administrador y Empleado).
-- Rebranding completo a Mooving Assistant.
+✨ FEATURES & IMPROVEMENTS
+- Unificación de las horas y proyectos del cliente Interno bajo el cliente Mooving.
+- Actualización de los conocimientos RAG en los agentes Senda QA con la versión 1.5 del Glosario.
 `
