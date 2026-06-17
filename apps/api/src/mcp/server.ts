@@ -117,6 +117,56 @@ export const TOOL_REGISTRY = {
     return { success: true };
   },
 
+  create_time_record: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { employee_id, client_id, project_id, duration_decimal, date, work_type, description } = params;
+    
+    // Auto-detect company from auth if not provided
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    
+    // Simple lookup for names if not provided
+    let employee_name = params.employee_name || '';
+    let client_name = params.client_name || '';
+    let project_name = params.project_name || '';
+    
+    if (!employee_name && employee_id) {
+        const { results } = await db.prepare('SELECT name FROM employees WHERE id = ?').bind(employee_id).all();
+        if (results.length > 0) employee_name = results[0].name;
+    }
+    if (!client_name && client_id) {
+        const { results } = await db.prepare('SELECT name FROM clients WHERE id = ?').bind(client_id).all();
+        if (results.length > 0) client_name = results[0].name;
+    }
+    if (!project_name && project_id) {
+        const { results } = await db.prepare('SELECT name FROM projects WHERE id = ?').bind(project_id).all();
+        if (results.length > 0) project_name = results[0].name;
+    }
+
+    const id = crypto.randomUUID();
+    const durationHour = Math.floor(duration_decimal || 0);
+    const durationMin = Math.round(((duration_decimal || 0) % 1) * 60);
+
+    await db.prepare(`
+      INSERT INTO time_records (
+        id, company_id, employee_id, employee_name, client_id, client_name,
+        project_id, project_name, duration_decimal, duration_hours, duration_minutes,
+        date, work_type, description, source
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).bind(
+      id, company_id, employee_id, employee_name,
+      client_id, client_name, project_id, project_name,
+      duration_decimal, durationHour, durationMin,
+      date || new Date().toISOString().split('T')[0], 
+      work_type || 'project', description || '', 'senda_ai'
+    ).run();
+
+    return {
+      success: true,
+      record_id: id,
+      message: `Registro de tiempo creado exitosamente para el empleado ${employee_name}.`
+    };
+  },
+
   get_time_records: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { company_id, month, employee_id } = params;
@@ -387,14 +437,16 @@ export const TOOL_REGISTRY = {
   },
 
   parse_natural_language_hours: async (params: any, c: HonoContext) => {
-    const { text, company_id } = params;
+    const { text } = params;
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+
     if (!text) {
       throw new Error('El texto es requerido para procesar.');
     }
     
     const textLower = text.toLowerCase();
     
-    // Default values
     let employee_id = 'emp_monica';
     let employee_name = 'monica.aieta';
     let client_id = '';
@@ -405,36 +457,66 @@ export const TOOL_REGISTRY = {
     let work_type = 'project';
     let description = text;
 
+    // Fetch master data from DB
+    const employeesReq = await db.prepare('SELECT id, name FROM employees WHERE company_id = ?').bind(company_id).all();
+    const clientsReq = await db.prepare('SELECT id, name FROM clients WHERE company_id = ?').bind(company_id).all();
+    const projectsReq = await db.prepare('SELECT id, name, client_id FROM projects WHERE company_id = ?').bind(company_id).all();
+
+    const employees = employeesReq.results || [];
+    const clients = clientsReq.results || [];
+    const projects = projectsReq.results || [];
+
     // Extract employee
-    if (textLower.includes('fede') || textLower.includes('gomez') || textLower.includes('federico')) {
-      employee_id = 'emp_fede';
-      employee_name = 'federico.gomez';
-    } else if (textLower.includes('santi') || textLower.includes('perez') || textLower.includes('santiago')) {
-      employee_id = 'emp_santi';
-      employee_name = 'santiago.perez';
-    } else if (textLower.includes('moni') || textLower.includes('aieta') || textLower.includes('monica')) {
-      employee_id = 'emp_monica';
-      employee_name = 'monica.aieta';
+    let foundEmp = false;
+    for (const emp of employees) {
+      const parts = (emp.name as string).toLowerCase().split(/[._\s]/);
+      for (const part of parts) {
+        if (part.length > 2 && textLower.includes(part)) {
+          employee_id = emp.id as string;
+          employee_name = emp.name as string;
+          foundEmp = true;
+          break;
+        }
+      }
+      if (foundEmp) break;
     }
 
-    // Extract client/project
-    if (textLower.includes('camuzzi')) {
-      client_id = 'cli_camuzzi';
-      client_name = 'Camuzzi';
-      project_id = 'proj_cam_web';
-      project_name = 'Portal Web';
-    } else if (textLower.includes('ypf')) {
-      client_id = 'cli_ypf';
-      client_name = 'YPF';
-      project_id = 'proj_ypf_mig';
-      project_name = 'Migración SAP';
-    } else if (textLower.includes('senda') || textLower.includes('core') || textLower.includes('mooving')) {
-      client_id = 'cli_mooving';
-      client_name = 'Mooving';
-      project_id = 'proj_moov_core';
-      project_name = 'Senda Core';
-    } else {
-      throw new Error('No pude identificar a qué cliente o proyecto corresponden las horas. Por favor, especifica el nombre del cliente (ej. Camuzzi, YPF, Mooving).');
+    // Extract client dynamically
+    for (const cli of clients) {
+      if (textLower.includes((cli.name as string).toLowerCase())) {
+        client_id = cli.id as string;
+        client_name = cli.name as string;
+        break;
+      }
+    }
+    
+    if (!client_id) {
+      // Fallback
+      if (textLower.includes('senda') || textLower.includes('core')) {
+        client_id = 'cli_mooving';
+        client_name = 'Mooving';
+      } else if (textLower.includes('interno')) {
+        client_id = 'cli_interno';
+        client_name = 'Interno';
+      } else {
+        throw new Error('No pude identificar a qué cliente o proyecto corresponden las horas. Por favor, especifica el nombre del cliente que aparece en tu base de datos.');
+      }
+    }
+
+    // Extract project dynamically
+    const availableProjects = projects.filter((p: any) => p.client_id === client_id);
+    for (const proj of availableProjects) {
+      const projName = (proj.name as string).toLowerCase();
+      if (textLower.includes(projName) || projName.split(' ').some(p => p.length > 3 && textLower.includes(p))) {
+        project_id = proj.id as string;
+        project_name = proj.name as string;
+        break;
+      }
+    }
+    
+    if (!project_id && availableProjects.length > 0) {
+      project_id = availableProjects[0].id as string;
+      project_name = availableProjects[0].name as string;
     }
 
     // Extract duration (e.g. 5.5h, 4h, 6 horas)

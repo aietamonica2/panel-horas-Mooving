@@ -124,7 +124,7 @@ export const MyTime: React.FC = () => {
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-4 rounded-lg shadow transition flex items-center gap-2 text-sm"
                 >
                   <Zap className="w-4 h-4" />
-                  Carga Rápida (Senda AI)
+                  Carga Rápida (Manual)
                 </button>
               </div>
               <form onSubmit={handleSubmit} className="space-y-4">

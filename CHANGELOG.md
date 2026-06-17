@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.5.1] - 2026-06-17
+
+### Fixed
+- Mejora en la función `parse_natural_language_hours` de la API para que extraiga los nombres de clientes y proyectos consultando dinámicamente la base de datos (Cloudflare D1) en lugar de una lista estática, solucionando el problema al cargar horas para clientes como "Decathlon".
+
 ## [1.5.0] - 2026-06-16
 
 ### Added
