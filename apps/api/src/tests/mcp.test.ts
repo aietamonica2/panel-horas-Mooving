@@ -5,7 +5,33 @@ import { HonoContext } from '../types';
 describe('MCP Server Tools', () => {
   it('should parse natural language correctly for Federico in YPF', async () => {
     const mockContext = {
-      env: { DB: {} },
+      env: {
+        DB: {
+          prepare: (sql: string) => {
+            return {
+              bind: (..._args: any[]) => {
+                return {
+                  all: () => {
+                    if (sql.includes('FROM employees')) {
+                      return { results: [{ id: 'emp_fede', name: 'Federico Gomez' }, { id: 'emp_monica', name: 'monica.aieta' }] };
+                    }
+                    if (sql.includes('FROM clients')) {
+                      return { results: [{ id: 'cli_ypf', name: 'YPF' }, { id: 'cli_camuzzi', name: 'Camuzzi' }] };
+                    }
+                    if (sql.includes('FROM projects')) {
+                      return { results: [
+                        { id: 'proj_ypf_mig', name: 'Migración SAP', client_id: 'cli_ypf' },
+                        { id: 'proj_cam_web', name: 'Portal Web', client_id: 'cli_camuzzi' }
+                      ] };
+                    }
+                    return { results: [] };
+                  }
+                };
+              }
+            };
+          }
+        }
+      },
       get: () => ({ company_id: 'mooving-default' })
     } as unknown as HonoContext;
 
@@ -22,7 +48,33 @@ describe('MCP Server Tools', () => {
 
   it('should parse natural language correctly for Monica in Camuzzi', async () => {
     const mockContext = {
-      env: { DB: {} },
+      env: {
+        DB: {
+          prepare: (sql: string) => {
+            return {
+              bind: (..._args: any[]) => {
+                return {
+                  all: () => {
+                    if (sql.includes('FROM employees')) {
+                      return { results: [{ id: 'emp_fede', name: 'Federico Gomez' }, { id: 'emp_monica', name: 'monica.aieta' }] };
+                    }
+                    if (sql.includes('FROM clients')) {
+                      return { results: [{ id: 'cli_ypf', name: 'YPF' }, { id: 'cli_camuzzi', name: 'Camuzzi' }] };
+                    }
+                    if (sql.includes('FROM projects')) {
+                      return { results: [
+                        { id: 'proj_ypf_mig', name: 'Migración SAP', client_id: 'cli_ypf' },
+                        { id: 'proj_cam_web', name: 'Portal Web', client_id: 'cli_camuzzi' }
+                      ] };
+                    }
+                    return { results: [] };
+                  }
+                };
+              }
+            };
+          }
+        }
+      },
       get: () => ({ company_id: 'mooving-default' })
     } as unknown as HonoContext;
 

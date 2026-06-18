@@ -167,6 +167,102 @@ export const TOOL_REGISTRY = {
     };
   },
 
+  create_bulk_time_records: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { employee_id, client_id, project_id, duration_decimal, work_type, description, start_date, end_date, days_of_week } = params;
+    
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    
+    let employee_name = params.employee_name || '';
+    let client_name = params.client_name || '';
+    let project_name = params.project_name || '';
+    
+    if (!employee_name && employee_id) {
+        const { results } = await db.prepare('SELECT name FROM employees WHERE id = ?').bind(employee_id).all();
+        if (results.length > 0) employee_name = results[0].name;
+    }
+    if (!client_name && client_id) {
+        const { results } = await db.prepare('SELECT name FROM clients WHERE id = ?').bind(client_id).all();
+        if (results.length > 0) client_name = results[0].name;
+    }
+    if (!project_name && project_id) {
+        const { results } = await db.prepare('SELECT name FROM projects WHERE id = ?').bind(project_id).all();
+        if (results.length > 0) project_name = results[0].name;
+    }
+
+    if (!start_date || !end_date) {
+      throw new Error('start_date and end_date are required for bulk time records');
+    }
+
+    // Force UTC parsing to avoid timezone shift issues
+    const start = new Date(start_date + 'T00:00:00Z');
+    const end = new Date(end_date + 'T00:00:00Z');
+    
+    // Safety limit of 31 days max
+    const diffTime = Math.abs(end.getTime() - start.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+    if (diffDays > 31) {
+      throw new Error('No se permite la carga masiva de más de 31 días a la vez por razones de seguridad.');
+    }
+
+    let targetDays: number[] | null = null;
+    if (days_of_week && Array.isArray(days_of_week) && days_of_week.length > 0) {
+      targetDays = days_of_week.map(d => {
+        if (typeof d === 'number') return d;
+        const lower = String(d).toLowerCase();
+        if (lower.startsWith('dom')) return 0;
+        if (lower.startsWith('lun')) return 1;
+        if (lower.startsWith('mar')) return 2;
+        if (lower.startsWith('mie') || lower.startsWith('mié')) return 3;
+        if (lower.startsWith('jue')) return 4;
+        if (lower.startsWith('vie')) return 5;
+        if (lower.startsWith('sab') || lower.startsWith('sáb')) return 6;
+        return parseInt(String(d));
+      }).filter(d => !isNaN(d));
+    }
+
+    const durationHour = Math.floor(duration_decimal || 0);
+    const durationMin = Math.round(((duration_decimal || 0) % 1) * 60);
+
+    let inserted = 0;
+    
+    // Iterate over dates using UTC
+    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+      const dayOfWeek = d.getUTCDay();
+      
+      if (targetDays) {
+        if (!targetDays.includes(dayOfWeek)) continue;
+      } else {
+        if (dayOfWeek === 0 || dayOfWeek === 6) continue; // Default skip weekends
+      }
+
+      const id = crypto.randomUUID();
+      const currentDateString = d.toISOString().split('T')[0];
+
+      await db.prepare(`
+        INSERT INTO time_records (
+          id, company_id, employee_id, employee_name, client_id, client_name,
+          project_id, project_name, duration_decimal, duration_hours, duration_minutes,
+          date, work_type, description, source
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).bind(
+        id, company_id, employee_id, employee_name,
+        client_id, client_name, project_id, project_name,
+        duration_decimal, durationHour, durationMin,
+        currentDateString, 
+        work_type || 'project', description || '', 'senda_ai_bulk'
+      ).run();
+      
+      inserted++;
+    }
+
+    return {
+      success: true,
+      records_inserted: inserted,
+      message: `Carga masiva completada: se insertaron ${inserted} registros para el empleado ${employee_name}.`
+    };
+  },
+
   get_time_records: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { company_id, month, employee_id } = params;
@@ -468,12 +564,13 @@ export const TOOL_REGISTRY = {
 
     // Extract employee
     let foundEmp = false;
+    const textWords = textLower.split(/\s+/);
     for (const emp of employees) {
-      const parts = (emp.name as string).toLowerCase().split(/[._\s]/);
-      for (const part of parts) {
-        if (part.length > 2 && textLower.includes(part)) {
+      const nameParts = (emp.name as string).toLowerCase().split(/[._\s]/);
+      for (const part of nameParts) {
+        if (part.length > 2 && textWords.some(w => part.startsWith(w) || w.startsWith(part))) {
           employee_id = emp.id as string;
-          employee_name = emp.name as string;
+          employee_name = emp.name.toLowerCase().replace(/\s+/g, '.');
           foundEmp = true;
           break;
         }
@@ -551,7 +648,119 @@ export const TOOL_REGISTRY = {
         description
       }
     };
-  }
+  },
+
+  /**
+   * senda_widget_action
+   * Forwards a user message to the Senda AI API and returns the text response.
+   * Useful for conversational queries from the widget that need to be logged
+   * or pre-processed by the backend.
+   *
+   * Params:
+   *   message      (string)  – The user's natural-language message.
+   *   company_id   (string)  – Tenant identifier for isolation.
+   *   space        (string)  – Senda space (defaults to "tramia").
+   */
+  senda_widget_action: async (params: any, c: HonoContext) => {
+    const { message, space } = params;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const sendaApiKey = c.env.SENDA_API_KEY;
+    const sendaBaseUrl = c.env.SENDA_BASE_URL || 'https://sendaqa.telar.ai/api';
+
+    if (!message) {
+      throw new Error('El campo "message" es requerido.');
+    }
+    if (!sendaApiKey) {
+      throw new Error('SENDA_API_KEY no está configurada en las variables de entorno del Worker.');
+    }
+
+    const targetSpace = space || 'tramia';
+
+    // Call Senda chat completions endpoint (non-streaming)
+    const res = await fetch(`${sendaBaseUrl}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${sendaApiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        message,
+        space: targetSpace,
+        stream: false,
+        metadata: { company_id },
+      }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Error al contactar Senda (${res.status}): ${errText}`);
+    }
+
+    const data = await res.json() as any;
+    const responseText = data.text || data.content || data.message || JSON.stringify(data);
+
+    return {
+      success: true,
+      company_id,
+      space: targetSpace,
+      response: responseText,
+    };
+  },
+
+  /**
+   * senda_bulk_load
+   * Publicly-callable wrapper around create_bulk_time_records.
+   * Intended for use by both the Senda widget and the weekly cron trigger.
+   *
+   * Params:
+   *   company_id      (string)   – Tenant identifier (REQUIRED for isolation).
+   *   employee_id     (string)   – Target employee ID.
+   *   client_id       (string)   – Client ID.
+   *   project_id      (string)   – Project ID.
+   *   description     (string)   – Entry description.
+   *   hours_per_day   (number)   – Hours to log per qualifying day.
+   *   start_date      (string)   – YYYY-MM-DD start date (inclusive).
+   *   end_date        (string)   – YYYY-MM-DD end date (inclusive, max 31 days ahead).
+   *   days_of_week    (number[]) – Optional. Day numbers (0=Sun…6=Sat). Default: Mon–Fri.
+   */
+  senda_bulk_load: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const {
+      employee_id,
+      client_id,
+      project_id,
+      description,
+      start_date,
+      end_date,
+      days_of_week,
+    } = params;
+
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const hours_per_day = Number(params.hours_per_day) || 4;
+
+    if (!employee_id || !client_id || !project_id || !start_date || !end_date) {
+      throw new Error(
+        'Los campos employee_id, client_id, project_id, start_date y end_date son requeridos.'
+      );
+    }
+
+    // Delegate to the existing create_bulk_time_records tool
+    return (TOOL_REGISTRY as any).create_bulk_time_records(
+      {
+        company_id,
+        employee_id,
+        client_id,
+        project_id,
+        duration_decimal: hours_per_day,
+        work_type: params.work_type || 'project',
+        description: description || 'Carga masiva via Senda',
+        start_date,
+        end_date,
+        days_of_week,
+      },
+      c
+    );
+  },
 };
 
 export const executeToolCall = async (toolName: string, params: any, c: HonoContext) => {

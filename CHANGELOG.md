@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.0] - 2026-06-18
+
+### Added
+- **Nuevo MCP tool `senda_widget_action`**: reenvía un mensaje al API de Senda AI (endpoint `/v1/chat/completions`) y retorna la respuesta textual. Disponible tanto desde el widget como directamente vía MCP. Requiere `SENDA_API_KEY` en las variables de entorno del Worker.
+- **Nuevo MCP tool `senda_bulk_load`**: wrapper público de `create_bulk_time_records` con validación de `company_id` obligatorio. Permite cargas masivas desde el widget de Senda, la UI y el cron.
+- **Cron de carga masiva semanal**: nuevo archivo `apps/api/src/cron/bulk_load.ts` con un handler `handleBulkLoadCron` que lee programaciones de la tabla `bulk_load_schedules` y ejecuta la carga masiva. Incluye fallback a programación por defecto si la tabla no existe.
+- **Trigger programado en Cloudflare Workers**: `wrangler.toml` actualizado con `[triggers] crons = ["0 8 * * 2"]` para ejecutar la carga masiva cada martes a las 08:00 UTC.
+- **Migración `0012_bulk_load_schedules_and_new_mcp_tools.sql`**: crea la tabla `bulk_load_schedules` para persistir programaciones por tenant y registra los nuevos tools en `mcp_tool_catalog`.
+- **`setup_senda_actions.js` actualizado**: incorpora `senda_widget_action` y `senda_bulk_load` al catálogo de acciones de Senda QA para disponibilidad inmediata desde el widget.
+- **`Env` type alias**: nuevo alias exportado desde `src/types/index.ts` usado por el cron handler y el entry-point del Worker.
+- **Scheduled export en `src/index.ts`**: el entry-point ahora exporta la función `scheduled()` requerida por Cloudflare Workers para ejecutar el cron.
+- **Tests nuevos** (18/18 ✅):
+  - `src/tests/senda_actions.test.ts` (7 tests): valida `senda_widget_action` y `senda_bulk_load` con mocks de D1 y fetch.
+  - `src/tests/bulk_load.test.ts` (5 tests): valida el cron handler incluyendo filtros de días, fechas inválidas, limite de 31 días y fallback sin tabla.
+
+### Fixed
+- **Cron loop date iteration**: reemplazado el loop `for (let d = new Date(...)...d.setUTCDate(...))` con un loop basado en contador índice para evitar off-by-one errors por mutación del objeto Date.
+- **`days_of_week` parsing**: el handler ahora acepta tanto arrays nativos como strings JSON para compatibilidad con datos de la DB y objetos en memoria.
+
+## [1.6.1] - 2026-06-17
+
+### Fixed
+- Normalized employee_name output in parse_natural_language_hours to lowercase with dots.
+
+## [1.6.0] - 2026-06-17
+
+### Added
+- Nueva herramienta MCP (`create_bulk_time_records`) en el backend para permitir cargas masivas y recurrentes de horas. El agente de Senda AI ahora puede procesar solicitudes como "carga todos los martes 8hs" o "carga diariamente hasta fin de mes". Se incluye un límite máximo de 31 días por motivos de seguridad.
+
 ## [1.5.1] - 2026-06-17
 
 ### Fixed

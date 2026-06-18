@@ -12,11 +12,15 @@ export interface CloudflareEnv {
   ENVIRONMENT: 'development' | 'production'
   SECRET_KEY?: string
   SENDA_BASE_URL?: string
+  SENDA_API_KEY?: string
   ZENDESK_SUBDOMAIN?: string
   ZENDESK_EMAIL?: string
   ZENDESK_API_TOKEN?: string
   [key: string]: any
 }
+
+/** Alias used by cron handlers and Workers entry-point */
+export type Env = CloudflareEnv
 
 export interface TimeRecordPayload {
   company_id: string
