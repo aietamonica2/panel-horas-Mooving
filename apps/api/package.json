@@ -13,6 +13,7 @@
   "dependencies": {
     "@cloudflare/workers-types": "^4.20240122.0",
     "@hono/zod-validator": "^0.2.2",
+    "csv-parse": "^7.0.0",
     "hono": "^3.11.7",
     "panel-senda": "file:../..",
     "zod": "^3.22.4"

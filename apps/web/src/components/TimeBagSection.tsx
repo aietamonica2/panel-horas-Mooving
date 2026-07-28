@@ -30,8 +30,8 @@ export const TimeBagSection: React.FC<TimeBagSectionProps> = ({ records }) => {
   const meetings = records.filter(r => r.work_type === 'meeting')
 
   // Calculate totals
-  const internalHours = internalTasks.reduce((sum, r) => sum + r.duration_hours, 0)
-  const meetingHours = meetings.reduce((sum, r) => sum + r.duration_hours, 0)
+  const internalHours = internalTasks.reduce((sum, r) => sum + r.duration_decimal, 0)
+  const meetingHours = meetings.reduce((sum, r) => sum + r.duration_decimal, 0)
   const totalBagHours = internalHours + meetingHours
 
   // Only show section if there's data

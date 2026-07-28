@@ -32,7 +32,7 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
         employee_name: record.employee_name,
         client_name: record.client_name,
         project_name: record.project_name,
-        duration_decimal: record.duration_hours,
+        duration_decimal: record.duration_decimal,
         date: record.date,
         work_type: record.work_type,
         description: record.description || ''

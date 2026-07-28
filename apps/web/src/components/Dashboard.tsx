@@ -18,6 +18,7 @@ import { BagOfHoursTable } from './BagOfHoursTable'
 import { AnalyticsCharts } from './AnalyticsCharts'
 import { QuickLogModal } from './QuickLogModal'
 import { EditRecordModal } from './EditRecordModal'
+import { EmailRemindersModal } from './EmailRemindersModal'
 import { api } from '../api'
 
 const MOOVING_COLORS = {
@@ -37,6 +38,7 @@ export const Dashboard: React.FC = () => {
   const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false)
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
 
   
   // Multi-select filter states
@@ -231,7 +233,7 @@ export const Dashboard: React.FC = () => {
     filteredRecords.reduce((acc, r) => {
       const key = r.employee_name
       const existing = acc.get(key) || { name: key, horas: 0 }
-      existing.horas += r.duration_hours
+      existing.horas += r.duration_decimal
       acc.set(key, existing)
       return acc
     }, new Map()).values()
@@ -242,7 +244,7 @@ export const Dashboard: React.FC = () => {
     filteredRecords.reduce((acc, r) => {
       const key = r.client_name
       const existing = acc.get(key) || { name: key, value: 0 }
-      existing.value += r.duration_hours
+      existing.value += r.duration_decimal
       acc.set(key, existing)
       return acc
     }, new Map()).values()
@@ -284,10 +286,15 @@ export const Dashboard: React.FC = () => {
             </h2>
             <span className="text-xs bg-indigo-200 text-indigo-800 px-3 py-1 rounded-full font-bold uppercase tracking-wider">Modo Integrado</span>
           </div>
-          <div className="flex flex-wrap gap-4 mb-6">
+            <button 
+              onClick={() => setIsEmailModalOpen(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-5 border border-indigo-700 rounded-lg shadow-sm transition flex items-center gap-2"
+            >
+              📧 Recordatorios por Mail
+            </button>
             <button 
               onClick={() => setIsQuickLogOpen(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-5 border border-indigo-700 rounded-lg shadow-sm transition flex items-center gap-2"
+              className="bg-white hover:bg-indigo-50 text-indigo-700 font-medium py-2 px-5 border border-indigo-200 rounded-lg shadow-sm transition flex items-center gap-2"
             >
               ⚡ Carga Rápida
             </button>
@@ -309,13 +316,6 @@ export const Dashboard: React.FC = () => {
             >
               🛡️ Auditar Tiempos
             </button>
-            <button 
-              onClick={() => handleSendaAction('Envío de Alertas Inactividad')}
-              className="bg-white hover:bg-indigo-50 text-indigo-700 font-medium py-2 px-5 border border-indigo-200 rounded-lg shadow-sm transition flex items-center gap-2"
-            >
-              📩 Notificar Inactivos
-            </button>
-          </div>
 
           {/* ROI Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-indigo-100 pt-4">
@@ -458,7 +458,7 @@ export const Dashboard: React.FC = () => {
                 <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Índice de Facturabilidad</p>
                 <div className="flex items-end gap-3">
                   <p className="text-3xl font-bold text-green-400">
-                    {totalHours > 0 ? ((filteredRecords.filter(r => r.work_type === 'project').reduce((acc, r) => acc + r.duration_hours, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
+                    {totalHours > 0 ? ((filteredRecords.filter(r => r.work_type === 'project').reduce((acc, r) => acc + r.duration_decimal, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
                   </p>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">Objetivo saludable: &gt; 75%</p>
@@ -469,7 +469,7 @@ export const Dashboard: React.FC = () => {
                 <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Carga de Overhead</p>
                 <div className="flex items-end gap-3">
                   <p className="text-3xl font-bold text-red-400">
-                    {totalHours > 0 ? ((filteredRecords.filter(r => r.work_type !== 'project').reduce((acc, r) => acc + r.duration_hours, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
+                    {totalHours > 0 ? ((filteredRecords.filter(r => r.work_type !== 'project').reduce((acc, r) => acc + r.duration_decimal, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
                   </p>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">Tiempo en reuniones internas / tareas no facturables</p>
@@ -647,7 +647,7 @@ export const Dashboard: React.FC = () => {
                       <td className="px-6 py-3 text-gray-600">{record.project_name}</td>
                       <td className="px-6 py-3 text-center">
                         <span className="font-semibold" style={{ color: MOOVING_COLORS.secondary }}>
-                          {record.duration_hours.toFixed(2)}h
+                          {record.duration_decimal.toFixed(2)}h
                         </span>
                       </td>
                       <td className="px-6 py-3 text-gray-600">
@@ -760,6 +760,11 @@ export const Dashboard: React.FC = () => {
             </div>
           </div>
         )}
+
+        <EmailRemindersModal 
+          isOpen={isEmailModalOpen} 
+          onClose={() => setIsEmailModalOpen(false)} 
+        />
       </div>
     </div>
   )

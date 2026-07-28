@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Users, Briefcase, FolderGit2, Tags, Plus, Trash2, Loader2, Edit2 } from 'lucide-react';
+import { Users, Briefcase, FolderGit2, Tags, Plus, Trash2, Loader2, Edit2, Clock, Mail } from 'lucide-react';
+import { EmailRemindersModal } from './EmailRemindersModal';
 
 type TabType = 'employees' | 'clients' | 'projects' | 'categories';
 
@@ -8,6 +9,7 @@ export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<TabType>('employees');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   
   const [data, setData] = useState({
     employees: [] as any[],
@@ -24,12 +26,11 @@ export function AdminPanel() {
     setLoading(true);
     setError('');
     try {
-      // Call MCP Tools sequentially or concurrently depending on need
       const [empRes, cliRes, projRes, catRes] = await Promise.all([
-        api.callMcpTool('get_employees', {}).then(res => res.json()),
-        api.callMcpTool('get_clients', {}).then(res => res.json()),
-        api.callMcpTool('get_projects', {}).then(res => res.json()),
-        api.callMcpTool('get_categories', {}).then(res => res.json()),
+        api.callMcpTool('get_employees', { company_id: 'mooving-default' }).then(res => res.json()),
+        api.callMcpTool('get_clients', { company_id: 'mooving-default' }).then(res => res.json()),
+        api.callMcpTool('get_projects', { company_id: 'mooving-default' }).then(res => res.json()),
+        api.callMcpTool('get_categories', { company_id: 'mooving-default' }).then(res => res.json()),
       ]);
 
       setData({
@@ -72,6 +73,24 @@ export function AdminPanel() {
     }
   };
 
+  const handleSyncClockify = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.callMcpTool('sync_clockify_hours', {});
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Error al sincronizar Clockify');
+      
+      alert(data.result?.message || 'Sincronización de Clockify exitosa');
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Error al sincronizar con Clockify.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -103,13 +122,13 @@ export function AdminPanel() {
 
   const openCreateModal = () => {
     setEditingItem(null);
-    setFormData({});
+    setFormData({ is_active: 1 });
     setIsModalOpen(true);
   };
 
   const openEditModal = (item: any) => {
     setEditingItem(item);
-    setFormData(item);
+    setFormData({ ...item, is_active: item.is_active !== undefined ? item.is_active : 1 });
     setIsModalOpen(true);
   };
 
@@ -124,18 +143,36 @@ export function AdminPanel() {
     <div className="flex-1 p-8 bg-slate-50 overflow-y-auto">
       <div className="max-w-6xl mx-auto space-y-6">
         
-        <div className="flex justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200">
+        <div className="flex flex-wrap justify-between items-center bg-white p-6 rounded-xl shadow-sm border border-slate-200 gap-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-800">Administración</h1>
-            <p className="text-slate-500 mt-1">Gestión de datos maestros (CRUDs)</p>
+            <p className="text-slate-500 mt-1">Gestión de datos maestros y empleados</p>
           </div>
-          <button
-            onClick={fetchData}
-            className="flex items-center px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors"
-          >
-            {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Actualizar Datos
-          </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={() => setIsEmailModalOpen(true)}
+              className="flex items-center px-4 py-2 bg-indigo-600 text-white font-medium rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+            >
+              <Mail className="w-4 h-4 mr-2" />
+              Recordatorios por Mail
+            </button>
+            <button
+              onClick={handleSyncClockify}
+              disabled={loading}
+              className="flex items-center px-4 py-2 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-lg hover:bg-indigo-100 transition-colors disabled:opacity-50"
+            >
+              {loading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Clock className="w-4 h-4 mr-2" />}
+              Sincronizar Clockify
+            </button>
+            <button
+              onClick={fetchData}
+              disabled={loading}
+              className="flex items-center px-4 py-2 bg-slate-100 text-slate-700 rounded-lg hover:bg-slate-200 transition-colors disabled:opacity-50"
+            >
+              {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+              Actualizar Datos
+            </button>
+          </div>
         </div>
 
         {error && (
@@ -185,6 +222,7 @@ export function AdminPanel() {
                     <th className="py-3 px-4 font-medium">ID</th>
                     <th className="py-3 px-4 font-medium">Nombre</th>
                     {activeTab === 'employees' && <th className="py-3 px-4 font-medium">Email</th>}
+                    {activeTab === 'employees' && <th className="py-3 px-4 font-medium">Estado</th>}
                     {activeTab === 'projects' && <th className="py-3 px-4 font-medium">Client ID</th>}
                     <th className="py-3 px-4 font-medium text-right">Acciones</th>
                   </tr>
@@ -194,7 +232,16 @@ export function AdminPanel() {
                     <tr key={item.id} className="hover:bg-slate-50 transition-colors">
                       <td className="py-3 px-4 text-slate-500 font-mono text-xs">{item.id}</td>
                       <td className="py-3 px-4 font-medium text-slate-800">{item.name}</td>
-                      {activeTab === 'employees' && <td className="py-3 px-4 text-slate-500">{item.email || '-'}</td>}
+                      {activeTab === 'employees' && <td className="py-3 px-4 text-slate-500 font-mono text-xs">{item.email || '-'}</td>}
+                      {activeTab === 'employees' && (
+                        <td className="py-3 px-4">
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            item.is_active === 0 ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-800'
+                          }`}>
+                            {item.is_active === 0 ? 'Fuera de la org.' : 'Activo'}
+                          </span>
+                        </td>
+                      )}
                       {activeTab === 'projects' && <td className="py-3 px-4 text-slate-500 font-mono text-xs">{item.client_id}</td>}
                       <td className="py-3 px-4 text-right">
                         <button
@@ -216,7 +263,7 @@ export function AdminPanel() {
                   ))}
                   {data[activeTab].length === 0 && (
                     <tr>
-                      <td colSpan={5} className="py-8 text-center text-slate-500 italic">
+                      <td colSpan={6} className="py-8 text-center text-slate-500 italic">
                         No hay registros disponibles.
                       </td>
                     </tr>
@@ -257,15 +304,29 @@ export function AdminPanel() {
               </div>
 
               {activeTab === 'employees' && (
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    value={formData.email || ''}
-                    onChange={e => setFormData({...formData, email: e.target.value})}
-                    className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                  />
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
+                    <input
+                      type="email"
+                      value={formData.email || ''}
+                      onChange={e => setFormData({...formData, email: e.target.value})}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1">Estado de Empleado</label>
+                    <select
+                      value={formData.is_active !== 0 ? 1 : 0}
+                      onChange={e => setFormData({...formData, is_active: parseInt(e.target.value)})}
+                      className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <option value={1}>Activo (En la organización)</option>
+                      <option value={0}>Fuera de la organización (Exempleado)</option>
+                    </select>
+                  </div>
+                </>
               )}
 
               {activeTab === 'projects' && (
@@ -306,6 +367,13 @@ export function AdminPanel() {
           </div>
         </div>
       )}
+
+      {/* Email Reminders Modal */}
+      <EmailRemindersModal
+        isOpen={isEmailModalOpen}
+        onClose={() => setIsEmailModalOpen(false)}
+      />
     </div>
   );
 }
+

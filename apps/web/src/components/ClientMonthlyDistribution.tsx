@@ -48,7 +48,7 @@ export const ClientMonthlyDistribution: React.FC<ClientMonthlyDistributionProps>
       uniqueMonths.forEach(month => {
         const hours = projectRecords
           .filter(r => r.client_name === client && r.date.substring(0, 7) === month)
-          .reduce((sum, r) => sum + r.duration_hours, 0)
+          .reduce((sum, r) => sum + r.duration_decimal, 0)
         matrix[client][month] = hours
       })
     })

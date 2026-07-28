@@ -37,7 +37,7 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
     const uniqueDates = new Set(records.map(r => r.date))
     const uniqueEmployees = new Set(records.map(r => r.employee_id))
 
-    const totalHours = records.reduce((sum, r) => sum + r.duration_hours, 0)
+    const totalHours = records.reduce((sum, r) => sum + r.duration_decimal, 0)
     const workdays = uniqueDates.size
     const employees = uniqueEmployees.size
 

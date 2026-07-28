@@ -42,7 +42,7 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
     const breakdown: { [client: string]: number } = {}
     empRecords.forEach(r => {
       const key = r.client_name || 'Sin Cliente'
-      breakdown[key] = (breakdown[key] || 0) + r.duration_hours
+      breakdown[key] = (breakdown[key] || 0) + r.duration_decimal
     })
 
     const total = Object.values(breakdown).reduce((sum, h) => sum + h, 0)
@@ -147,14 +147,14 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
         <div className="bg-orange-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.secondary }}>
           <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Total Horas (Proyectos)</div>
           <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.secondary }}>
-            {records.filter(r => r.work_type === 'project').reduce((sum, r) => sum + r.duration_hours, 0)}h
+            {records.filter(r => r.work_type === 'project').reduce((sum, r) => sum + r.duration_decimal, 0)}h
           </div>
         </div>
 
         <div className="bg-green-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.success }}>
           <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Promedio/Empleado</div>
           <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.success }}>
-            {(records.filter(r => r.work_type === 'project').reduce((sum, r) => sum + r.duration_hours, 0) / uniqueEmployees.length).toFixed(1)}h
+            {(records.filter(r => r.work_type === 'project').reduce((sum, r) => sum + r.duration_decimal, 0) / uniqueEmployees.length).toFixed(1)}h
           </div>
         </div>
 

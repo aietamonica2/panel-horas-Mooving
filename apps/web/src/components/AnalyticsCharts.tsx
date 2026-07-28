@@ -38,7 +38,7 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
 
     records.forEach(r => {
       const month = r.date.substring(0, 7)
-      monthlyMap[month] = (monthlyMap[month] || 0) + r.duration_hours
+      monthlyMap[month] = (monthlyMap[month] || 0) + r.duration_decimal
     })
 
     return Object.entries(monthlyMap)
@@ -55,7 +55,7 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
     const employeeMap: { [name: string]: number } = {}
 
     records.forEach(r => {
-      employeeMap[r.employee_name] = (employeeMap[r.employee_name] || 0) + r.duration_hours
+      employeeMap[r.employee_name] = (employeeMap[r.employee_name] || 0) + r.duration_decimal
     })
 
     return Object.entries(employeeMap)
@@ -74,7 +74,7 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
 
     records.forEach(r => {
       if (r.client_name) {
-        clientMap[r.client_name] = (clientMap[r.client_name] || 0) + r.duration_hours
+        clientMap[r.client_name] = (clientMap[r.client_name] || 0) + r.duration_decimal
       }
     })
 

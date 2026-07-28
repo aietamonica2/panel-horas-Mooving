@@ -49,11 +49,11 @@ export const InternalTasksTable: React.FC<InternalTasksTableProps> = ({ records 
       // Add hours to employee/month
       const employeeMonths = employeeData.get(employee)!
       const current = employeeMonths.get(month) || 0
-      employeeMonths.set(month, current + record.duration_hours)
+      employeeMonths.set(month, current + record.duration_decimal)
 
       // Add to month total
       const currentMonth = monthTotals.get(month) || 0
-      monthTotals.set(month, currentMonth + record.duration_hours)
+      monthTotals.set(month, currentMonth + record.duration_decimal)
     })
 
     // Convert to array and sort

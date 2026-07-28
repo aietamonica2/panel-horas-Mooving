@@ -52,7 +52,7 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
       uniqueMonths.forEach(month => {
         const hours = bagRecords
           .filter(r => r.employee_name === emp && r.date.substring(0, 7) === month)
-          .reduce((sum, r) => sum + r.duration_hours, 0)
+          .reduce((sum, r) => sum + r.duration_decimal, 0)
         matrix[emp][month] = hours
       })
     })
@@ -72,7 +72,7 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
       uniqueMonths.forEach(month => {
         const hours = typeRecords
           .filter(r => r.employee_name === emp && r.date.substring(0, 7) === month)
-          .reduce((sum, r) => sum + r.duration_hours, 0)
+          .reduce((sum, r) => sum + r.duration_decimal, 0)
         matrix[emp][month] = hours
       })
     })
@@ -172,21 +172,21 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
         <div className="bg-indigo-50 rounded-lg p-6 border-l-4" style={{ borderColor: MOOVING_COLORS.indigo }}>
           <div className="text-sm text-gray-600 uppercase font-semibold mb-2">⚙️ Tareas Internas</div>
           <div className="text-3xl font-bold" style={{ color: MOOVING_COLORS.indigo }}>
-            {internalRecords.reduce((sum, r) => sum + r.duration_hours, 0)}h
+            {internalRecords.reduce((sum, r) => sum + r.duration_decimal, 0)}h
           </div>
         </div>
 
         <div className="bg-pink-50 rounded-lg p-6 border-l-4" style={{ borderColor: MOOVING_COLORS.pink }}>
           <div className="text-sm text-gray-600 uppercase font-semibold mb-2">👥 Reuniones de Equipo</div>
           <div className="text-3xl font-bold" style={{ color: MOOVING_COLORS.pink }}>
-            {meetingRecords.reduce((sum, r) => sum + r.duration_hours, 0)}h
+            {meetingRecords.reduce((sum, r) => sum + r.duration_decimal, 0)}h
           </div>
         </div>
 
         <div className="bg-orange-50 rounded-lg p-6 border-l-4" style={{ borderColor: MOOVING_COLORS.secondary }}>
           <div className="text-sm text-gray-600 uppercase font-semibold mb-2">📊 Total Bolsa</div>
           <div className="text-3xl font-bold" style={{ color: MOOVING_COLORS.secondary }}>
-            {bagRecords.reduce((sum, r) => sum + r.duration_hours, 0)}h
+            {bagRecords.reduce((sum, r) => sum + r.duration_decimal, 0)}h
           </div>
         </div>
       </div>
@@ -198,13 +198,13 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
           <div
             className="bg-indigo-500 transition-all"
             style={{
-              width: `${(internalRecords.reduce((sum, r) => sum + r.duration_hours, 0) / bagRecords.reduce((sum, r) => sum + r.duration_hours, 0) * 100) || 0}%`
+              width: `${(internalRecords.reduce((sum, r) => sum + r.duration_decimal, 0) / bagRecords.reduce((sum, r) => sum + r.duration_decimal, 0) * 100) || 0}%`
             }}
           />
           <div
             className="bg-pink-500 transition-all"
             style={{
-              width: `${(meetingRecords.reduce((sum, r) => sum + r.duration_hours, 0) / bagRecords.reduce((sum, r) => sum + r.duration_hours, 0) * 100) || 0}%`
+              width: `${(meetingRecords.reduce((sum, r) => sum + r.duration_decimal, 0) / bagRecords.reduce((sum, r) => sum + r.duration_decimal, 0) * 100) || 0}%`
             }}
           />
         </div>

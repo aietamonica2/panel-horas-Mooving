@@ -16,6 +16,9 @@ export interface CloudflareEnv {
   ZENDESK_SUBDOMAIN?: string
   ZENDESK_EMAIL?: string
   ZENDESK_API_TOKEN?: string
+  CLOCKIFY_API_TOKEN?: string
+  SENDGRID_API_KEY?: string
+  SENDGRID_FROM_EMAIL?: string
   [key: string]: any
 }
 

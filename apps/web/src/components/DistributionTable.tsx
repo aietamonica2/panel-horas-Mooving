@@ -44,7 +44,7 @@ export const DistributionTable: React.FC<DistributionTableProps> = ({
       }
 
       const existing = grouped.get(key) || { name, total: 0, count: 0 }
-      existing.total += record.duration_hours
+      existing.total += record.duration_decimal
       existing.count += 1
       grouped.set(key, existing)
     })

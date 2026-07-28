@@ -67,7 +67,7 @@ export const EmployeeAvailability: React.FC<EmployeeAvailabilityProps> = ({ reco
 
         const registeredHours = records
           .filter(r => r.employee_name === emp && r.date.substring(0, 7) === month)
-          .reduce((sum, r) => sum + r.duration_hours, 0)
+          .reduce((sum, r) => sum + r.duration_decimal, 0)
 
         const availableHours = Math.max(0, expectedHours - registeredHours)
         const percentage = (registeredHours / expectedHours) * 100
