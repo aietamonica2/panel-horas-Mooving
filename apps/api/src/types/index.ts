@@ -19,6 +19,8 @@ export interface CloudflareEnv {
   CLOCKIFY_API_TOKEN?: string
   SENDGRID_API_KEY?: string
   SENDGRID_FROM_EMAIL?: string
+  RESEND_API_KEY?: string
+  RESEND_FROM_EMAIL?: string
   [key: string]: any
 }
 

@@ -90,7 +90,7 @@ describe('Email Reminders Cron Handler', () => {
     await handleEmailRemindersCron(env);
 
     expect(consoleSpy).toHaveBeenCalledWith(
-      expect.stringContaining('SENDGRID_API_KEY not configured'),
+      expect.stringContaining('No API key configured'),
     );
     consoleSpy.mockRestore();
   });

@@ -960,9 +960,9 @@ export const TOOL_REGISTRY = {
       // Table fallback
     }
 
-    // Optional: sync Clockify before sending to ensure latest hours data
+    // Optional: sync Clockify before sending if explicitly requested (e.g. background cron)
     let clockifySyncResult = null;
-    if (sync_clockify_first !== false) {
+    if (sync_clockify_first === true) {
       const clockifyToken = c.env.CLOCKIFY_API_TOKEN;
       if (clockifyToken) {
         try {
@@ -976,12 +976,16 @@ export const TOOL_REGISTRY = {
       }
     }
 
+    const resendKey = (c.env.RESEND_API_KEY || '').trim();
     const sendgridKey = (c.env.SENDGRID_API_KEY || c.env.SENDGRID_PASSWORD || '').trim();
-    const fromEmail = (c.env.SENDGRID_FROM_EMAIL || 'monica.aieta@moovingtech.com').trim();
+    const activeApiKey = resendKey || sendgridKey;
+    const providerName = resendKey ? 'Resend API' : (sendgridKey ? 'SendGrid API (v3)' : 'Simulación / Mailto Interactivo');
+    const fromEmail = (c.env.RESEND_FROM_EMAIL || c.env.SENDGRID_FROM_EMAIL || 'Mónica Aieta <onboarding@resend.dev>').trim();
+    
     let realEmailsSent = 0;
     const failedEmails: string[] = [];
 
-    if (sendgridKey) {
+    if (activeApiKey) {
       try {
         const draftsResult = await (TOOL_REGISTRY as any).get_email_reminder_drafts({ company_id, month, custom_cc }, c);
         const draftsMap: Record<string, any> = {};
@@ -993,67 +997,85 @@ export const TOOL_REGISTRY = {
         for (const recipientId of recipients) {
           const d = draftsMap[recipientId] || draftsMap[recipientId.toLowerCase()];
           if (!d) {
-            console.error(`[SendGrid] Recipient not found in drafts: ${recipientId}`);
+            console.error(`[EmailProvider] Recipient not found in drafts: ${recipientId}`);
             failedEmails.push(`ID ${recipientId}: No encontrado en borradores`);
             continue;
           }
 
           try {
-            const ccEmails = (d.cc || custom_cc || '')
+            const parsedCcStrings = (d.cc || custom_cc || '')
               .split(';')
               .map((s: string) => {
                 const match = s.match(/<([^>]+)>/);
                 const email = match ? match[1] : s.trim();
-                return email.includes('@') ? { email: email.trim() } : null;
+                return email.includes('@') ? email.trim() : null;
               })
-              .filter(Boolean);
+              .filter(Boolean) as string[];
 
-            const sendgridPayload: any = {
-              personalizations: [
-                {
-                  to: [{ email: d.email.trim() }],
-                  ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
-                  subject: d.subject
-                }
-              ],
-              from: { email: fromEmail, name: 'Mónica Aieta - Mooving Tech' },
-              content: [
-                {
-                  type: 'text/plain',
-                  value: d.body
-                }
-              ]
-            };
+            let emailRes: Response;
 
-            const cleanKey = sendgridKey.trim();
-            const authHeader = cleanKey.startsWith('SG.')
-              ? `Bearer ${cleanKey}`
-              : (cleanKey.includes(':') ? `Basic ${btoa(cleanKey)}` : `Bearer ${cleanKey}`);
+            if (resendKey) {
+              // Resend API (POST https://api.resend.com/emails)
+              const resendPayload = {
+                from: fromEmail.includes('<') ? fromEmail : `Mónica Aieta <${fromEmail}>`,
+                to: [d.email.trim()],
+                ...(parsedCcStrings.length > 0 ? { cc: parsedCcStrings } : {}),
+                subject: d.subject,
+                text: d.body
+              };
 
-            const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
-              method: 'POST',
-              headers: {
-                'Authorization': authHeader,
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify(sendgridPayload)
-            });
-
-            if (sgRes.ok || sgRes.status === 202) {
-              realEmailsSent++;
-              console.log(`[SendGrid] ✅ Mail sent to ${d.email}`);
+              emailRes = await fetch('https://api.resend.com/emails', {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${resendKey}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(resendPayload)
+              });
             } else {
-              const errText = await sgRes.text();
-              console.error(`[SendGrid] ❌ Failed for ${d.email}: HTTP ${sgRes.status} — ${errText}`);
-              failedEmails.push(`${d.employee_name} (${d.email}): HTTP ${sgRes.status} ${errText}`);
+              // SendGrid API fallback
+              const sgCcObjects = parsedCcStrings.map(email => ({ email }));
+              const sendgridPayload: any = {
+                personalizations: [
+                  {
+                    to: [{ email: d.email.trim() }],
+                    ...(sgCcObjects.length > 0 ? { cc: sgCcObjects } : {}),
+                    subject: d.subject
+                  }
+                ],
+                from: { email: fromEmail, name: 'Mónica Aieta - Mooving Tech' },
+                content: [{ type: 'text/plain', value: d.body }]
+              };
+
+              const authHeader = sendgridKey.startsWith('SG.')
+                ? `Bearer ${sendgridKey}`
+                : `Bearer ${sendgridKey}`;
+
+              emailRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
+                method: 'POST',
+                headers: {
+                  'Authorization': authHeader,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(sendgridPayload)
+              });
+            }
+
+            if (emailRes.ok || emailRes.status === 200 || emailRes.status === 201 || emailRes.status === 202) {
+              realEmailsSent++;
+              console.log(`[${providerName}] ✅ Mail sent to ${d.email}`);
+            } else {
+              const errText = await emailRes.text();
+              console.error(`[${providerName}] ❌ Failed for ${d.email}: HTTP ${emailRes.status} — ${errText}`);
+              failedEmails.push(`${d.employee_name} (${d.email}): HTTP ${emailRes.status} ${errText}`);
             }
           } catch (recipientErr: any) {
-            console.error(`[SendGrid] Error sending to ${d.email}:`, recipientErr);
+            console.error(`[${providerName}] Error sending to ${d.email}:`, recipientErr);
             failedEmails.push(`${d.employee_name} (${d.email}): ${recipientErr.message || 'Error de envío'}`);
           }
         }
       } catch (err: any) {
-        console.error('[SendGrid] Error general procesando borradores:', err);
+        console.error(`[${providerName}] Error general procesando borradores:`, err);
         failedEmails.push(`Error de proceso: ${err.message}`);
       }
     }
@@ -1067,11 +1089,11 @@ export const TOOL_REGISTRY = {
         synced: true,
         new_records: clockifySyncResult.records_inserted || 0,
       } : { synced: false },
-      provider: sendgridKey ? 'SendGrid API (v3)' : 'Simulación / Mailto Interactivo',
-      message: sendgridKey 
+      provider: providerName,
+      message: activeApiKey 
         ? (failedEmails.length > 0
-          ? `Se enviaron ${realEmailsSent} de ${recipients.length} mails vía SendGrid. ${failedEmails.length} fallaron.`
-          : `Se enviaron exitosamente ${realEmailsSent} recordatorios a través de SendGrid API.`)
+          ? `Se enviaron ${realEmailsSent} de ${recipients.length} mails vía ${providerName}. ${failedEmails.length} fallaron: ${failedEmails.join(' — ')}`
+          : `Se enviaron exitosamente ${realEmailsSent} recordatorios a través de ${providerName}.`)
         : `Se registraron exitosamente ${recipients.length} recordatorios para envío.`,
       timestamp: new Date().toISOString()
     };

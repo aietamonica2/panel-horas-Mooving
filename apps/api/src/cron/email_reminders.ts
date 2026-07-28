@@ -19,8 +19,9 @@ import { Env } from '../types';
  *
  * @returns true if the email was accepted (HTTP 202), false otherwise.
  */
-async function sendViaSendGrid(
-  apiKey: string,
+async function sendViaEmailProvider(
+  resendKey: string | undefined,
+  sendgridKey: string | undefined,
   fromEmail: string,
   fromName: string,
   toEmail: string,
@@ -28,46 +29,71 @@ async function sendViaSendGrid(
   bodyText: string,
   ccEmails: Array<{ email: string }>,
 ): Promise<boolean> {
-  const payload: any = {
-    personalizations: [
-      {
-        to: [{ email: toEmail }],
-        ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
-        subject,
-      },
-    ],
-    from: { email: fromEmail, name: fromName },
-    content: [
-      {
-        type: 'text/plain',
-        value: bodyText,
-      },
-    ],
-  };
-
-  const authHeader = apiKey.startsWith('SG.')
-    ? `Bearer ${apiKey}`
-    : `Bearer ${apiKey}`;
+  const cleanResend = (resendKey || '').trim();
+  const cleanSendGrid = (sendgridKey || '').trim();
+  const parsedCcStrings = ccEmails.map(c => c.email).filter(Boolean);
 
   try {
-    const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
-      method: 'POST',
-      headers: {
-        Authorization: authHeader,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(payload),
-    });
+    if (cleanResend) {
+      const resendFrom = fromEmail.includes('<') ? fromEmail : `Mónica Aieta <${fromEmail}>`;
+      const resendRes = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${cleanResend}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          from: resendFrom,
+          to: [toEmail.trim()],
+          ...(parsedCcStrings.length > 0 ? { cc: parsedCcStrings } : {}),
+          subject,
+          text: bodyText,
+        }),
+      });
 
-    if (res.ok || res.status === 202) {
-      return true;
+      if (resendRes.ok || resendRes.status === 200 || resendRes.status === 201) {
+        return true;
+      }
+      const errBody = await resendRes.text();
+      console.error(`[EmailCron][Resend] HTTP ${resendRes.status}: ${errBody}`);
+      return false;
     }
 
-    const errBody = await res.text();
-    console.error(`[EmailCron][SendGrid] HTTP ${res.status}: ${errBody}`);
+    if (cleanSendGrid) {
+      const payload: any = {
+        personalizations: [
+          {
+            to: [{ email: toEmail.trim() }],
+            ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
+            subject,
+          },
+        ],
+        from: { email: fromEmail, name: fromName },
+        content: [{ type: 'text/plain', value: bodyText }],
+      };
+
+      const res = await fetch('https://api.sendgrid.com/v3/mail/send', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${cleanSendGrid}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (res.ok || res.status === 202) {
+        return true;
+      }
+
+      const errBody = await res.text();
+      console.error(`[EmailCron][SendGrid] HTTP ${res.status}: ${errBody}`);
+      return false;
+    }
+
+    console.error('[EmailCron] No API key configured (Resend or SendGrid)');
     return false;
   } catch (err) {
-    console.error('[EmailCron][SendGrid] Fetch error:', err);
+    console.error('[EmailCron] Fetch error:', err);
     return false;
   }
 }
@@ -231,12 +257,13 @@ async function syncClockifyForTenant(
  */
 export async function handleEmailRemindersCron(env: Env): Promise<void> {
   const db = env.DB;
+  const resendKey = env.RESEND_API_KEY;
   const sendgridKey = env.SENDGRID_API_KEY;
-  const fromEmail = env.SENDGRID_FROM_EMAIL || 'monica.aieta@moovingtech.com';
+  const fromEmail = env.RESEND_FROM_EMAIL || env.SENDGRID_FROM_EMAIL || 'Mónica Aieta <onboarding@resend.dev>';
   const clockifyToken = env.CLOCKIFY_API_TOKEN;
 
-  if (!sendgridKey) {
-    console.error('[EmailCron] ❌ SENDGRID_API_KEY not configured. Aborting.');
+  if (!resendKey && !sendgridKey) {
+    console.error('[EmailCron] ❌ No API key configured (RESEND_API_KEY or SENDGRID_API_KEY). Aborting.');
     return;
   }
 
@@ -361,7 +388,8 @@ export async function handleEmailRemindersCron(env: Env): Promise<void> {
 
       const subject = `Registro de horas — ${fullMonthYearStr}`;
 
-      const success = await sendViaSendGrid(
+      const success = await sendViaEmailProvider(
+        resendKey,
         sendgridKey,
         fromEmail,
         fromName,
