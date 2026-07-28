@@ -976,8 +976,8 @@ export const TOOL_REGISTRY = {
       }
     }
 
-    const sendgridKey = c.env.SENDGRID_API_KEY || c.env.SENDGRID_PASSWORD;
-    const fromEmail = c.env.SENDGRID_FROM_EMAIL || 'monica.aieta@moovingtech.com';
+    const sendgridKey = (c.env.SENDGRID_API_KEY || c.env.SENDGRID_PASSWORD || '').trim();
+    const fromEmail = (c.env.SENDGRID_FROM_EMAIL || 'monica.aieta@moovingtech.com').trim();
     let realEmailsSent = 0;
     const failedEmails: string[] = [];
 
@@ -987,62 +987,74 @@ export const TOOL_REGISTRY = {
         const draftsMap: Record<string, any> = {};
         (draftsResult.drafts || []).forEach((d: any) => {
           draftsMap[d.employee_id] = d;
+          if (d.email) draftsMap[d.email.toLowerCase()] = d;
         });
 
         for (const recipientId of recipients) {
-          const d = draftsMap[recipientId];
-          if (!d) continue;
+          const d = draftsMap[recipientId] || draftsMap[recipientId.toLowerCase()];
+          if (!d) {
+            console.error(`[SendGrid] Recipient not found in drafts: ${recipientId}`);
+            failedEmails.push(`ID ${recipientId}: No encontrado en borradores`);
+            continue;
+          }
 
-          const ccEmails = (d.cc || custom_cc || '')
-            .split(';')
-            .map((s: string) => {
-              const match = s.match(/<([^>]+)>/);
-              const email = match ? match[1] : s.trim();
-              return email.includes('@') ? { email } : null;
-            })
-            .filter(Boolean);
+          try {
+            const ccEmails = (d.cc || custom_cc || '')
+              .split(';')
+              .map((s: string) => {
+                const match = s.match(/<([^>]+)>/);
+                const email = match ? match[1] : s.trim();
+                return email.includes('@') ? { email: email.trim() } : null;
+              })
+              .filter(Boolean);
 
-          const sendgridPayload: any = {
-            personalizations: [
-              {
-                to: [{ email: d.email }],
-                ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
-                subject: d.subject
-              }
-            ],
-            from: { email: fromEmail, name: 'Mónica Aieta - Mooving Tech' },
-            content: [
-              {
-                type: 'text/plain',
-                value: d.body
-              }
-            ]
-          };
+            const sendgridPayload: any = {
+              personalizations: [
+                {
+                  to: [{ email: d.email.trim() }],
+                  ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
+                  subject: d.subject
+                }
+              ],
+              from: { email: fromEmail, name: 'Mónica Aieta - Mooving Tech' },
+              content: [
+                {
+                  type: 'text/plain',
+                  value: d.body
+                }
+              ]
+            };
 
-          const authHeader = sendgridKey.startsWith('SG.')
-            ? `Bearer ${sendgridKey}`
-            : (sendgridKey.includes(':') ? `Basic ${btoa(sendgridKey)}` : `Bearer ${sendgridKey}`);
+            const cleanKey = sendgridKey.trim();
+            const authHeader = cleanKey.startsWith('SG.')
+              ? `Bearer ${cleanKey}`
+              : (cleanKey.includes(':') ? `Basic ${btoa(cleanKey)}` : `Bearer ${cleanKey}`);
 
-          const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
-            method: 'POST',
-            headers: {
-              'Authorization': authHeader,
-              'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(sendgridPayload)
-          });
+            const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
+              method: 'POST',
+              headers: {
+                'Authorization': authHeader,
+                'Content-Type': 'application/json'
+              },
+              body: JSON.stringify(sendgridPayload)
+            });
 
-          if (sgRes.ok || sgRes.status === 202) {
-            realEmailsSent++;
-            console.log(`[SendGrid] ✅ Mail sent to ${d.email}`);
-          } else {
-            const errText = await sgRes.text();
-            console.error(`[SendGrid] ❌ Failed for ${d.email}: HTTP ${sgRes.status} — ${errText}`);
-            failedEmails.push(`${d.employee_name} (${d.email})`);
+            if (sgRes.ok || sgRes.status === 202) {
+              realEmailsSent++;
+              console.log(`[SendGrid] ✅ Mail sent to ${d.email}`);
+            } else {
+              const errText = await sgRes.text();
+              console.error(`[SendGrid] ❌ Failed for ${d.email}: HTTP ${sgRes.status} — ${errText}`);
+              failedEmails.push(`${d.employee_name} (${d.email}): HTTP ${sgRes.status} ${errText}`);
+            }
+          } catch (recipientErr: any) {
+            console.error(`[SendGrid] Error sending to ${d.email}:`, recipientErr);
+            failedEmails.push(`${d.employee_name} (${d.email}): ${recipientErr.message || 'Error de envío'}`);
           }
         }
-      } catch (err) {
-        console.error('[SendGrid] Error enviando mails:', err);
+      } catch (err: any) {
+        console.error('[SendGrid] Error general procesando borradores:', err);
+        failedEmails.push(`Error de proceso: ${err.message}`);
       }
     }
 
