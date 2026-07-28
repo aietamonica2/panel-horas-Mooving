@@ -3,14 +3,14 @@
  * Updated with each release to track deployments and changelog
  */
 
-export const APP_VERSION = 'v1.9.0'
+export const APP_VERSION = 'v1.9.1'
 export const RELEASE_DATE = '28 de Julio de 2026'
 export const RELEASE_NOTES = `
-v1.9.0 - 28 de Julio de 2026
+v1.9.1 - 28 de Julio de 2026
 
-✨ ENVÍO AUTOMÁTICO DE EMAILS
-- Los recordatorios de horas se envían automáticamente el día 28 de cada mes a las 9:00 AM (ARG).
-- Sincronización previa de Clockify para garantizar datos actualizados.
-- El envío manual desde la UI también sincroniza Clockify antes de enviar.
-- Logging detallado de cada mail enviado o fallido.
+✨ OPTIMIZACIÓN Y CORRECCIÓN DE BUGS (UX & PERFORMANCE)
+- Arreglo de maquetado en contenedor de botones de Senda AI Copilot.
+- Paginación dinámica (15 registros por página) en la tabla principal de registros.
+- Mapeo inteligente de tipos de trabajo en español para la importación CSV (Reunión, Capacitación, Interna, etc.).
+- Consolidación de sincronizaciones de estado para evitar re-renders en cascada al filtrar.
 `

@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.1] - 2026-07-28
+
+### Added
+- **Paginación en Tabla Principal de Registros (`Dashboard.tsx`)**:
+  - Controles de navegación de página (15 registros por página, indicador de total de filas, botones Anterior/Siguiente).
+- **Mapeo Inteligente de `work_type` en Importador CSV**:
+  - Soporte para términos en español y variaciones (`Reunión` → `meeting`, `Capacitación` → `training`, `Interna` → `internal`).
+
+### Fixed
+- **Maquetado de Botones Senda AI Copilot**:
+  - Encapsulado de botones de acción directa en un contenedor `flex flex-wrap gap-3` para evitar desbordes y colisiones visuales en pantallas medianas.
+- **Optimización de Performance al Filtrar**:
+  - Consolidación de 5 disparadores `useEffect` en un solo dispatcher para eliminar re-renders en cascada en Zustand.
+
 ## [1.9.0] - 2026-07-28
 
 ### Added

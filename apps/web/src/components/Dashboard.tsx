@@ -51,6 +51,8 @@ export const Dashboard: React.FC = () => {
   const [auditResults, setAuditResults] = useState<{ status: string; anomalies_found: { issue: string; user: string }[] } | null>(null)
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<any | null>(null)
+  const [currentPage, setCurrentPage] = useState<number>(1)
+  const pageSize = 15
 
   const filteredRecords = getFilteredRecords()
 
@@ -127,26 +129,17 @@ export const Dashboard: React.FC = () => {
     fetchRecords()
   }, [])
 
-  // Sync state filters to Zustand store
+  // Sync state filters to Zustand store (consolidated to prevent cascading re-renders)
   React.useEffect(() => {
-    setFilters({ months: selectedMonths })
-  }, [selectedMonths, setFilters])
-
-  React.useEffect(() => {
-    setFilters({ employees: selectedEmployees })
-  }, [selectedEmployees, setFilters])
-
-  React.useEffect(() => {
-    setFilters({ clients: selectedClients })
-  }, [selectedClients, setFilters])
-
-  React.useEffect(() => {
-    setFilters({ projects: selectedProjects })
-  }, [selectedProjects, setFilters])
-
-  React.useEffect(() => {
-    setFilters({ workTypes: selectedCategories })
-  }, [selectedCategories, setFilters])
+    setFilters({
+      months: selectedMonths,
+      employees: selectedEmployees,
+      clients: selectedClients,
+      projects: selectedProjects,
+      workTypes: selectedCategories
+    })
+    setCurrentPage(1)
+  }, [selectedMonths, selectedEmployees, selectedClients, selectedProjects, selectedCategories, setFilters])
 
   const totalHours = filteredRecords.reduce((sum, r) => sum + (r.duration_decimal || 0), 0)
   const avgHours = filteredRecords.length > 0 ? (totalHours / filteredRecords.length).toFixed(2) : '0.00'
@@ -180,11 +173,14 @@ export const Dashboard: React.FC = () => {
           const values = line.split(',').map(v => v.trim())
           const dur = parseFloat(values[6])
           
-          // Validate work_type to fit the enum: 'project' | 'internal' | 'meeting' | 'training' | 'other'
-          let wt = values[8] || 'project'
-          if (!['project', 'internal', 'meeting', 'training', 'other'].includes(wt)) {
-            wt = 'project'
-          }
+          // Validate and normalize work_type to fit enum with Spanish fallback mapping
+          const rawWt = (values[8] || '').toLowerCase()
+          let wt = 'project'
+          if (rawWt.includes('reun') || rawWt.includes('meet') || rawWt.includes('call')) wt = 'meeting'
+          else if (rawWt.includes('intern')) wt = 'internal'
+          else if (rawWt.includes('capacit') || rawWt.includes('train')) wt = 'training'
+          else if (rawWt.includes('otro') || rawWt.includes('other')) wt = 'other'
+          else if (['project', 'internal', 'meeting', 'training', 'other'].includes(rawWt)) wt = rawWt
 
           const empName = values[1] || 'Unknown Employee';
           const cliName = values[3] || 'Unknown Client';
@@ -286,6 +282,7 @@ export const Dashboard: React.FC = () => {
             </h2>
             <span className="text-xs bg-indigo-200 text-indigo-800 px-3 py-1 rounded-full font-bold uppercase tracking-wider">Modo Integrado</span>
           </div>
+          <div className="flex flex-wrap gap-3 mb-6">
             <button 
               onClick={() => setIsEmailModalOpen(true)}
               className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-5 border border-indigo-700 rounded-lg shadow-sm transition flex items-center gap-2"
@@ -316,6 +313,7 @@ export const Dashboard: React.FC = () => {
             >
               🛡️ Auditar Tiempos
             </button>
+          </div>
 
           {/* ROI Metrics */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t border-indigo-100 pt-4">
@@ -613,10 +611,13 @@ export const Dashboard: React.FC = () => {
         {/* Data Table */}
         {filteredRecords.length > 0 && (
           <div className="bg-white rounded-xl shadow-md overflow-hidden mt-8">
-            <div className="px-6 py-4 border-b" style={{ borderColor: MOOVING_COLORS.border }}>
+            <div className="px-6 py-4 border-b flex justify-between items-center" style={{ borderColor: MOOVING_COLORS.border }}>
               <h3 className="text-lg font-semibold" style={{ color: MOOVING_COLORS.primary }}>
-                📅 Últimos Registros
+                📅 Registros de Horas ({filteredRecords.length})
               </h3>
+              <div className="text-xs text-gray-500 font-medium">
+                Mostrando {Math.min((currentPage - 1) * pageSize + 1, filteredRecords.length)} - {Math.min(currentPage * pageSize, filteredRecords.length)} de {filteredRecords.length}
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -633,7 +634,7 @@ export const Dashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredRecords.slice(0, 15).map((record, idx) => (
+                  {filteredRecords.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((record, idx) => (
                     <tr
                       key={record.id}
                       className="border-t hover:bg-opacity-50 transition"
@@ -654,6 +655,8 @@ export const Dashboard: React.FC = () => {
                         {record.work_type === 'project' && '🏢 Proyecto'}
                         {record.work_type === 'internal' && '⚙️ Interna'}
                         {record.work_type === 'meeting' && '👥 Reunión'}
+                        {record.work_type === 'training' && '🎓 Capacitación'}
+                        {record.work_type === 'other' && '📋 Otro'}
                       </td>
                       <td className="px-6 py-3 text-center">
                         {record.source === 'senda_ai' ? (
@@ -680,6 +683,31 @@ export const Dashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
+
+            {/* Pagination Footer */}
+            {filteredRecords.length > pageSize && (
+              <div className="px-6 py-3 bg-slate-50 border-t flex justify-between items-center text-xs">
+                <span className="text-gray-500 font-medium">
+                  Página {currentPage} de {Math.ceil(filteredRecords.length / pageSize)}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1 bg-white border border-gray-300 rounded font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition"
+                  >
+                    ← Anterior
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredRecords.length / pageSize), p + 1))}
+                    disabled={currentPage >= Math.ceil(filteredRecords.length / pageSize)}
+                    className="px-3 py-1 bg-white border border-gray-300 rounded font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition"
+                  >
+                    Siguiente →
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
