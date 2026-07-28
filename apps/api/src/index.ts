@@ -1,8 +1,3 @@
-/**
- * Main Hono API Server
- * Cloudflare Workers entry point
- */
-
 import { Hono } from 'hono'
 import { cors } from './middleware/cors'
 import { auth } from './middleware/auth'
@@ -11,6 +6,7 @@ import dataRouter from './routes/data'
 import mcpRouter from './routes/mcp'
 import { HonoContext, ApiResponse, CloudflareEnv } from './types'
 import { handleBulkLoadCron } from './cron/bulk_load'
+import { handleEmailRemindersCron } from './cron/email_reminders'
 
 const app = new Hono<{ Bindings: CloudflareEnv }>()
 
@@ -31,11 +27,11 @@ app.get('/', (c) => {
   const response: ApiResponse = {
     success: true,
     data: {
-      message: 'Panel Horas API v1.0.1',
+      message: 'Panel Horas API v1.9.0',
       endpoints: ['/api/health', '/api/data/records', '/api/data/upload'],
     },
     timestamp: new Date().toISOString(),
-    version: 'v1.0.1',
+    version: 'v1.9.0',
   }
   return c.json(response)
 })
@@ -46,7 +42,7 @@ app.notFound((c) => {
     success: false,
     error: 'Not found',
     timestamp: new Date().toISOString(),
-    version: 'v1.0.1',
+    version: 'v1.9.0',
   }, 404)
 })
 
@@ -57,25 +53,45 @@ app.onError((err, c) => {
     success: false,
     error: err instanceof Error ? err.message : 'Internal server error',
     timestamp: new Date().toISOString(),
-    version: 'v1.0.1',
+    version: 'v1.9.0',
   }, 500)
 })
 
 /**
  * Cloudflare Workers scheduled trigger.
- * Configured in wrangler.toml as:  cron = "0 8 * * 2"  (every Tuesday at 08:00 UTC)
+ * Routes to the appropriate handler based on the trigger time:
+ *   - Day 28 of month at 12:00 UTC → Email reminders (syncs Clockify first)
+ *   - Tuesdays at 08:00 UTC        → Bulk load cron
  */
 export async function scheduled(
-  _event: ScheduledEvent,
+  event: ScheduledEvent,
   env: CloudflareEnv,
   ctx: ExecutionContext
 ): Promise<void> {
+  const triggerDate = new Date(event.scheduledTime);
+  const dayOfMonth = triggerDate.getUTCDate();
+  const hour = triggerDate.getUTCHours();
+
+  // Route: 28th of month at 12:00 UTC → Email reminders
+  if (dayOfMonth === 28 && hour === 12) {
+    console.log('[Scheduled] Triggering email reminders cron (28th of month)');
+    ctx.waitUntil(
+      handleEmailRemindersCron(env).catch((err) =>
+        console.error('[Scheduled] Email reminders cron error:', err)
+      )
+    );
+    return;
+  }
+
+  // Route: Default → Bulk load (Tuesdays at 08:00 UTC)
+  console.log('[Scheduled] Triggering bulk-load cron');
   ctx.waitUntil(
     handleBulkLoadCron(env).catch((err) =>
       console.error('[Scheduled] Bulk-load cron error:', err)
     )
-  )
+  );
 }
 
 export default app
+
 

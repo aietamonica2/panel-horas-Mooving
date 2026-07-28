@@ -12,7 +12,8 @@ ENVIRONMENT = "development"
 SENDA_BASE_URL = "https://sendaqa.telar.ai/api"
 
 # Scheduled triggers
-# Cron runs every Tuesday at 08:00 UTC
+# Cron 1: Bulk load — every Tuesday at 08:00 UTC
+# Cron 2: Email reminders — 28th of each month at 12:00 UTC (09:00 ARG)
 [triggers]
-crons = ["0 8 * * 2"]
+crons = ["0 8 * * 2", "0 12 28 * *"]
 

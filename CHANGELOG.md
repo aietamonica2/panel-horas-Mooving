@@ -5,6 +5,57 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.0] - 2026-07-28
+
+### Added
+- **Envío Automático de Emails por Cron (día 28 de cada mes)**:
+  - Nuevo cron handler `email_reminders.ts` que se ejecuta automáticamente el día 28 de cada mes a las 12:00 UTC (09:00 ARG).
+  - Sincronización previa de Clockify antes del envío para garantizar que las horas reportadas en los mails estén actualizadas.
+  - Configuración en `wrangler.toml` con segundo trigger cron: `"0 12 28 * *"`.
+  - Routing inteligente en `index.ts` que distingue entre el cron semanal (bulk load) y el mensual (email reminders) basado en el timestamp del trigger.
+- **Mejoras al MCP Tool `send_email_reminders`**:
+  - Nuevo parámetro `sync_clockify_first` (default `true`) que sincroniza automáticamente Clockify antes de enviar recordatorios.
+  - Logging detallado por cada mail enviado o fallido vía SendGrid.
+  - Response enriquecido con `failed_emails` y `clockify_sync` para trazabilidad completa.
+- **Configuración de SendGrid API Key** en `.dev.vars` y tipado en `CloudflareEnv`.
+- **Verificación de Single Sender** con `monica.aieta@moovingtech.com`.
+
+### Technical
+- Cloudflare Workers cron triggers: `["0 8 * * 2", "0 12 28 * *"]`
+- API version bumped a v1.9.0 en endpoint root, 404, y error handler.
+
+## [1.8.1] - 2026-07-27
+
+### Added
+- **Integración Nativa con SendGrid API (v3)**:
+  - Soporte para el envío automático directo de mails a través de la API REST de SendGrid (`POST https://api.sendgrid.com/v3/mail/send`).
+  - Formateo automático de destinatarios, copias (`CC`) y cuerpo plano del correo para cada recordatorio de horas.
+  - Configuración segura de secretos y credenciales en Cloudflare Workers context (`c.env.SENDGRID_API_KEY`).
+
+## [1.8.0] - 2026-07-27
+
+### Added
+- **Módulo de Borradores y Recordatorios por Mail (`EmailRemindersModal.tsx`)**:
+  - Detección automática de empleados dados de alta y estado de carga de horas acumuladas para el mes seleccionado.
+  - Generación dinámica de borradores de mails personalizados en español con formato decimal estandarizado (`64,75`, `136,00`, `0,00`).
+  - Selección/deselección individual y masiva de destinatarios.
+  - Edición flexible de direcciones de correo y de copias (`CC` por defecto: `Eddie Rodriguez Von der Becke <eddie.rodriguez@moovingtech.com>; Julieta Albina <julieta.albina@moovingtech.com>`).
+  - Botón de copia completa de informe de borradores al portapapeles y soporte para apertura directa en cliente de correo (`mailto:`).
+  - Configuración e integración para automatización y régimen programado a fin de mes.
+- **Soporte para Empleados Inactivos / Fuera de la Organización**:
+  - Añadido campo `is_active` en la entidad de empleados.
+  - Los empleados marcados como "Fuera de la organización" quedan excluidos automáticamente de las auditorías y recordatorios de mail a futuro, con opción de visibilidad mediante filtro toggle.
+- **Nuevas Herramientas MCP**:
+  - `get_email_reminder_drafts`
+  - `send_email_reminders`
+  - `configure_email_reminder_schedule`
+- **Migración D1 `0013_email_reminder_settings.sql`** aplicada en la base de datos de producción.
+
+## [1.7.1] - 2026-07-01
+
+### Fixed
+- **Cálculo de horas incorrecto**: Se reemplazó el uso de `duration_hours` (que descartaba los decimales de hora) por `duration_decimal` en todos los componentes del frontend para que las tablas de distribución, gráficos analíticos y resúmenes de horas reflejen los valores exactos.
+
 ## [1.7.0] - 2026-06-18
 
 ### Added

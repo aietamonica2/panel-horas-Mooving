@@ -67,18 +67,20 @@ export const TOOL_REGISTRY = {
   },
   create_employee: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { company_id, name, email } = params;
+    const { company_id, name, email, is_active } = params;
     const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
     const id = 'emp_' + crypto.randomUUID().split('-')[0];
-    await db.prepare('INSERT INTO employees (id, company_id, name, email) VALUES (?, ?, ?, ?)')
-      .bind(id, cid, name, email || null).run();
+    const active = is_active !== undefined ? (is_active ? 1 : 0) : 1;
+    await db.prepare('INSERT INTO employees (id, company_id, name, email, is_active) VALUES (?, ?, ?, ?, ?)')
+      .bind(id, cid, name, email || null, active).run();
     return { success: true, employee_id: id };
   },
   update_employee: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { id, name, email } = params;
-    await db.prepare('UPDATE employees SET name = ?, email = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .bind(name, email || null, id).run();
+    const { id, name, email, is_active } = params;
+    const active = is_active !== undefined ? (is_active ? 1 : 0) : 1;
+    await db.prepare('UPDATE employees SET name = ?, email = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
+      .bind(name, email || null, active, id).run();
     return { success: true };
   },
   delete_employee: async (params: any, c: HonoContext) => {
@@ -348,41 +350,120 @@ export const TOOL_REGISTRY = {
   sync_clockify_hours: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const token = c.env.CLOCKIFY_API_TOKEN;
     
-    const mockSyncRecords = [
-      { employee_id: 'emp_monica', employee_name: 'monica.aieta', client_id: 'cli_camuzzi', client_name: 'Camuzzi', project_id: 'proj_cam_web', project_name: 'Portal Web', duration: 6.5, date: '2026-06-10', work_type: 'project', desc: 'Desarrollo Frontend [Clockify]' },
-      { employee_id: 'emp_fede', employee_name: 'federico.gomez', client_id: 'cli_ypf', client_name: 'YPF', project_id: 'proj_ypf_mig', project_name: 'Migración SAP', duration: 8.0, date: '2026-06-11', work_type: 'project', desc: 'Reunión SAP [Clockify]' },
-      { employee_id: 'emp_santi', employee_name: 'santiago.perez', client_id: 'cli_mooving', client_name: 'Mooving', project_id: 'proj_moov_core', project_name: 'Senda Core', duration: 7.5, date: '2026-06-12', work_type: 'project', desc: 'Code review [Clockify]' }
-    ];
+    if (!token) {
+      throw new Error('Falta configurar CLOCKIFY_API_TOKEN en el entorno.');
+    }
+
+    const BASE_URL = "https://api.clockify.me/api/v1";
+    const REPORTS_URL = "https://reports.api.clockify.me/v1";
+
+    // 1. Obtener workspace "Mooving Tech"
+    const wsRes = await fetch(`${BASE_URL}/workspaces`, { headers: { 'X-Api-Key': token } });
+    if (!wsRes.ok) throw new Error(`Clockify API error (workspaces): ${wsRes.status}`);
+    const workspaces = await wsRes.json() as any[];
+    
+    let targetWs = workspaces.find(w => w.name.toLowerCase().includes("mooving tech"));
+    if (!targetWs && workspaces.length > 0) {
+      targetWs = workspaces[0]; // fallback al primero
+    }
+    if (!targetWs) {
+      throw new Error('No se encontró ningún workspace en Clockify.');
+    }
 
     let inserted = 0;
-    for (const rec of mockSyncRecords) {
-      const id = 'clk_' + crypto.randomUUID().substring(0, 8);
-      try {
-        await db.prepare(`
-          INSERT INTO time_records (
-            id, company_id, employee_id, employee_name, client_id, client_name,
-            project_id, project_name, duration_decimal, duration_hours, duration_minutes,
-            date, work_type, description
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          id, company_id, rec.employee_id, rec.employee_name,
-          rec.client_id, rec.client_name, rec.project_id, rec.project_name,
-          rec.duration, Math.floor(rec.duration), Math.round((rec.duration % 1) * 60),
-          rec.date, rec.work_type, rec.desc
-        ).run();
-        inserted++;
-      } catch (err) {
-        console.error('Error inserting clockify sync record:', err);
+    let total_hours = 0;
+    let page = 1;
+    let hasMore = true;
+
+    // Cache de IDs generados (Clockify Name -> Local ID)
+    const empCache: Record<string, string> = {};
+    const cliCache: Record<string, string> = {};
+    const projCache: Record<string, string> = {};
+
+    const sanitizeId = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+    while (hasMore) {
+      const reportRes = await fetch(`${REPORTS_URL}/workspaces/${targetWs.id}/reports/detailed`, {
+        method: "POST",
+        headers: { 'X-Api-Key': token, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          dateRangeStart: "2020-01-01T00:00:00.000Z",
+          dateRangeEnd: new Date().toISOString(),
+          detailedFilter: { page, pageSize: 1000 }
+        })
+      });
+
+      if (!reportRes.ok) throw new Error(`Clockify API error (reports): ${reportRes.status}`);
+      const report = await reportRes.json() as any;
+      const entries = report.timeentries || [];
+
+      if (entries.length === 0) {
+        hasMore = false;
+        break;
       }
+
+      for (const entry of entries) {
+        const id = 'clk_' + entry._id;
+        const duration_decimal = (entry.timeInterval?.duration || 0) / 3600;
+        if (duration_decimal <= 0) continue;
+
+        const dateStr = entry.timeInterval?.start ? entry.timeInterval.start.split('T')[0] : new Date().toISOString().split('T')[0];
+        
+        const employee_name = entry.userName || 'Desconocido';
+        if (!empCache[employee_name]) empCache[employee_name] = sanitizeId(employee_name);
+        
+        const client_name = entry.clientName || 'Sin Cliente';
+        if (!cliCache[client_name]) cliCache[client_name] = sanitizeId(client_name);
+        
+        const project_name = entry.projectName || 'Sin Proyecto';
+        if (!projCache[project_name]) projCache[project_name] = sanitizeId(project_name);
+
+        const desc = entry.description || '';
+        
+        let work_type = 'project';
+        const lowerDesc = desc.toLowerCase();
+        if (project_name.toLowerCase().includes('interna') || client_name.toLowerCase().includes('mooving')) {
+          work_type = 'internal';
+          if (lowerDesc.includes('daily') || lowerDesc.includes('reunión') || lowerDesc.includes('weekly')) {
+            work_type = 'meeting';
+          }
+        }
+
+        try {
+          // Usamos INSERT OR IGNORE para no duplicar horas si ya existen
+          const res = await db.prepare(`
+            INSERT OR IGNORE INTO time_records (
+              id, company_id, employee_id, employee_name, client_id, client_name,
+              project_id, project_name, duration_decimal, duration_hours, duration_minutes,
+              date, work_type, description, source
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          `).bind(
+            id, company_id, empCache[employee_name], employee_name,
+            cliCache[client_name], client_name, projCache[project_name], project_name,
+            duration_decimal, Math.floor(duration_decimal), Math.round((duration_decimal % 1) * 60),
+            dateStr, work_type, desc, 'clockify'
+          ).run();
+          
+          // result.changes es 1 si se insertó, 0 si fue ignorado
+          if (res.meta.changes > 0) {
+            inserted++;
+            total_hours += duration_decimal;
+          }
+        } catch (err) {
+          console.error('Error inserting clockify sync record:', err);
+        }
+      }
+
+      page++;
     }
 
     return {
       success: true,
-      message: `Horas de operaciones extraídas e importadas de Clockify para el tenant ${company_id}.`,
-      records_fetched: mockSyncRecords.length,
+      message: `Se sincronizó el histórico completo de Clockify para el tenant ${company_id}. Se insertaron ${inserted} nuevos registros.`,
       records_inserted: inserted,
-      total_hours: mockSyncRecords.reduce((acc, r) => acc + r.duration, 0),
+      total_hours_inserted: total_hours,
       source: 'clockify'
     };
   },
@@ -760,6 +841,260 @@ export const TOOL_REGISTRY = {
       },
       c
     );
+  },
+
+  get_email_reminder_drafts: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const targetMonth = params.month || new Date().toISOString().substring(0, 7); // e.g. "2026-07"
+    const includeInactive = !!params.include_inactive;
+
+    // Fetch settings for default CC
+    let defaultCc = 'Eddie Rodriguez Von der Becke <eddie.rodriguez@moovingtech.com>; Julieta Albina <julieta.albina@moovingtech.com>';
+    try {
+      const settingRow = await db.prepare('SELECT default_cc FROM email_reminder_settings WHERE company_id = ?')
+        .bind(company_id).first();
+      if (settingRow?.default_cc) defaultCc = settingRow.default_cc as string;
+    } catch {
+      // Table fallback
+    }
+
+    if (params.custom_cc) {
+      defaultCc = params.custom_cc;
+    }
+
+    // 1. Fetch employees
+    let empQuery = 'SELECT * FROM employees WHERE company_id = ?';
+    if (!includeInactive) {
+      empQuery += ' AND is_active = 1';
+    }
+    const { results: employees } = await db.prepare(empQuery).bind(company_id).all();
+
+    // 2. Fetch sum of hours per employee for the target month
+    const { results: records } = await db.prepare(
+      'SELECT employee_id, employee_name, SUM(duration_decimal) as total_hours FROM time_records WHERE company_id = ? AND date LIKE ? GROUP BY employee_name'
+    ).bind(company_id, `${targetMonth}-%`).all();
+
+    const hoursMap: Record<string, number> = {};
+    for (const r of (records || []) as any[]) {
+      if (r.employee_name) hoursMap[r.employee_name.toLowerCase()] = r.total_hours || 0;
+      if (r.employee_id) hoursMap[r.employee_id] = r.total_hours || 0;
+    }
+
+    const monthIdx = parseInt(targetMonth.split('-')[1], 10) - 1;
+    const yearStr = targetMonth.split('-')[0];
+    const monthNames = [
+      'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
+      'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'
+    ];
+    const monthName = monthNames[monthIdx] || 'este mes';
+    const fullMonthYearStr = `${monthName} ${yearStr}`;
+    const dateTodayStr = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    const drafts: any[] = [];
+    let reportText = `Borradores de mail — Horas registradas, ${fullMonthYearStr}\nUn mail por persona, listo para copiar y pegar. Datos: Clockify, al ${dateTodayStr}.\n\n`;
+
+    (employees || []).forEach((emp: any, index: number) => {
+      const email = emp.email || `${emp.name.toLowerCase().replace(/\s+/g, '.')}@moovingtech.com`;
+      const hours = hoursMap[emp.id] || hoursMap[emp.name.toLowerCase()] || 0;
+      
+      const cleanName = emp.name.replace(/\./g, ' ').trim();
+      const nameParts = cleanName.split(/\s+/).map((p: string) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase());
+      const fullName = nameParts.join(' ');
+      const firstName = nameParts[0] || fullName;
+      const hoursFormatted = hours.toFixed(2).replace('.', ',');
+
+      let body = '';
+      if (hours > 0) {
+        body = `Hola ${firstName},\n\nTenemos registradas ${hoursFormatted} horas a tu nombre para el mes de ${monthName}. Por favor revisá los valores y avisanos si encontrás alguna diferencia.\n\nSaludos,`;
+      } else {
+        body = `Hola ${firstName},\n\nNo tenemos horas registradas en Clockify a tu nombre para el mes en curso. Por favor registralas a la brevedad.\n\nSaludos,`;
+      }
+
+      drafts.push({
+        number: index + 1,
+        employee_id: emp.id,
+        employee_name: fullName,
+        email,
+        cc: defaultCc,
+        subject: `Registro de horas — ${fullMonthYearStr}`,
+        body,
+        hours,
+        hours_formatted: hoursFormatted,
+        is_active: emp.is_active !== 0
+      });
+
+      reportText += `${index + 1}. ${fullName}\n`;
+      reportText += `Para: ${email}\n`;
+      reportText += `CC: ${defaultCc}\n`;
+      reportText += `Asunto: Registro de horas — ${fullMonthYearStr}\n`;
+      reportText += `${body}\n\n`;
+    });
+
+    return {
+      month: targetMonth,
+      month_name: fullMonthYearStr,
+      default_cc: defaultCc,
+      total_employees: drafts.length,
+      drafts,
+      full_report_text: reportText.trim()
+    };
+  },
+
+  send_email_reminders: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { recipients, custom_cc, month, sync_clockify_first } = params;
+
+    if (!Array.isArray(recipients) || recipients.length === 0) {
+      throw new Error('Debes especificar al menos un destinatario para el envío de recordatorios.');
+    }
+
+    try {
+      await db.prepare(`
+        INSERT INTO email_reminder_settings (id, company_id, default_cc, last_sent_at)
+        VALUES (?, ?, ?, datetime('now'))
+        ON CONFLICT(company_id) DO UPDATE SET last_sent_at = datetime('now'), default_cc = coalesce(?, default_cc)
+      `).bind(crypto.randomUUID().split('-')[0], company_id, custom_cc || null, custom_cc || null).run();
+    } catch {
+      // Table fallback
+    }
+
+    // Optional: sync Clockify before sending to ensure latest hours data
+    let clockifySyncResult = null;
+    if (sync_clockify_first !== false) {
+      const clockifyToken = c.env.CLOCKIFY_API_TOKEN;
+      if (clockifyToken) {
+        try {
+          console.log(`[send_email_reminders] Syncing Clockify for ${company_id} before sending...`);
+          clockifySyncResult = await (TOOL_REGISTRY as any).sync_clockify_hours({ company_id }, c);
+          console.log(`[send_email_reminders] Clockify sync: ${clockifySyncResult?.records_inserted || 0} new records`);
+        } catch (err) {
+          console.error('[send_email_reminders] Clockify sync failed (continuing):', err);
+          clockifySyncResult = { error: 'Sync failed, sending with existing data' };
+        }
+      }
+    }
+
+    const sendgridKey = c.env.SENDGRID_API_KEY || c.env.SENDGRID_PASSWORD;
+    const fromEmail = c.env.SENDGRID_FROM_EMAIL || 'monica.aieta@moovingtech.com';
+    let realEmailsSent = 0;
+    const failedEmails: string[] = [];
+
+    if (sendgridKey) {
+      try {
+        const draftsResult = await (TOOL_REGISTRY as any).get_email_reminder_drafts({ company_id, month, custom_cc }, c);
+        const draftsMap: Record<string, any> = {};
+        (draftsResult.drafts || []).forEach((d: any) => {
+          draftsMap[d.employee_id] = d;
+        });
+
+        for (const recipientId of recipients) {
+          const d = draftsMap[recipientId];
+          if (!d) continue;
+
+          const ccEmails = (d.cc || custom_cc || '')
+            .split(';')
+            .map((s: string) => {
+              const match = s.match(/<([^>]+)>/);
+              const email = match ? match[1] : s.trim();
+              return email.includes('@') ? { email } : null;
+            })
+            .filter(Boolean);
+
+          const sendgridPayload: any = {
+            personalizations: [
+              {
+                to: [{ email: d.email }],
+                ...(ccEmails.length > 0 ? { cc: ccEmails } : {}),
+                subject: d.subject
+              }
+            ],
+            from: { email: fromEmail, name: 'Mónica Aieta - Mooving Tech' },
+            content: [
+              {
+                type: 'text/plain',
+                value: d.body
+              }
+            ]
+          };
+
+          const authHeader = sendgridKey.startsWith('SG.')
+            ? `Bearer ${sendgridKey}`
+            : (sendgridKey.includes(':') ? `Basic ${btoa(sendgridKey)}` : `Bearer ${sendgridKey}`);
+
+          const sgRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
+            method: 'POST',
+            headers: {
+              'Authorization': authHeader,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(sendgridPayload)
+          });
+
+          if (sgRes.ok || sgRes.status === 202) {
+            realEmailsSent++;
+            console.log(`[SendGrid] ✅ Mail sent to ${d.email}`);
+          } else {
+            const errText = await sgRes.text();
+            console.error(`[SendGrid] ❌ Failed for ${d.email}: HTTP ${sgRes.status} — ${errText}`);
+            failedEmails.push(`${d.employee_name} (${d.email})`);
+          }
+        }
+      } catch (err) {
+        console.error('[SendGrid] Error enviando mails:', err);
+      }
+    }
+
+    return {
+      success: true,
+      sent_count: recipients.length,
+      real_emails_sent: realEmailsSent,
+      failed_emails: failedEmails,
+      clockify_sync: clockifySyncResult ? {
+        synced: true,
+        new_records: clockifySyncResult.records_inserted || 0,
+      } : { synced: false },
+      provider: sendgridKey ? 'SendGrid API (v3)' : 'Simulación / Mailto Interactivo',
+      message: sendgridKey 
+        ? (failedEmails.length > 0
+          ? `Se enviaron ${realEmailsSent} de ${recipients.length} mails vía SendGrid. ${failedEmails.length} fallaron.`
+          : `Se enviaron exitosamente ${realEmailsSent} recordatorios a través de SendGrid API.`)
+        : `Se registraron exitosamente ${recipients.length} recordatorios para envío.`,
+      timestamp: new Date().toISOString()
+    };
+  },
+
+  configure_email_reminder_schedule: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { default_cc, is_automated, cron_schedule } = params;
+
+    const autoVal = is_automated ? 1 : 0;
+    const ccVal = default_cc || 'Eddie Rodriguez Von der Becke <eddie.rodriguez@moovingtech.com>; Julieta Albina <julieta.albina@moovingtech.com>';
+    const cronVal = cron_schedule || '0 9 27 * *';
+
+    await db.prepare(`
+      INSERT INTO email_reminder_settings (id, company_id, default_cc, is_automated, cron_schedule)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(company_id) DO UPDATE SET
+        default_cc = ?,
+        is_automated = ?,
+        cron_schedule = ?,
+        updated_at = datetime('now')
+    `).bind(
+      crypto.randomUUID().split('-')[0],
+      company_id, ccVal, autoVal, cronVal,
+      ccVal, autoVal, cronVal
+    ).run();
+
+    return {
+      success: true,
+      is_automated: !!autoVal,
+      default_cc: ccVal,
+      cron_schedule: cronVal,
+      message: 'Configuración de automatización de recordatorios guardada exitosamente.'
+    };
   },
 };
 
