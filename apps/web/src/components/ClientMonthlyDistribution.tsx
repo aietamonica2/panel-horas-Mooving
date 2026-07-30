@@ -110,11 +110,11 @@ export const ClientMonthlyDistribution: React.FC<ClientMonthlyDistributionProps>
                 <td className="px-4 py-3 font-medium text-gray-800">{client}</td>
                 {uniqueMonths.map(m => (
                   <td key={m} className="px-3 py-3 text-center">
-                    {matrix[client]?.[m] > 0 ? `${matrix[client][m]}h` : '-'}
+                    {matrix[client]?.[m] > 0 ? `${matrix[client][m].toFixed(2)}h` : '-'}
                   </td>
                 ))}
                 <td className="px-3 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.secondary }}>
-                  {totals.byClient[client]}h
+                  {totals.byClient[client].toFixed(2)}h
                 </td>
               </tr>
             ))}
@@ -122,11 +122,11 @@ export const ClientMonthlyDistribution: React.FC<ClientMonthlyDistributionProps>
               <td className="px-4 py-3 font-bold">Total/Mes</td>
               {uniqueMonths.map(m => (
                 <td key={m} className="px-3 py-3 text-center font-bold" style={{ color: MOOVING_COLORS.secondary }}>
-                  {totals.byMonth[m]}h
+                  {totals.byMonth[m].toFixed(2)}h
                 </td>
               ))}
               <td className="px-3 py-3 text-center font-bold text-lg" style={{ color: MOOVING_COLORS.secondary }}>
-                {grandTotal}h
+                {grandTotal.toFixed(2)}h
               </td>
             </tr>
           </tbody>
@@ -145,21 +145,21 @@ export const ClientMonthlyDistribution: React.FC<ClientMonthlyDistributionProps>
         <div className="bg-orange-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.secondary }}>
           <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Total Horas</div>
           <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.secondary }}>
-            {grandTotal}h
+            {grandTotal.toFixed(2)}h
           </div>
         </div>
 
         <div className="bg-green-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.success }}>
           <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Promedio/Cliente</div>
           <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.success }}>
-            {(grandTotal / uniqueClients).toFixed(1)}h
+            {(grandTotal / uniqueClients.length).toFixed(2)}h
           </div>
         </div>
 
         <div className="bg-cyan-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.info }}>
           <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Mayor Cliente</div>
           <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.info }}>
-            {sortedClients[0] ? totals.byClient[sortedClients[0]] : 0}h
+            {sortedClients[0] ? totals.byClient[sortedClients[0]].toFixed(2) : '0.00'}h
           </div>
         </div>
       </div>

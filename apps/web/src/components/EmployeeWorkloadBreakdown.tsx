@@ -102,7 +102,7 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
                     <div className="flex justify-between items-center mb-1">
                       <span className="text-sm font-medium text-gray-700">{item.client}</span>
                       <span className="text-sm font-bold" style={{ color: COLORS[itemIdx % COLORS.length] }}>
-                        {item.hours}h
+                        {item.hours.toFixed(2)}h
                       </span>
                     </div>
                     <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
@@ -114,8 +114,8 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
                         }}
                       />
                     </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      {item.percentage.toFixed(1)}% del tiempo
+                    <div className="text-xs text-gray-500 mt-1 flex justify-between items-center">
+                      <span>{item.percentage.toFixed(1)}% del tiempo</span>
                     </div>
                   </div>
                 ))}
@@ -127,7 +127,7 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
               >
                 <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Total Proyectos</div>
                 <div className="text-2xl font-bold" style={{ color: COLORS[idx % COLORS.length] }}>
-                  {breakdown.total}h
+                  {breakdown.total.toFixed(2)}h
                 </div>
               </div>
             </div>
@@ -147,7 +147,7 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
         <div className="bg-orange-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.secondary }}>
           <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Total Horas (Proyectos)</div>
           <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.secondary }}>
-            {records.filter(r => r.work_type === 'project').reduce((sum, r) => sum + r.duration_decimal, 0)}h
+            {records.filter(r => r.work_type === 'project').reduce((sum, r) => sum + r.duration_decimal, 0).toFixed(2)}h
           </div>
         </div>
 

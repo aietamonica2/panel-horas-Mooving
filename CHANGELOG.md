@@ -5,6 +5,50 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.9.6] - 2026-07-30
+
+### Fixed
+- **B3-FIX & B4-FIX: Métricas Ejecutivas C-Level con Datos Reales (`Dashboard.tsx`)** — Reemplazados los cálculos estáticos y heurísticas simples por evaluaciones reactivas reales basadas en el campo de facturabilidad `is_billable` de la base de datos y ordenamiento inmutable del cliente de mayor concentración.
+
+## [1.9.5] - 2026-07-30
+
+### Fixed
+- **B1-FIX: Promedio Diario (`Dashboard.tsx`)** — Corregida la fórmula del Promedio Diario que dividía por el total de registros en lugar de los días laborales/únicos reales registrados (`uniqueDatesCount`).
+- **B2-FIX: Filtro de Meses por Año (`FilterPanel.tsx`)** — Cambiado el agrupamiento de meses de `substring(5,7)` (mes de 2 dígitos) a `YYYY-MM` con formateo legible (ej. "Mayo 2026"), evitando la colisión de meses entre distintos años.
+- **B6-FIX: Sanitizado de User ID (`MyTime.tsx`)** — Corregido `replace('.', '_')` a `replaceAll('.', '_')` para evitar discrepancias cuando el nombre de usuario tiene múltiples puntos.
+- **B7-FIX: Inclusión de Capacitación en Overhead (`BagOfHoursTable.tsx`)** — Añadido el tipo `training` al filtro de registros de overhead junto a `internal` y `meeting`.
+
+## [1.9.4] - 2026-07-30
+
+### Fixed
+- **Pantalla en blanco en producción (`Dashboard.tsx`)** — Error crítico de `ReferenceError: selectedCategories is not defined` que crasheaba el árbol de componentes de React al renderizar en producción. La variable `selectedCategories` se usaba en 5 lugares del componente pero su `useState` nunca había sido declarado. Corregido añadiendo `const [selectedCategories, setSelectedCategories] = useState<string[]>(['project', 'internal', 'meeting', 'training', 'other'])`.
+- **Redondeo de decimales en acumulador de datos (`MyTime.tsx`)** — Corregido el valor flotante `193.66666666666666h` que persistía en la leyenda del gráfico de distribución por cliente, aplicando `Math.round(value * 100) / 100` directamente sobre el resultado del `reduce()`.
+
+## [1.9.3] - 2026-07-30
+
+### Fixed
+- **Formateo Estricto de Decimales en la Vista Individual y Gráficos (`MyTime.tsx`, `AnalyticsCharts.tsx`, `BagOfHoursTable.tsx`, `EmployeeAvailability.tsx`)**:
+  - Corrección del desborde decimal en el desglose de distribución por cliente de la vista individual (`MyTime.tsx`), convirtiendo acumulados tipo `193.66666666666666h` a un limpio `193.67h`.
+  - Aplicación de formateo `.toFixed(2)` en tooltips y leyendas de todos los gráficos Recharts (`AnalyticsCharts.tsx`), bolsas de horas (`BagOfHoursTable.tsx`), y disponibilidad de empleados.
+
+## [1.9.2] - 2026-07-30
+
+### Added
+- **Mapeo de Agentes e Identidades de Zendesk por Email y Alias (`sync_zendesk_tickets`)**:
+  - Obtención dinámica del correo y nombre del agente resolutivo de Zendesk (`assignee.email`).
+  - Matcheo directo por mail corporativo (`@moovingtech.com` / `@moovingtech.cloud`) contra la base de datos de empleados.
+  - Creación de tabla `employee_aliases` y migración D1 `0014_employee_aliases.sql` para vinculación de cuentas.
+- **Sección de "🔗 Vinculación de Empleados" en Panel de Administración (`AdminPanel.tsx`)**:
+  - Interfaz gráfica para listar identidades no reconocidas de Zendesk o Clockify y vincularlas manualmente a un Empleado oficial del sistema en 1 solo clic.
+  - Herramientas MCP registradas: `get_unlinked_external_users` y `link_external_user`.
+- **Filtro por Rango de Fechas e Inputs ISO (`FilterPanel.tsx` & `Dashboard.tsx`)**:
+  - Selectores `Fecha Desde` y `Fecha Hasta` en el panel de filtros anidados reactivos.
+  - Botones de selección rápida (*"Este Mes"*, *"Últimos 7 Días"*, *"Últimos 30 Días"*, *"Limpiar Fechas"*).
+
+### Fixed
+- **Formateo Estricto de Decimales en Tablero Visual**:
+  - Eliminación de cadenas con flotantes interminables (como `256.41666666666663h`) mediante formateo estricto `.toFixed(2)` en todas las tarjetas de carga de empleados (`EmployeeWorkloadBreakdown.tsx`), matrices por cliente (`ClientMonthlyDistribution.tsx`), métricas de disponibilidad y tablas de distribución.
+
 ## [1.9.1] - 2026-07-28
 
 ### Added
@@ -37,6 +81,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Technical
 - Cloudflare Workers cron triggers: `["0 8 * * 2", "0 12 28 * *"]`
 - API version bumped a v1.9.0 en endpoint root, 404, y error handler.
+
+## [1.8.2] - 2026-07-30
+
+### Changed
+- **Estandarización de Motor de Email Nativo Cloudflare Workers**:
+  - Configurado como motor de envío primario predeterminado a **Cloudflare MailChannels**.
+  - Configurada dirección de remitente predeterminada: `Mónica Aieta - Mooving Tech <no-reply@mooving.ai>`.
+  - Eliminada dependencia de proveedores de terceros (SendGrid/Resend) para simplificar la infraestructura y evitar errores de verificación de dominio.
 
 ## [1.8.1] - 2026-07-27
 

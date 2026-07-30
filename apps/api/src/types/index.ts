@@ -21,6 +21,7 @@ export interface CloudflareEnv {
   SENDGRID_FROM_EMAIL?: string
   RESEND_API_KEY?: string
   RESEND_FROM_EMAIL?: string
+  CLOUDFLARE_FROM_EMAIL?: string
   [key: string]: any
 }
 

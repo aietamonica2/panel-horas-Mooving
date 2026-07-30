@@ -22,8 +22,8 @@ const MOOVING_COLORS = {
 }
 
 export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selectedMonth }) => {
-  // Filter for internal tasks and meetings only
-  const bagRecords = records.filter(r => r.work_type === 'internal' || r.work_type === 'meeting')
+  // Filter for internal tasks, meetings, and training (overhead)
+  const bagRecords = records.filter(r => r.work_type === 'internal' || r.work_type === 'meeting' || r.work_type === 'training')
 
   if (bagRecords.length === 0) {
     return (
@@ -130,11 +130,11 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
                   <td className="px-4 py-3 font-medium">{emp}</td>
                   {uniqueMonths.map(m => (
                     <td key={m} className="px-3 py-3 text-center">
-                      {matrix[emp]?.[m] > 0 ? `${matrix[emp][m]}h` : '-'}
+                      {matrix[emp]?.[m] > 0 ? `${matrix[emp][m].toFixed(2)}h` : '-'}
                     </td>
                   ))}
                   <td className="px-3 py-3 text-center font-semibold" style={{ color }}>
-                    {totals.byEmployee[emp]}h
+                    {totals.byEmployee[emp].toFixed(2)}h
                   </td>
                 </tr>
               ))}
@@ -142,11 +142,11 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
                 <td className="px-4 py-3 font-bold">Total/Mes</td>
                 {uniqueMonths.map(m => (
                   <td key={m} className="px-3 py-3 text-center font-bold" style={{ color }}>
-                    {totals.byMonth[m]}h
+                    {totals.byMonth[m].toFixed(2)}h
                   </td>
                 ))}
                 <td className="px-3 py-3 text-center font-bold text-lg" style={{ color }}>
-                  {grandTotal}h
+                  {grandTotal.toFixed(2)}h
                 </td>
               </tr>
             </tbody>
@@ -172,21 +172,21 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
         <div className="bg-indigo-50 rounded-lg p-6 border-l-4" style={{ borderColor: MOOVING_COLORS.indigo }}>
           <div className="text-sm text-gray-600 uppercase font-semibold mb-2">⚙️ Tareas Internas</div>
           <div className="text-3xl font-bold" style={{ color: MOOVING_COLORS.indigo }}>
-            {internalRecords.reduce((sum, r) => sum + r.duration_decimal, 0)}h
+            {internalRecords.reduce((sum, r) => sum + r.duration_decimal, 0).toFixed(2)}h
           </div>
         </div>
 
         <div className="bg-pink-50 rounded-lg p-6 border-l-4" style={{ borderColor: MOOVING_COLORS.pink }}>
           <div className="text-sm text-gray-600 uppercase font-semibold mb-2">👥 Reuniones de Equipo</div>
           <div className="text-3xl font-bold" style={{ color: MOOVING_COLORS.pink }}>
-            {meetingRecords.reduce((sum, r) => sum + r.duration_decimal, 0)}h
+            {meetingRecords.reduce((sum, r) => sum + r.duration_decimal, 0).toFixed(2)}h
           </div>
         </div>
 
         <div className="bg-orange-50 rounded-lg p-6 border-l-4" style={{ borderColor: MOOVING_COLORS.secondary }}>
           <div className="text-sm text-gray-600 uppercase font-semibold mb-2">📊 Total Bolsa</div>
           <div className="text-3xl font-bold" style={{ color: MOOVING_COLORS.secondary }}>
-            {bagRecords.reduce((sum, r) => sum + r.duration_decimal, 0)}h
+            {bagRecords.reduce((sum, r) => sum + r.duration_decimal, 0).toFixed(2)}h
           </div>
         </div>
       </div>

@@ -121,7 +121,7 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
                 borderRadius: '8px',
                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
               }}
-              formatter={(value) => [`${value}h`, 'Horas']}
+              formatter={(value: any) => [`${Number(value).toFixed(2)}h`, 'Horas']}
             />
             <Bar dataKey="horas" fill={MOOVING_COLORS.secondary} radius={[8, 8, 0, 0]} />
           </BarChart>
@@ -129,8 +129,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
 
         <div className="mt-6 bg-orange-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.secondary }}>
           <p className="text-sm text-gray-700">
-            <span className="font-bold" style={{ color: MOOVING_COLORS.secondary }}>Total anual:</span> {monthlyData.reduce((sum, m) => sum + m.horas, 0)}h
-            <span className="ml-4"><span className="font-bold" style={{ color: MOOVING_COLORS.secondary }}>Promedio/mes:</span> {(monthlyData.reduce((sum, m) => sum + m.horas, 0) / monthlyData.length).toFixed(0)}h</span>
+            <span className="font-bold" style={{ color: MOOVING_COLORS.secondary }}>Total anual:</span> {monthlyData.reduce((sum, m) => sum + m.horas, 0).toFixed(2)}h
+            <span className="ml-4"><span className="font-bold" style={{ color: MOOVING_COLORS.secondary }}>Promedio/mes:</span> {(monthlyData.reduce((sum, m) => sum + m.horas, 0) / (monthlyData.length || 1)).toFixed(2)}h</span>
           </p>
         </div>
       </div>
@@ -157,7 +157,7 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
                 borderRadius: '8px',
                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
               }}
-              formatter={(value) => [`${value}h`, 'Horas']}
+              formatter={(value: any) => [`${Number(value).toFixed(2)}h`, 'Horas']}
             />
             <Bar dataKey="horas" radius={[0, 8, 8, 0]}>
               {topEmployees.map((entry, index) => (
@@ -169,8 +169,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
 
         <div className="mt-6 bg-blue-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.primary }}>
           <p className="text-sm text-gray-700">
-            <span className="font-bold" style={{ color: MOOVING_COLORS.primary }}>Empleado más activo:</span> {topEmployees[0]?.name} ({topEmployees[0]?.horas}h)
-            <span className="ml-4"><span className="font-bold" style={{ color: MOOVING_COLORS.primary }}>Promedio Top 10:</span> {(topEmployees.reduce((sum, e) => sum + e.horas, 0) / 10).toFixed(0)}h</span>
+            <span className="font-bold" style={{ color: MOOVING_COLORS.primary }}>Empleado más activo:</span> {topEmployees[0]?.name} ({topEmployees[0]?.horas ? topEmployees[0].horas.toFixed(2) : '0.00'}h)
+            <span className="ml-4"><span className="font-bold" style={{ color: MOOVING_COLORS.primary }}>Promedio Top 10:</span> {(topEmployees.reduce((sum, e) => sum + e.horas, 0) / (topEmployees.length || 1)).toFixed(2)}h</span>
           </p>
         </div>
       </div>
@@ -202,7 +202,7 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
                 borderRadius: '8px',
                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
               }}
-              formatter={(value) => [`${value}h`, 'Horas']}
+              formatter={(value: any) => [`${Number(value).toFixed(2)}h`, 'Horas']}
             />
             <Bar dataKey="horas" radius={[8, 8, 0, 0]}>
               {topClients.map((entry, index) => (
@@ -214,8 +214,8 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
 
         <div className="mt-6 bg-cyan-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.info }}>
           <p className="text-sm text-gray-700">
-            <span className="font-bold" style={{ color: MOOVING_COLORS.info }}>Cliente principal:</span> {topClients[0]?.name} ({topClients[0]?.horas}h)
-            <span className="ml-4"><span className="font-bold" style={{ color: MOOVING_COLORS.info }}>Total Top 10:</span> {topClients.reduce((sum, c) => sum + c.horas, 0)}h</span>
+            <span className="font-bold" style={{ color: MOOVING_COLORS.info }}>Cliente principal:</span> {topClients[0]?.name} ({topClients[0]?.horas ? topClients[0].horas.toFixed(2) : '0.00'}h)
+            <span className="ml-4"><span className="font-bold" style={{ color: MOOVING_COLORS.info }}>Total Top 10:</span> {topClients.reduce((sum, c) => sum + c.horas, 0).toFixed(2)}h</span>
           </p>
         </div>
       </div>

@@ -14,11 +14,15 @@ interface FilterPanelProps {
   selectedClients: string[]
   selectedProjects: string[]
   selectedCategories: string[]
+  startDate?: string
+  endDate?: string
   onMonthsChange: (months: string[]) => void
   onEmployeesChange: (employees: string[]) => void
   onClientsChange: (clients: string[]) => void
   onProjectsChange: (projects: string[]) => void
   onCategoriesChange: (categories: string[]) => void
+  onStartDateChange?: (date: string) => void
+  onEndDateChange?: (date: string) => void
   onReset: () => void
 }
 
@@ -44,11 +48,15 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   selectedClients,
   selectedProjects,
   selectedCategories,
+  startDate = '',
+  endDate = '',
   onMonthsChange,
   onEmployeesChange,
   onClientsChange,
   onProjectsChange,
   onCategoriesChange,
+  onStartDateChange,
+  onEndDateChange,
   onReset,
 }) => {
   // Category toggle helper
@@ -57,6 +65,39 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
       ? selectedCategories.filter(c => c !== category)
       : [...selectedCategories, category]
     onCategoriesChange(updated)
+  }
+
+  // Date Presets helper
+  const applyPreset = (preset: 'thisMonth' | 'last7' | 'last30' | 'clear') => {
+    if (preset === 'clear') {
+      if (onStartDateChange) onStartDateChange('')
+      if (onEndDateChange) onEndDateChange('')
+      return
+    }
+
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = String(today.getMonth() + 1).padStart(2, '0')
+    const dd = String(today.getDate()).padStart(2, '0')
+    const todayStr = `${yyyy}-${mm}-${dd}`
+
+    if (preset === 'thisMonth') {
+      const firstDay = `${yyyy}-${mm}-01`
+      if (onStartDateChange) onStartDateChange(firstDay)
+      if (onEndDateChange) onEndDateChange(todayStr)
+    } else if (preset === 'last7') {
+      const past = new Date(today)
+      past.setDate(past.getDate() - 7)
+      const pastStr = past.toISOString().split('T')[0]
+      if (onStartDateChange) onStartDateChange(pastStr)
+      if (onEndDateChange) onEndDateChange(todayStr)
+    } else if (preset === 'last30') {
+      const past = new Date(today)
+      past.setDate(past.getDate() - 30)
+      const pastStr = past.toISOString().split('T')[0]
+      if (onStartDateChange) onStartDateChange(pastStr)
+      if (onEndDateChange) onEndDateChange(todayStr)
+    }
   }
 
   // Reactive selection logic for nested selections:
@@ -74,18 +115,22 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
       filtered = filtered.filter(r => selectedProjects.includes(r.project_id))
     }
 
-    const uniqueMonths = Array.from(new Set(filtered.map(r => r.date.substring(5, 7)))).sort()
-    return uniqueMonths.map(month => ({
-      id: month,
-      name: MONTHS_ES[month as keyof typeof MONTHS_ES] || month
-    }))
+    const uniqueMonths = Array.from(new Set(filtered.map(r => r.date.substring(0, 7)))).sort()
+    return uniqueMonths.map(ym => {
+      const [year, month] = ym.split('-')
+      const monthName = MONTHS_ES[month as keyof typeof MONTHS_ES] || month
+      return {
+        id: ym,
+        name: `${monthName} ${year}`
+      }
+    })
   }, [records, selectedEmployees, selectedClients, selectedProjects])
 
   // 2. Available Clients: filtered by selected months, selected employees, and selected projects
   const availableClientsOptions = useMemo(() => {
     let filtered = records
     if (selectedMonths.length > 0) {
-      filtered = filtered.filter(r => selectedMonths.includes(r.date.substring(5, 7)))
+      filtered = filtered.filter(r => selectedMonths.includes(r.date.substring(0, 7)) || selectedMonths.includes(r.date.substring(5, 7)))
     }
     if (selectedEmployees.length > 0) {
       filtered = filtered.filter(r => selectedEmployees.includes(r.employee_id))
@@ -109,7 +154,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   const availableEmployeesOptions = useMemo(() => {
     let filtered = records
     if (selectedMonths.length > 0) {
-      filtered = filtered.filter(r => selectedMonths.includes(r.date.substring(5, 7)))
+      filtered = filtered.filter(r => selectedMonths.includes(r.date.substring(0, 7)) || selectedMonths.includes(r.date.substring(5, 7)))
     }
     if (selectedClients.length > 0) {
       filtered = filtered.filter(r => selectedClients.includes(r.client_id))
@@ -133,7 +178,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   const availableProjectsOptions = useMemo(() => {
     let filtered = records
     if (selectedMonths.length > 0) {
-      filtered = filtered.filter(r => selectedMonths.includes(r.date.substring(5, 7)))
+      filtered = filtered.filter(r => selectedMonths.includes(r.date.substring(0, 7)) || selectedMonths.includes(r.date.substring(5, 7)))
     }
     if (selectedEmployees.length > 0) {
       filtered = filtered.filter(r => selectedEmployees.includes(r.employee_id))
@@ -160,9 +205,66 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
 
   return (
     <div className="bg-white rounded-xl shadow-md p-6 mb-8" style={{ borderLeft: '4px solid #f97316' }}>
-      <h2 className="text-xl font-semibold mb-6 flex items-center gap-2" style={{ color: '#1a5f7a' }}>
-        🔍 Filtros Anidados Reactivos
-      </h2>
+      <div className="flex flex-wrap justify-between items-center mb-6 gap-4 border-b pb-4 border-gray-100">
+        <h2 className="text-xl font-semibold flex items-center gap-2" style={{ color: '#1a5f7a' }}>
+          🔍 Filtros Anidados Reactivos
+        </h2>
+
+        {/* Date Range Selector & Presets */}
+        <div className="flex flex-wrap items-center gap-3 bg-slate-50 p-2.5 rounded-lg border border-slate-200">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-600">📅 Rango:</span>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => onStartDateChange && onStartDateChange(e.target.value)}
+              className="px-2 py-1 bg-white border border-slate-300 rounded text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              title="Fecha Desde"
+            />
+            <span className="text-xs text-slate-400">a</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => onEndDateChange && onEndDateChange(e.target.value)}
+              className="px-2 py-1 bg-white border border-slate-300 rounded text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              title="Fecha Hasta"
+            />
+          </div>
+
+          <div className="flex items-center gap-1 border-l pl-3 border-slate-200">
+            <button
+              type="button"
+              onClick={() => applyPreset('thisMonth')}
+              className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 rounded text-xs transition font-medium"
+            >
+              Este Mes
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset('last7')}
+              className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 rounded text-xs transition font-medium"
+            >
+              7 Días
+            </button>
+            <button
+              type="button"
+              onClick={() => applyPreset('last30')}
+              className="px-2 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-600 rounded text-xs transition font-medium"
+            >
+              30 Días
+            </button>
+            {(startDate || endDate) && (
+              <button
+                type="button"
+                onClick={() => applyPreset('clear')}
+                className="px-2 py-1 bg-red-50 hover:bg-red-100 text-red-600 border border-red-200 rounded text-xs transition font-semibold"
+              >
+                ✕ Limpiar Fechas
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
         {/* Month Filter */}

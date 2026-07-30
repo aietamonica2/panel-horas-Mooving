@@ -56,7 +56,7 @@ export const MyTime: React.FC = () => {
     try {
       const userEmail = localStorage.getItem('mooving_user_email') || 'unknown@moovingtech.com';
       const userName = userEmail.split('@')[0];
-      const userId = 'emp_' + userName.replace('.', '_');
+      const userId = 'emp_' + userName.replaceAll('.', '_');
 
       const payload = {
         employee_id: userId,
@@ -96,14 +96,14 @@ export const MyTime: React.FC = () => {
   const expectedHours = 160;
   const progress = Math.min(100, Math.round((totalHoursThisMonth / expectedHours) * 100));
 
-  // Datos para el gráfico de Donas (Clientes)
+  // Datos para el gráfico de Donas (Clientes) - redondeo a 2 decimales para evitar flotantes
   const clientsData = Object.values(
     thisMonthRecords.reduce((acc: any, r: any) => {
       acc[r.client_name] = acc[r.client_name] || { name: r.client_name, value: 0 };
       acc[r.client_name].value += r.duration_decimal;
       return acc;
     }, {})
-  ) as any[];
+  ).map((c: any) => ({ ...c, value: Math.round(c.value * 100) / 100 })) as any[];
 
   return (
     <div className="flex-1 bg-slate-50 overflow-auto p-8">
@@ -202,7 +202,7 @@ export const MyTime: React.FC = () => {
                           <td className="py-3 px-4 font-medium text-gray-900">{r.date}</td>
                           <td className="py-3 px-4">{r.client_name}</td>
                           <td className="py-3 px-4 text-gray-500">{r.project_name}</td>
-                          <td className="py-3 px-4 font-semibold text-indigo-600">{r.duration_decimal}h</td>
+                          <td className="py-3 px-4 font-semibold text-indigo-600">{Number(r.duration_decimal).toFixed(2)}h</td>
                           <td className="py-3 px-4 text-gray-500 truncate max-w-xs hidden sm:table-cell" title={r.description}>{r.description || '-'}</td>
                         </tr>
                       ))}
@@ -218,7 +218,7 @@ export const MyTime: React.FC = () => {
             <div className="bg-indigo-600 text-white rounded-xl shadow-sm p-6 relative overflow-hidden">
               <div className="relative z-10">
                 <h3 className="text-indigo-100 font-medium mb-1">Horas este mes</h3>
-                <div className="text-4xl font-bold mb-4">{totalHoursThisMonth.toFixed(1)} <span className="text-lg font-normal text-indigo-200">/ {expectedHours}h</span></div>
+                <div className="text-4xl font-bold mb-4">{totalHoursThisMonth.toFixed(2)} <span className="text-lg font-normal text-indigo-200">/ {expectedHours}h</span></div>
                 
                 <div className="w-full bg-indigo-900/50 rounded-full h-2.5 mb-2">
                   <div className="bg-white h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
@@ -239,7 +239,7 @@ export const MyTime: React.FC = () => {
                           <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
                         ))}
                       </Pie>
-                      <RechartsTooltip formatter={(value: number) => [`${value}h`, 'Horas']} />
+                      <RechartsTooltip formatter={(value: number) => [`${Number(value).toFixed(2)}h`, 'Horas']} />
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
@@ -253,7 +253,7 @@ export const MyTime: React.FC = () => {
                       <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
                       <span className="text-gray-600">{client.name}</span>
                     </div>
-                    <span className="font-medium">{client.value}h</span>
+                    <span className="font-medium">{Number(client.value).toFixed(2)}h</span>
                   </div>
                 ))}
               </div>

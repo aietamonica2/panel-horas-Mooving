@@ -47,6 +47,19 @@ export const Dashboard: React.FC = () => {
   const [selectedClients, setSelectedClients] = useState<string[]>([])
   const [selectedProjects, setSelectedProjects] = useState<string[]>([])
   const [selectedCategories, setSelectedCategories] = useState<string[]>(['project', 'internal', 'meeting', 'training', 'other'])
+  // Date Range filter state
+  const [startDate, setStartDate] = useState<string>('')
+  const [endDate, setEndDate] = useState<string>('')
+
+  const handleStartDateChange = (date: string) => {
+    setStartDate(date)
+    setFilters({ dateRangeStart: date })
+  }
+
+  const handleEndDateChange = (date: string) => {
+    setEndDate(date)
+    setFilters({ dateRangeEnd: date })
+  }
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [auditResults, setAuditResults] = useState<{ status: string; anomalies_found: { issue: string; user: string }[] } | null>(null)
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
@@ -107,6 +120,8 @@ export const Dashboard: React.FC = () => {
     setSelectedClients([])
     setSelectedProjects([])
     setSelectedCategories(['project', 'internal', 'meeting', 'training', 'other'])
+    setStartDate('')
+    setEndDate('')
     clearFilters()
   }
 
@@ -142,7 +157,8 @@ export const Dashboard: React.FC = () => {
   }, [selectedMonths, selectedEmployees, selectedClients, selectedProjects, selectedCategories, setFilters])
 
   const totalHours = filteredRecords.reduce((sum, r) => sum + (r.duration_decimal || 0), 0)
-  const avgHours = filteredRecords.length > 0 ? (totalHours / filteredRecords.length).toFixed(2) : '0.00'
+  const uniqueDatesCount = new Set(filteredRecords.map(r => r.date)).size
+  const avgHours = uniqueDatesCount > 0 ? (totalHours / uniqueDatesCount).toFixed(2) : '0.00'
   const uniqueEmployees = new Set(filteredRecords.map(r => r.employee_id)).size
   const uniqueClients = new Set(filteredRecords.map(r => r.client_id)).size
 
@@ -372,11 +388,15 @@ export const Dashboard: React.FC = () => {
             selectedClients={selectedClients}
             selectedProjects={selectedProjects}
             selectedCategories={selectedCategories}
+            startDate={startDate}
+            endDate={endDate}
             onMonthsChange={setSelectedMonths}
             onEmployeesChange={setSelectedEmployees}
             onClientsChange={setSelectedClients}
             onProjectsChange={setSelectedProjects}
             onCategoriesChange={setSelectedCategories}
+            onStartDateChange={handleStartDateChange}
+            onEndDateChange={handleEndDateChange}
             onReset={handleResetFilters}
           />
         )}
@@ -408,7 +428,7 @@ export const Dashboard: React.FC = () => {
               </div>
               <div className="text-4xl">📊</div>
             </div>
-            <p className="text-xs text-gray-400 mt-4">por trabajador</p>
+            <p className="text-xs text-gray-400 mt-4">por día registrado</p>
           </div>
 
           {/* Employees */}
@@ -456,10 +476,10 @@ export const Dashboard: React.FC = () => {
                 <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Índice de Facturabilidad</p>
                 <div className="flex items-end gap-3">
                   <p className="text-3xl font-bold text-green-400">
-                    {totalHours > 0 ? ((filteredRecords.filter(r => r.work_type === 'project').reduce((acc, r) => acc + r.duration_decimal, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
+                    {totalHours > 0 ? ((filteredRecords.filter(r => r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')).reduce((acc, r) => acc + r.duration_decimal, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
                   </p>
                 </div>
-                <p className="text-xs text-gray-400 mt-2">Objetivo saludable: &gt; 75%</p>
+                <p className="text-xs text-gray-400 mt-2">Objetivo saludable: &gt; 75% (basado en is_billable real)</p>
               </div>
 
               {/* Fuga de Capital / Overhead */}
@@ -467,7 +487,7 @@ export const Dashboard: React.FC = () => {
                 <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Carga de Overhead</p>
                 <div className="flex items-end gap-3">
                   <p className="text-3xl font-bold text-red-400">
-                    {totalHours > 0 ? ((filteredRecords.filter(r => r.work_type !== 'project').reduce((acc, r) => acc + r.duration_decimal, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
+                    {totalHours > 0 ? (((totalHours - filteredRecords.filter(r => r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')).reduce((acc, r) => acc + r.duration_decimal, 0)) / totalHours) * 100).toFixed(1) : '0.0'}%
                   </p>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">Tiempo en reuniones internas / tareas no facturables</p>
@@ -478,11 +498,11 @@ export const Dashboard: React.FC = () => {
                 <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Concentración de Riesgo</p>
                 <div className="flex items-end gap-3">
                   <p className="text-xl font-bold text-yellow-400 truncate">
-                    {clientData.sort((a, b) => b.value - a.value)[0]?.name || 'N/A'}
+                    {[...clientData].sort((a, b) => b.value - a.value)[0]?.name || 'N/A'}
                   </p>
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
-                  Consume el {totalHours > 0 ? ((clientData.sort((a, b) => b.value - a.value)[0]?.value || 0) / totalHours * 100).toFixed(1) : '0.0'}% del tiempo total
+                  Consume el {totalHours > 0 ? (([...clientData].sort((a, b) => b.value - a.value)[0]?.value || 0) / totalHours * 100).toFixed(1) : '0.0'}% del tiempo total
                 </p>
               </div>
             </div>

@@ -480,7 +480,7 @@ export const TOOL_REGISTRY = {
     }
 
     const authStr = btoa(`${email}/token:${token}`);
-    const url = `https://${subdomain}.zendesk.com/api/v2/search.json?query=type:ticket status:solved`;
+    const url = `https://${subdomain}.zendesk.com/api/v2/search.json?query=type:ticket status:solved&include=users`;
 
     let zendeskData;
     try {
@@ -500,28 +500,86 @@ export const TOOL_REGISTRY = {
     }
 
     const tickets = zendeskData.results || [];
+    const usersList: any[] = zendeskData.users || [];
+    const usersMap = new Map<number, { name: string; email: string }>();
+    usersList.forEach(u => {
+      if (u.id) {
+        usersMap.set(u.id, { name: u.name || 'Agente Zendesk', email: u.email || '' });
+      }
+    });
+
+    // Fetch existing employees & aliases for smart matching
+    const empRes = await db.prepare(`SELECT id, name, email FROM employees WHERE company_id = ?`).bind(company_id).all();
+    const existingEmployees = (empRes.results || []) as any[];
+    
+    const aliasRes = await db.prepare(`SELECT alias_email, alias_name, employee_id FROM employee_aliases WHERE company_id = ?`).bind(company_id).all();
+    const existingAliases = (aliasRes.results || []) as any[];
+
     let inserted = 0;
     let total_hours = 0;
 
     for (const ticket of tickets) {
       const id = 'zen_' + ticket.id;
-      // Estimación básica: asumimos 1h por ticket resuelto
-      const duration = 1.0; 
+      const duration = 1.0; // 1h por ticket resuelto
       const desc = `Resolución Ticket #${ticket.id} [Zendesk]: ${ticket.subject}`;
       const dateStr = ticket.updated_at ? ticket.updated_at.split('T')[0] : new Date().toISOString().split('T')[0];
+
+      // Resolve assignee
+      const assigneeInfo = ticket.assignee_id ? usersMap.get(ticket.assignee_id) : null;
+      const assigneeEmail = (assigneeInfo?.email || '').toLowerCase().trim();
+      const assigneeName = (assigneeInfo?.name || 'Agente Soporte').trim();
+
+      let targetEmpId = '';
+      let targetEmpName = '';
+
+      // 1. Check exact email match in employees
+      if (assigneeEmail) {
+        const matchByEmail = existingEmployees.find(e => (e.email || '').toLowerCase().trim() === assigneeEmail);
+        if (matchByEmail) {
+          targetEmpId = matchByEmail.id;
+          targetEmpName = matchByEmail.name;
+        }
+      }
+
+      // 2. Check alias table
+      if (!targetEmpId && assigneeEmail) {
+        const matchAlias = existingAliases.find(a => (a.alias_email || '').toLowerCase().trim() === assigneeEmail);
+        if (matchAlias) {
+          const emp = existingEmployees.find(e => e.id === matchAlias.employee_id);
+          if (emp) {
+            targetEmpId = emp.id;
+            targetEmpName = emp.name;
+          }
+        }
+      }
+
+      // 3. Check exact name match in employees
+      if (!targetEmpId && assigneeName) {
+        const matchByName = existingEmployees.find(e => (e.name || '').toLowerCase().trim() === assigneeName.toLowerCase());
+        if (matchByName) {
+          targetEmpId = matchByName.id;
+          targetEmpName = matchByName.name;
+        }
+      }
+
+      // Fallback: Use assignee name or email directly if unlinked
+      if (!targetEmpId) {
+        targetEmpId = assigneeEmail ? `zen_user_${assigneeEmail.replace(/[^a-zA-Z0-9]/g, '_')}` : `zen_agent_${ticket.assignee_id || 'soporte'}`;
+        targetEmpName = assigneeName || assigneeEmail || 'Agente Soporte';
+      }
 
       try {
         await db.prepare(`
           INSERT OR IGNORE INTO time_records (
             id, company_id, employee_id, employee_name, client_id, client_name,
             project_id, project_name, duration_decimal, duration_hours, duration_minutes,
-            date, work_type, description
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            date, work_type, description, source
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          id, company_id, 'emp_soporte', 'Agente Soporte',
+          id, company_id, targetEmpId, targetEmpName,
           'cli_varios', 'Varios', 'proj_support', 'Soporte Técnico',
           duration, Math.floor(duration), Math.round((duration % 1) * 60),
-          dateStr, 'other', desc
+          dateStr, 'other', desc, 'zendesk'
         ).run();
         inserted++;
         total_hours += duration;
@@ -537,6 +595,72 @@ export const TOOL_REGISTRY = {
       records_inserted: inserted,
       total_hours: total_hours,
       source: 'zendesk'
+    };
+  },
+
+  get_unlinked_external_users: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+
+    // Query time_records with external sources (zendesk/clockify) that don't match any employee ID in employees table
+    const { results } = await db.prepare(`
+      SELECT DISTINCT tr.employee_id, tr.employee_name, tr.source
+      FROM time_records tr
+      LEFT JOIN employees e ON tr.employee_id = e.id OR tr.employee_name = e.name
+      WHERE tr.company_id = ? AND tr.source IN ('zendesk', 'clockify') AND e.id IS NULL
+    `).bind(company_id).all();
+
+    const aliasesRes = await db.prepare(`
+      SELECT alias_email, alias_name, employee_id FROM employee_aliases WHERE company_id = ?
+    `).bind(company_id).all();
+
+    return {
+      success: true,
+      unlinked_users: results || [],
+      existing_aliases: aliasesRes.results || [],
+      timestamp: new Date().toISOString()
+    };
+  },
+
+  link_external_user: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { alias_identifier, target_employee_id } = params;
+
+    if (!alias_identifier || !target_employee_id) {
+      throw new Error('Faltan parámetros requeridos: alias_identifier y target_employee_id.');
+    }
+
+    // Get official employee
+    const emp = await db.prepare(`SELECT id, name, email FROM employees WHERE id = ? AND company_id = ?`).bind(target_employee_id, company_id).first();
+    if (!emp) {
+      throw new Error('Empleado objetivo no encontrado.');
+    }
+
+    const aliasId = 'alias_' + crypto.randomUUID().substring(0, 8);
+    const aliasEmail = alias_identifier.includes('@') ? alias_identifier.toLowerCase().trim() : '';
+    const aliasName = alias_identifier;
+
+    // Save alias mapping
+    await db.prepare(`
+      INSERT OR REPLACE INTO employee_aliases (id, company_id, alias_email, alias_name, employee_id)
+      VALUES (?, ?, ?, ?, ?)
+    `).bind(aliasId, company_id, aliasEmail, aliasName, emp.id).run();
+
+    // Update all historical time_records for this external identity
+    const updateResult = await db.prepare(`
+      UPDATE time_records
+      SET employee_id = ?, employee_name = ?
+      WHERE company_id = ? AND (
+        LOWER(employee_id) = LOWER(?) OR LOWER(employee_name) = LOWER(?) OR LOWER(employee_id) LIKE ?
+      )
+    `).bind(emp.id, emp.name, company_id, alias_identifier, alias_identifier, `%${alias_identifier}%`).run();
+
+    return {
+      success: true,
+      message: `Alias "${alias_identifier}" vinculado exitosamente con el empleado ${emp.name}.`,
+      updated_records: updateResult.meta?.changes || 0,
+      timestamp: new Date().toISOString()
     };
   },
 
@@ -976,16 +1100,23 @@ export const TOOL_REGISTRY = {
       }
     }
 
+    const sendgridRaw = (c.env.SENDGRID_API_KEY || '').trim();
+    const sendgridKey = sendgridRaw.startsWith('SG.') ? sendgridRaw : '';
     const resendKey = (c.env.RESEND_API_KEY || '').trim();
-    const sendgridKey = (c.env.SENDGRID_API_KEY || c.env.SENDGRID_PASSWORD || '').trim();
-    const activeApiKey = resendKey || sendgridKey;
-    const providerName = resendKey ? 'Resend API' : (sendgridKey ? 'SendGrid API (v3)' : 'Simulación / Mailto Interactivo');
-    const fromEmail = (c.env.RESEND_FROM_EMAIL || c.env.SENDGRID_FROM_EMAIL || 'Mónica Aieta <onboarding@resend.dev>').trim();
+    const useMailChannels = (c.env.USE_MAILCHANNELS || 'true') === 'true'; // Default Cloudflare Workers Outbound Engine
+    
+    // Priority: Resend API -> SendGrid API (SG.xxx) -> Cloudflare MailChannels -> Mailto
+    const providerName = resendKey 
+      ? 'Resend API' 
+      : (sendgridKey ? 'SendGrid API (v3)' : (useMailChannels ? 'Cloudflare MailChannels (Worker Nativo)' : 'Simulación / Mailto Interactivo'));
+    
+    const fromEmail = (c.env.RESEND_FROM_EMAIL || c.env.SENDGRID_FROM_EMAIL || 'no-reply@moovingtech.cloud').trim();
+    const fromName = 'Mónica Aieta - Mooving Tech';
     
     let realEmailsSent = 0;
     const failedEmails: string[] = [];
 
-    if (activeApiKey) {
+    if (resendKey || sendgridKey || useMailChannels) {
       try {
         const draftsResult = await (TOOL_REGISTRY as any).get_email_reminder_drafts({ company_id, month, custom_cc }, c);
         const draftsMap: Record<string, any> = {};
@@ -1013,11 +1144,14 @@ export const TOOL_REGISTRY = {
               .filter(Boolean) as string[];
 
             let emailRes: Response;
+            let currentProvider = providerName;
 
             if (resendKey) {
-              // Resend API (POST https://api.resend.com/emails)
+              // 1. Primary Provider: Resend API (Using moovingtech.cloud domain)
+              const resendFrom = `Mónica Aieta <${fromEmail}>`;
+
               const resendPayload = {
-                from: fromEmail.includes('<') ? fromEmail : `Mónica Aieta <${fromEmail}>`,
+                from: resendFrom,
                 to: [d.email.trim()],
                 ...(parsedCcStrings.length > 0 ? { cc: parsedCcStrings } : {}),
                 subject: d.subject,
@@ -1032,8 +1166,64 @@ export const TOOL_REGISTRY = {
                 },
                 body: JSON.stringify(resendPayload)
               });
-            } else {
-              // SendGrid API fallback
+
+              // Retry with onboarding@resend.dev if domain verification is still pending in Resend
+              if (!emailRes.ok && emailRes.status === 403) {
+                console.warn(`[Resend] Domain ${fromEmail} pending verification (403). Retrying with onboarding@resend.dev...`);
+                const fallbackResendPayload = {
+                  ...resendPayload,
+                  from: 'Mónica Aieta <onboarding@resend.dev>'
+                };
+
+                emailRes = await fetch('https://api.resend.com/emails', {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${resendKey}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify(fallbackResendPayload)
+                });
+                if (emailRes.ok) currentProvider = 'Resend API (onboarding@resend.dev)';
+              }
+
+              // Fallback to MailChannels if Resend domain is unverified for external recipient
+              if (!emailRes.ok && (emailRes.status === 403 || emailRes.status === 422) && useMailChannels) {
+                const resendErrText = await emailRes.text();
+                console.warn(`[Resend] HTTP ${emailRes.status} (unverified domain). Falling back to Cloudflare MailChannels for ${d.email}... Error: ${resendErrText}`);
+                
+                const mcCcObjects = parsedCcStrings.map(email => ({ email }));
+                const mailchannelsPayload = {
+                  personalizations: [
+                    {
+                      to: [{ email: d.email.trim() }],
+                      ...(mcCcObjects.length > 0 ? { cc: mcCcObjects } : {})
+                    }
+                  ],
+                  from: {
+                    email: 'monica.aieta@moovingtech.com',
+                    name: 'Mónica Aieta - Mooving Tech'
+                  },
+                  subject: d.subject,
+                  content: [{ type: 'text/plain', value: d.body }]
+                };
+
+                const mcRes = await fetch('https://api.mailchannels.net/tx/v1/send', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify(mailchannelsPayload)
+                });
+
+                if (mcRes.ok || mcRes.status === 200 || mcRes.status === 201 || mcRes.status === 202) {
+                  emailRes = mcRes;
+                  currentProvider = 'Cloudflare MailChannels (Fallback)';
+                } else {
+                  // Keep the original informative Resend error if MailChannels is also unverified
+                  failedEmails.push(`${d.employee_name} (${d.email}): Resend requiere verificar el dominio moovingtech.com en resend.com/domains (Estado pendiente)`);
+                  continue;
+                }
+              }
+            } else if (sendgridKey) {
+              // 2. Secondary Provider: SendGrid API
               const sgCcObjects = parsedCcStrings.map(email => ({ email }));
               const sendgridPayload: any = {
                 personalizations: [
@@ -1047,9 +1237,7 @@ export const TOOL_REGISTRY = {
                 content: [{ type: 'text/plain', value: d.body }]
               };
 
-              const authHeader = sendgridKey.startsWith('SG.')
-                ? `Bearer ${sendgridKey}`
-                : `Bearer ${sendgridKey}`;
+              const authHeader = `Bearer ${sendgridKey}`;
 
               emailRes = await fetch('https://api.sendgrid.com/v3/mail/send', {
                 method: 'POST',
@@ -1059,15 +1247,48 @@ export const TOOL_REGISTRY = {
                 },
                 body: JSON.stringify(sendgridPayload)
               });
+            } else if (useMailChannels) {
+              // 3. Tertiary Provider: Cloudflare MailChannels (Worker Nativo)
+              const mcCcObjects = parsedCcStrings.map(email => ({ email }));
+              const mailchannelsPayload = {
+                personalizations: [
+                  {
+                    to: [{ email: d.email.trim() }],
+                    ...(mcCcObjects.length > 0 ? { cc: mcCcObjects } : {})
+                  }
+                ],
+                from: {
+                  email: fromEmail.includes('<') ? (fromEmail.match(/<([^>]+)>/)?.[1] || fromEmail) : fromEmail,
+                  name: 'Mónica Aieta - Mooving Tech'
+                },
+                subject: d.subject,
+                content: [{ type: 'text/plain', value: d.body }]
+              };
+
+              emailRes = await fetch('https://api.mailchannels.net/tx/v1/send', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(mailchannelsPayload)
+              });
             }
 
             if (emailRes.ok || emailRes.status === 200 || emailRes.status === 201 || emailRes.status === 202) {
               realEmailsSent++;
-              console.log(`[${providerName}] ✅ Mail sent to ${d.email}`);
+              console.log(`[${currentProvider}] ✅ Mail sent to ${d.email}`);
             } else {
               const errText = await emailRes.text();
-              console.error(`[${providerName}] ❌ Failed for ${d.email}: HTTP ${emailRes.status} — ${errText}`);
-              failedEmails.push(`${d.employee_name} (${d.email}): HTTP ${emailRes.status} ${errText}`);
+              console.error(`[${currentProvider}] ❌ Failed for ${d.email}: HTTP ${emailRes.status} — ${errText}`);
+              
+              let friendlyErr = `HTTP ${emailRes.status}`;
+              if (emailRes.status === 401 && currentProvider.includes('MailChannels')) {
+                friendlyErr = 'Requiere registro TXT DNS (_mailchannels -> v=mc1 cfid=panel-horas-api.aietamonica.workers.dev) en Cloudflare DNS';
+              } else if (emailRes.status === 403) {
+                friendlyErr = 'Dominio de correo no verificado en proveedor transaccional';
+              }
+              
+              failedEmails.push(`${d.employee_name} (${d.email}): ${friendlyErr}`);
             }
           } catch (recipientErr: any) {
             console.error(`[${providerName}] Error sending to ${d.email}:`, recipientErr);
@@ -1090,7 +1311,7 @@ export const TOOL_REGISTRY = {
         new_records: clockifySyncResult.records_inserted || 0,
       } : { synced: false },
       provider: providerName,
-      message: activeApiKey 
+      message: providerName 
         ? (failedEmails.length > 0
           ? `Se enviaron ${realEmailsSent} de ${recipients.length} mails vía ${providerName}. ${failedEmails.length} fallaron: ${failedEmails.join(' — ')}`
           : `Se enviaron exitosamente ${realEmailsSent} recordatorios a través de ${providerName}.`)

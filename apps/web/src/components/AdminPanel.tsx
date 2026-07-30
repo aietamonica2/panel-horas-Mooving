@@ -1,15 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Users, Briefcase, FolderGit2, Tags, Plus, Trash2, Loader2, Edit2, Clock, Mail } from 'lucide-react';
+import { Users, Briefcase, FolderGit2, Tags, Plus, Trash2, Loader2, Edit2, Clock, Mail, Link } from 'lucide-react';
 import { EmailRemindersModal } from './EmailRemindersModal';
 
-type TabType = 'employees' | 'clients' | 'projects' | 'categories';
+type TabType = 'employees' | 'clients' | 'projects' | 'categories' | 'aliases';
 
 export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<TabType>('employees');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
+  const [unlinkedUsers, setUnlinkedUsers] = useState<any[]>([]);
+  const [selectedTargetEmps, setSelectedTargetEmps] = useState<Record<string, string>>({});
   
   const [data, setData] = useState({
     employees: [] as any[],
@@ -21,6 +23,45 @@ export function AdminPanel() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<any>(null);
   const [formData, setFormData] = useState<any>({});
+
+  const fetchUnlinkedUsers = async () => {
+    try {
+      const res = await api.callMcpTool('get_unlinked_external_users', {});
+      const json = await res.json();
+      if (json.success && json.result?.unlinked_users) {
+        setUnlinkedUsers(json.result.unlinked_users);
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleLinkUser = async (identifier: string) => {
+    const targetId = selectedTargetEmps[identifier];
+    if (!targetId) {
+      alert('Por favor selecciona un empleado para vincular.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await api.callMcpTool('link_external_user', {
+        alias_identifier: identifier,
+        target_employee_id: targetId
+      });
+      const json = await res.json();
+      if (!res.ok || !json.success) throw new Error(json.error || 'Error al vincular');
+      
+      alert(json.result?.message || 'Empleado vinculado exitosamente');
+      await fetchUnlinkedUsers();
+      await fetchData();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'Error al vincular empleado.');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -49,6 +90,7 @@ export function AdminPanel() {
 
   useEffect(() => {
     fetchData();
+    fetchUnlinkedUsers();
   }, []);
 
   const handleDelete = async (id: string, type: TabType) => {
@@ -137,6 +179,7 @@ export function AdminPanel() {
     { id: 'clients', name: 'Clientes', icon: Briefcase },
     { id: 'projects', name: 'Proyectos', icon: FolderGit2 },
     { id: 'categories', name: 'Categorías', icon: Tags },
+    { id: 'aliases', name: 'Vinculación de Empleados', icon: Link },
   ];
 
   return (
@@ -202,18 +245,93 @@ export function AdminPanel() {
           </div>
 
           <div className="p-6">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-semibold text-slate-800">
-                Listado de {tabs.find(t => t.id === activeTab)?.name}
-              </h2>
-              <button
-                onClick={openCreateModal}
-                className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Agregar Nuevo
-              </button>
-            </div>
+            {activeTab === 'aliases' ? (
+              <div>
+                <div className="mb-6 bg-indigo-50 p-4 rounded-lg border border-indigo-100">
+                  <h3 className="font-semibold text-indigo-900 flex items-center gap-2 mb-1">
+                    🔗 Vinculación de Identidades Externas (Zendesk / Clockify)
+                  </h3>
+                  <p className="text-xs text-indigo-700">
+                    Si un agente en Zendesk o Clockify ingresa con un mail o nombre diferente al padrón oficial, vinculalo aquí en 1 clic para unificar sus horas bajo la persona correcta.
+                  </p>
+                </div>
+
+                {unlinkedUsers.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-lg border border-slate-200">
+                    <p className="text-emerald-700 font-semibold text-sm">✅ ¡Todos los usuarios externos están 100% vinculados!</p>
+                    <p className="text-xs text-slate-500 mt-1">No hay agentes pendientes de asociar.</p>
+                  </div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-500 text-sm border-b border-slate-200">
+                          <th className="py-3 px-4 font-medium">Identidad Externa / Email</th>
+                          <th className="py-3 px-4 font-medium">Origen</th>
+                          <th className="py-3 px-4 font-medium">Vincular a Empleado Oficial</th>
+                          <th className="py-3 px-4 font-medium text-right">Acción</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 text-sm">
+                        {unlinkedUsers.map((u: any) => {
+                          const identifier = u.employee_id || u.employee_name;
+                          return (
+                            <tr key={identifier} className="hover:bg-slate-50 transition-colors">
+                              <td className="py-3 px-4 font-medium text-slate-800 font-mono text-xs">
+                                {u.employee_name} ({u.employee_id})
+                              </td>
+                              <td className="py-3 px-4">
+                                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                  u.source === 'zendesk' ? 'bg-purple-100 text-purple-800' : 'bg-blue-100 text-blue-800'
+                                }`}>
+                                  {u.source === 'zendesk' ? '🟣 Zendesk' : '🟦 Clockify'}
+                                </span>
+                              </td>
+                              <td className="py-3 px-4">
+                                <select
+                                  value={selectedTargetEmps[identifier] || ''}
+                                  onChange={(e) => setSelectedTargetEmps(prev => ({ ...prev, [identifier]: e.target.value }))}
+                                  className="w-full max-w-xs px-3 py-1.5 bg-white border border-slate-300 rounded-md text-xs text-slate-700 focus:ring-1 focus:ring-indigo-500"
+                                >
+                                  <option value="">-- Seleccionar Empleado Oficial --</option>
+                                  {data.employees.map((emp: any) => (
+                                    <option key={emp.id} value={emp.id}>
+                                      {emp.name} ({emp.email || emp.id})
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-3 px-4 text-right">
+                                <button
+                                  onClick={() => handleLinkUser(identifier)}
+                                  disabled={loading}
+                                  className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded text-xs font-semibold transition disabled:opacity-50"
+                                >
+                                  🔗 Vincular
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-lg font-semibold text-slate-800">
+                    Listado de {tabs.find(t => t.id === activeTab)?.name}
+                  </h2>
+                  <button
+                    onClick={openCreateModal}
+                    className="flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
+                  >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Agregar Nuevo
+                  </button>
+                </div>
 
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -271,9 +389,11 @@ export function AdminPanel() {
                 </tbody>
               </table>
             </div>
-          </div>
-        </div>
+          </>
+        )}
       </div>
+    </div>
+  </div>
 
       {/* Modal Form */}
       {isModalOpen && (

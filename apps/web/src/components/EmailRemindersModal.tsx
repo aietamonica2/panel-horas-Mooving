@@ -129,6 +129,7 @@ export function EmailRemindersModal({ isOpen, onClose }: EmailRemindersModalProp
         recipients: selectedIds,
         custom_cc: ccList,
         month,
+        sync_clockify_first: false,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al enviar recordatorios.');
