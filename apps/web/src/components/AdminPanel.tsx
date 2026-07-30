@@ -341,6 +341,7 @@ export function AdminPanel() {
                     <th className="py-3 px-4 font-medium">Nombre</th>
                     {activeTab === 'employees' && <th className="py-3 px-4 font-medium">Email</th>}
                     {activeTab === 'employees' && <th className="py-3 px-4 font-medium">Estado</th>}
+                    {activeTab === 'employees' && <th className="py-3 px-4 font-medium">Capacidad Diaria</th>}
                     {activeTab === 'projects' && <th className="py-3 px-4 font-medium">Client ID</th>}
                     <th className="py-3 px-4 font-medium text-right">Acciones</th>
                   </tr>
@@ -358,6 +359,11 @@ export function AdminPanel() {
                           }`}>
                             {item.is_active === 0 ? 'Fuera de la org.' : 'Activo'}
                           </span>
+                        </td>
+                      )}
+                      {activeTab === 'employees' && (
+                        <td className="py-3 px-4 font-semibold text-slate-700">
+                          {item.daily_hours_expected ?? 8}h / día
                         </td>
                       )}
                       {activeTab === 'projects' && <td className="py-3 px-4 text-slate-500 font-mono text-xs">{item.client_id}</td>}
@@ -445,6 +451,27 @@ export function AdminPanel() {
                       <option value={1}>Activo (En la organización)</option>
                       <option value={0}>Fuera de la organización (Exempleado)</option>
                     </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-1 flex justify-between">
+                      <span>Carga Horaria Diaria Esperada:</span>
+                      <span className="font-bold text-indigo-600">{formData.daily_hours_expected ?? 8}h / día</span>
+                    </label>
+                    <input
+                      type="range"
+                      min="0"
+                      max="8"
+                      step="0.5"
+                      value={formData.daily_hours_expected ?? 8}
+                      onChange={e => setFormData({ ...formData, daily_hours_expected: parseFloat(e.target.value) })}
+                      className="w-full h-2 bg-indigo-100 rounded-lg appearance-none cursor-pointer accent-indigo-600"
+                    />
+                    <div className="flex justify-between text-xs text-slate-400 mt-1 font-medium">
+                      <span>0h (Licencia/0h)</span>
+                      <span>4h (Part-time)</span>
+                      <span>8h (Full-time)</span>
+                    </div>
                   </div>
                 </>
               )}

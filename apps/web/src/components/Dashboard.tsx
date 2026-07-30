@@ -65,6 +65,7 @@ export const Dashboard: React.FC = () => {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<any | null>(null)
   const [currentPage, setCurrentPage] = useState<number>(1)
+  const [employeeCapacities, setEmployeeCapacities] = useState<Record<string, number>>({})
   const pageSize = 15
 
   const filteredRecords = getFilteredRecords()
@@ -564,7 +565,7 @@ export const Dashboard: React.FC = () => {
 
         {/* Availability Metrics */}
         {filteredRecords.length > 0 && (
-          <AvailabilityMetrics records={filteredRecords} />
+          <AvailabilityMetrics records={filteredRecords} employeeCapacities={employeeCapacities} />
         )}
 
         {/* Distribution Tables */}
@@ -591,7 +592,7 @@ export const Dashboard: React.FC = () => {
         {/* Employee Workload Breakdown - NEW in Phase 2 */}
         {records.length > 0 && (
           <div className="mt-8">
-            <EmployeeWorkloadBreakdown records={filteredRecords} />
+            <EmployeeWorkloadBreakdown records={filteredRecords} employeeCapacities={employeeCapacities} />
           </div>
         )}
 

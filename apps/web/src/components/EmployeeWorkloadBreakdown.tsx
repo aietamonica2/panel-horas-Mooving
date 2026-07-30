@@ -8,6 +8,7 @@ import { TimeRecord } from '../types'
 
 interface EmployeeWorkloadBreakdownProps {
   records: TimeRecord[]
+  employeeCapacities?: Record<string, number> // employee_id -> daily_hours_expected
 }
 
 const MOOVING_COLORS = {
@@ -21,7 +22,7 @@ const MOOVING_COLORS = {
 
 const COLORS = ['#1a5f7a', '#f97316', '#10b981', '#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4']
 
-export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps> = ({ records }) => {
+export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps> = ({ records, employeeCapacities = {} }) => {
   if (records.length === 0) {
     return (
       <div className="bg-white rounded-xl shadow-md p-8 text-center">
@@ -30,6 +31,9 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
     )
   }
 
+  // Get unique dates
+  const uniqueDatesCount = new Set(records.map(r => r.date)).size || 1
+
   // Get unique employees
   const uniqueEmployees = Array.from(new Set(
     records.map(r => r.employee_name)
@@ -37,97 +41,134 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
 
   // Build breakdown for each employee
   const getEmployeeBreakdown = (empName: string) => {
-    const empRecords = records.filter(r => r.employee_name === empName && r.work_type === 'project')
+    const empRecords = records.filter(r => r.employee_name === empName)
+    const empId = empRecords[0]?.employee_id || ''
+    const dailyExpected = employeeCapacities[empId] !== undefined ? employeeCapacities[empId] : 8.0
+    const expectedPeriodHours = dailyExpected * uniqueDatesCount
 
+    const projectRecords = empRecords.filter(r => r.work_type === 'project')
     const breakdown: { [client: string]: number } = {}
-    empRecords.forEach(r => {
+    projectRecords.forEach(r => {
       const key = r.client_name || 'Sin Cliente'
       breakdown[key] = (breakdown[key] || 0) + r.duration_decimal
     })
 
-    const total = Object.values(breakdown).reduce((sum, h) => sum + h, 0)
+    const totalLoggedAll = empRecords.reduce((sum, r) => sum + r.duration_decimal, 0)
+    const totalProject = Object.values(breakdown).reduce((sum, h) => sum + h, 0)
+    const complianceRate = expectedPeriodHours > 0 ? (totalLoggedAll / expectedPeriodHours) * 100 : 0
+
+    let statusColor = 'bg-red-100 text-red-800 border-red-300'
+    let statusIcon = '🔴 Red'
+    let statusLabel = 'Baja Carga (<70%)'
+    if (complianceRate >= 90) {
+      statusColor = 'bg-emerald-100 text-emerald-800 border-emerald-300'
+      statusIcon = '🟢 Verde'
+      statusLabel = 'Óptimo (≥90%)'
+    } else if (complianceRate >= 70) {
+      statusColor = 'bg-amber-100 text-amber-800 border-amber-300'
+      statusIcon = '🟡 Amarillo'
+      statusLabel = 'Moderado (70-89%)'
+    }
 
     return {
-      breakdown,
-      total,
+      empId,
+      dailyExpected,
+      expectedPeriodHours,
+      totalLoggedAll,
+      totalProject,
+      complianceRate,
+      statusColor,
+      statusIcon,
+      statusLabel,
       items: Object.entries(breakdown)
         .sort((a, b) => b[1] - a[1])
         .map(([client, hours]) => ({
           client,
           hours,
-          percentage: (hours / total) * 100
+          percentage: totalProject > 0 ? (hours / totalProject) * 100 : 0
         }))
     }
   }
 
   return (
     <div className="bg-white rounded-xl shadow-md p-8">
-      <h2 className="text-2xl font-bold mb-2" style={{ color: MOOVING_COLORS.primary }}>
-        💼 Distribución de Carga por Empleado
-      </h2>
-      <p className="text-gray-600 text-sm mb-6">
-        Cómo se distribuyen las horas de cada empleado entre los diferentes clientes/proyectos
-      </p>
+      <div className="flex flex-wrap justify-between items-center mb-6">
+        <div>
+          <h2 className="text-2xl font-bold" style={{ color: MOOVING_COLORS.primary }}>
+            💼 Distribución de Carga y Cumplimiento de Capacidad
+          </h2>
+          <p className="text-gray-600 text-sm mt-1">
+            Análisis de horas esperadas vs registradas por empleado con semáforo de cumplimiento 🟢🟡🔴
+          </p>
+        </div>
+      </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {uniqueEmployees.map((emp, idx) => {
-          const breakdown = getEmployeeBreakdown(emp)
-
-          if (breakdown.total === 0) {
-            return null
-          }
+          const b = getEmployeeBreakdown(emp)
 
           return (
             <div
               key={emp}
-              className="bg-gradient-to-br rounded-lg p-6 border shadow-sm hover:shadow-md transition"
+              className="bg-gradient-to-br rounded-xl p-6 border shadow-sm hover:shadow-md transition flex flex-col justify-between"
               style={{
                 background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
                 borderColor: COLORS[idx % COLORS.length]
               }}
             >
-              <div
-                className="font-bold mb-4 pb-3 border-b-2"
-                style={{
-                  color: COLORS[idx % COLORS.length],
-                  borderColor: COLORS[idx % COLORS.length]
-                }}
-              >
-                {emp}
-              </div>
-
-              <div className="space-y-3 mb-5">
-                {breakdown.items.map((item, itemIdx) => (
-                  <div key={item.client}>
-                    <div className="flex justify-between items-center mb-1">
-                      <span className="text-sm font-medium text-gray-700">{item.client}</span>
-                      <span className="text-sm font-bold" style={{ color: COLORS[itemIdx % COLORS.length] }}>
-                        {item.hours.toFixed(2)}h
-                      </span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="h-full transition-all rounded-full"
-                        style={{
-                          width: `${item.percentage}%`,
-                          backgroundColor: COLORS[itemIdx % COLORS.length]
-                        }}
-                      />
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1 flex justify-between items-center">
-                      <span>{item.percentage.toFixed(1)}% del tiempo</span>
-                    </div>
+              <div>
+                <div className="flex justify-between items-start mb-3 pb-3 border-b-2" style={{ borderColor: COLORS[idx % COLORS.length] }}>
+                  <div>
+                    <h3 className="font-bold text-slate-800 text-base">{emp}</h3>
+                    <span className="text-xs text-slate-500 font-medium">Meta diaria: {b.dailyExpected}h/día</span>
                   </div>
-                ))}
+                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${b.statusColor}`}>
+                    {b.statusIcon} ({b.complianceRate.toFixed(0)}%)
+                  </span>
+                </div>
+
+                {/* Sub-breakdown per client */}
+                <div className="space-y-3 mb-5">
+                  {b.items.map((item, itemIdx) => (
+                    <div key={item.client}>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-medium text-gray-700 truncate max-w-[160px]">{item.client}</span>
+                        <span className="text-xs font-bold" style={{ color: COLORS[itemIdx % COLORS.length] }}>
+                          {item.hours.toFixed(1)}h
+                        </span>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-1.5 overflow-hidden">
+                        <div
+                          className="h-full transition-all rounded-full"
+                          style={{
+                            width: `${item.percentage}%`,
+                            backgroundColor: COLORS[itemIdx % COLORS.length]
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                  {b.items.length === 0 && (
+                    <p className="text-xs text-slate-400 italic">Sin horas de proyectos externos registradas</p>
+                  )}
+                </div>
               </div>
 
-              <div
-                className="bg-white rounded p-3 text-center border-2"
-                style={{ borderColor: COLORS[idx % COLORS.length] }}
-              >
-                <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Total Proyectos</div>
-                <div className="text-2xl font-bold" style={{ color: COLORS[idx % COLORS.length] }}>
-                  {breakdown.total.toFixed(2)}h
+              {/* Bottom capacity comparison */}
+              <div className="bg-white rounded-lg p-3 border border-slate-200 grid grid-cols-3 gap-2 text-center text-xs">
+                <div>
+                  <span className="text-slate-400 font-medium block uppercase text-[10px]">Esperadas</span>
+                  <span className="font-bold text-slate-700 text-sm">{b.expectedPeriodHours.toFixed(0)}h</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block uppercase text-[10px]">Registradas</span>
+                  <span className="font-bold text-indigo-700 text-sm">{b.totalLoggedAll.toFixed(1)}h</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 font-medium block uppercase text-[10px]">Desviación Δ</span>
+                  <span className={`font-bold text-sm ${b.totalLoggedAll >= b.expectedPeriodHours ? 'text-emerald-600' : 'text-amber-600'}`}>
+                    {(b.totalLoggedAll - b.expectedPeriodHours).toFixed(1)}h
+                  </span>
                 </div>
               </div>
             </div>

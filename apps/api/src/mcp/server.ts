@@ -67,20 +67,28 @@ export const TOOL_REGISTRY = {
   },
   create_employee: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { company_id, name, email, is_active } = params;
+    const { company_id, name, email, is_active, daily_hours_expected } = params;
     const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
     const id = 'emp_' + crypto.randomUUID().split('-')[0];
     const active = is_active !== undefined ? (is_active ? 1 : 0) : 1;
-    await db.prepare('INSERT INTO employees (id, company_id, name, email, is_active) VALUES (?, ?, ?, ?, ?)')
-      .bind(id, cid, name, email || null, active).run();
+    const dailyHours = daily_hours_expected !== undefined ? Number(daily_hours_expected) : 8.0;
+    await db.prepare('INSERT INTO employees (id, company_id, name, email, is_active, daily_hours_expected) VALUES (?, ?, ?, ?, ?, ?)')
+      .bind(id, cid, name, email || null, active, dailyHours).run();
     return { success: true, employee_id: id };
   },
   update_employee: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { id, name, email, is_active } = params;
+    const { id, name, email, is_active, daily_hours_expected } = params;
     const active = is_active !== undefined ? (is_active ? 1 : 0) : 1;
-    await db.prepare('UPDATE employees SET name = ?, email = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .bind(name, email || null, active, id).run();
+    let query = 'UPDATE employees SET name = ?, email = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP';
+    const bindParams: any[] = [name, email || null, active];
+    if (daily_hours_expected !== undefined) {
+      query += ', daily_hours_expected = ?';
+      bindParams.push(Number(daily_hours_expected));
+    }
+    query += ' WHERE id = ?';
+    bindParams.push(id);
+    await db.prepare(query).bind(...bindParams).run();
     return { success: true };
   },
   delete_employee: async (params: any, c: HonoContext) => {

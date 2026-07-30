@@ -88,13 +88,47 @@ export const MyTime: React.FC = () => {
     }
   };
 
+  const [dailyCapacity, setDailyCapacity] = useState<number>(8.0);
+
+  useEffect(() => {
+    const loadUserCapacity = async () => {
+      try {
+        const userEmail = localStorage.getItem('mooving_user_email') || '';
+        const userName = userEmail.split('@')[0];
+        const res = await api.callMcpTool('get_employees', {});
+        const data = await res.json();
+        if (data.success && data.result?.employees) {
+          const emp = data.result.employees.find((e: any) => 
+            (e.email && e.email.toLowerCase() === userEmail.toLowerCase()) || 
+            (e.name && e.name.toLowerCase() === userName.toLowerCase())
+          );
+          if (emp && emp.daily_hours_expected !== undefined) {
+            setDailyCapacity(Number(emp.daily_hours_expected));
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+    loadUserCapacity();
+  }, []);
+
   // --- Analíticas Computadas ---
   const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
   const thisMonthRecords = records.filter(r => r.date.startsWith(currentMonth));
   
   const totalHoursThisMonth = thisMonthRecords.reduce((acc, r) => acc + (r.duration_decimal || 0), 0);
-  const expectedHours = 160;
-  const progress = Math.min(100, Math.round((totalHoursThisMonth / expectedHours) * 100));
+  
+  // Dynamic expected hours based on working days (Mon-Fri) in the current month
+  const now = new Date();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+  let workdaysCount = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const dayOfWeek = new Date(now.getFullYear(), now.getMonth(), d).getDay();
+    if (dayOfWeek !== 0 && dayOfWeek !== 6) workdaysCount++;
+  }
+  const expectedHours = workdaysCount * dailyCapacity;
+  const progress = Math.min(100, Math.round((totalHoursThisMonth / (expectedHours || 1)) * 100));
 
   // Datos para el gráfico de Donas (Clientes) - redondeo a 2 decimales para evitar flotantes
   const clientsData = Object.values(

@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-07-30
+
+### Added
+- **Epic 0 — Gestión Dinámica de Capacidad por Empleado (`0015_add_daily_hours_expected.sql`, `AdminPanel.tsx`, `AvailabilityMetrics.tsx`, `EmployeeWorkloadBreakdown.tsx`, `MyTime.tsx`)**:
+  - **Migración D1 `0015`**: Añadida la columna `daily_hours_expected` a la tabla `employees` (con valor por defecto 8h/día, soportando rangos de 0 a 8h).
+  - **Configuración de Carga en Administración (`AdminPanel.tsx`)**: Controles deslizantes (range sliders 0–8h) y columna explícita para ajustar la capacidad esperada individual por empleado.
+  - **Semáforo de Cumplimiento 🟢🟡🔴 (`EmployeeWorkloadBreakdown.tsx`)**: Clasificación automática del rendimiento de carga: 🟢 Óptimo (≥90%), 🟡 Moderado (70–89%), 🔴 Bajo/Riesgo (<70%).
+  - **Cálculo de Desviación Δ y Forecast**: Muestra horas esperadas del período, registradas y desviación para cada trabajador.
+  - **Meta Dinámica Individual (`MyTime.tsx`)**: Cálculo exacto de la meta mensual personal multiplicando las horas diarias esperadas por los días hábiles (Lunes a Viernes) del mes en curso.
+
+### Refactored
+- **Componente Único `WorkTypeTable.tsx` (B9-FIX)** — Creación del componente genérico para renderizar desgloses por tipo de trabajo y eliminación de código duplicado.
+
 ## [1.9.6] - 2026-07-30
 
 ### Fixed

@@ -8,6 +8,7 @@ import { TimeRecord } from '../types'
 
 interface AvailabilityMetricsProps {
   records: TimeRecord[]
+  employeeCapacities?: Record<string, number> // employee_id -> daily_hours_expected
 }
 
 const MOOVING_COLORS = {
@@ -18,7 +19,7 @@ const MOOVING_COLORS = {
   danger: '#ef4444',
 }
 
-export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ records }) => {
+export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ records, employeeCapacities = {} }) => {
   // Calculate metrics
   const calculateMetrics = () => {
     if (records.length === 0) {
@@ -30,28 +31,34 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
         availabilityPercentage: 0,
         teamUtilization: 0,
         employees: 0,
+        totalAvailableHours: 0,
       }
     }
 
     // Get unique dates and employees
     const uniqueDates = new Set(records.map(r => r.date))
-    const uniqueEmployees = new Set(records.map(r => r.employee_id))
+    const uniqueEmployees = Array.from(new Set(records.map(r => r.employee_id)))
 
     const totalHours = records.reduce((sum, r) => sum + r.duration_decimal, 0)
     const workdays = uniqueDates.size
-    const employees = uniqueEmployees.size
+    const employeesCount = uniqueEmployees.length
 
-    // Standard working hours: 8 hours per day
-    const standardHoursPerDay = 8
-    const totalAvailableHours = workdays * employees * standardHoursPerDay
+    // Dynamic available hours calculation based on each employee's expected daily hours
+    let totalAvailableHours = 0
+    uniqueEmployees.forEach(empId => {
+      const expectedDaily = employeeCapacities[empId] !== undefined ? employeeCapacities[empId] : 8
+      totalAvailableHours += workdays * expectedDaily
+    })
+
+    if (totalAvailableHours === 0) totalAvailableHours = workdays * employeesCount * 8 || 1
 
     // Occupancy: hours booked / total available hours
     const occupancyPercentage = (totalHours / totalAvailableHours) * 100
-    const availabilityPercentage = 100 - occupancyPercentage
+    const availabilityPercentage = Math.max(0, 100 - occupancyPercentage)
 
-    // Team utilization: % of team with active assignments
+    // Team utilization: % of team capacity utilized
     const avgHoursPerDay = totalHours / (workdays || 1)
-    const teamUtilization = (employees > 0 ? (totalHours / (workdays * employees * standardHoursPerDay)) * 100 : 0)
+    const teamUtilization = (totalHours / totalAvailableHours) * 100
 
     return {
       totalHours,
@@ -60,7 +67,8 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
       occupancyPercentage,
       availabilityPercentage,
       teamUtilization,
-      employees,
+      employees: employeesCount,
+      totalAvailableHours,
     }
   }
 
