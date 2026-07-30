@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Auditoría de Élite · Panel de Operaciones Mooving</title>
+<style>
+  :root{
+    --azul:#1a5f7a; --azul-d:#134c61; --naranja:#f97316; --naranja-d:#c2570c;
+    --p0:#dc2626; --p1:#ea580c; --p2:#ca8a04; --p3:#0891b2; --ok:#16a34a;
+    --bg:#f4f6f8; --card:#ffffff; --ink:#1f2937; --muted:#6b7280; --line:#e5e7eb;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+  header{background:linear-gradient(135deg,var(--azul),var(--azul-d));color:#fff;padding:28px 24px;box-shadow:0 2px 12px rgba(0,0,0,.15)}
+  header h1{margin:0 0 4px;font-size:1.5rem;letter-spacing:-.01em}
+  header p{margin:0;opacity:.85;font-size:.9rem}
+  .wrap{max-width:1180px;margin:0 auto;padding:24px}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:22px}
+  .kpi{background:var(--card);border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,.08);border-left:4px solid var(--azul)}
+  .kpi .n{font-size:1.9rem;font-weight:700;line-height:1}
+  .kpi .l{font-size:.78rem;color:var(--muted);margin-top:6px;text-transform:uppercase;letter-spacing:.03em}
+  .kpi.p0{border-left-color:var(--p0)} .kpi.ok{border-left-color:var(--ok)} .kpi.orange{border-left-color:var(--naranja)}
+  .bars{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:22px}
+  @media(max-width:760px){.bars{grid-template-columns:1fr}}
+  .panel{background:var(--card);border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .panel h2{margin:0 0 14px;font-size:1rem;color:var(--azul)}
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:9px;font-size:.85rem}
+  .row .lbl{width:120px;color:var(--muted);flex-shrink:0}
+  .track{flex:1;background:#eef1f4;border-radius:6px;height:16px;overflow:hidden}
+  .fill{height:100%;border-radius:6px}
+  .row .v{width:34px;text-align:right;font-weight:600}
+  .controls{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;align-items:center}
+  .controls .grp{display:flex;gap:6px;flex-wrap:wrap}
+  button.f{border:1px solid var(--line);background:#fff;color:var(--ink);padding:6px 12px;border-radius:20px;font-size:.8rem;cursor:pointer;transition:.15s}
+  button.f:hover{border-color:var(--azul)}
+  button.f.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+  table{width:100%;border-collapse:collapse;background:var(--card);border-radius:12px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  th,td{text-align:left;padding:11px 12px;font-size:.84rem;border-bottom:1px solid var(--line);vertical-align:top}
+  th{background:var(--azul);color:#fff;position:sticky;top:0;font-weight:600;font-size:.76rem;text-transform:uppercase;letter-spacing:.03em}
+  tbody tr:hover{background:#f9fafb}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:.72rem;font-weight:700;color:#fff;white-space:nowrap}
+  .b-p0{background:var(--p0)} .b-p1{background:var(--p1)} .b-p2{background:var(--p2)} .b-p3{background:var(--p3)}
+  .st{display:inline-block;padding:2px 9px;border-radius:6px;font-size:.72rem;font-weight:600;white-space:nowrap}
+  .st-done{background:#dcfce7;color:#15803d} .st-todo{background:#e0f2fe;color:#0369a1} .st-defer{background:#fef3c7;color:#92400e}
+  .idc{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:700;color:var(--azul);white-space:nowrap}
+  .dim{font-size:.72rem;color:var(--muted)}
+  footer{max-width:1180px;margin:8px auto 30px;padding:0 24px;color:var(--muted);font-size:.78rem}
+  .legend{font-size:.75rem;color:var(--muted);margin-top:6px}
+  .count{font-size:.8rem;color:var(--muted);margin-left:auto}
+  .note{background:#fff7ed;border:1px solid #fed7aa;border-radius:10px;padding:12px 16px;font-size:.83rem;margin-bottom:22px;color:#7c2d12}
+</style>
+</head>
+<body>
+<header>
+  <h1>Auditoría de Élite · Panel de Operaciones Mooving</h1>
+  <p>Estado del sistema, hallazgos y backlog de remediación · 30 de julio de 2026 · <strong>v2.2.3</strong> (reconciliada; auditoría inicial sobre v1.9.1)</p>
+</header>
+<div class="wrap">
+
+  <div class="kpis" id="kpis"></div>
+
+  <div class="note">
+    <strong>Reconciliado contra v2.2.3:</strong> la versión en uso (v2.2.3) vive solo en local, 7 commits por delante de GitHub (v1.9.1). Todos los P0/P1 de backend/seguridad/datos siguen vigentes; se agregaron hallazgos del código nuevo (NUEVO-*).
+    &nbsp;·&nbsp; <strong>Login:</strong> no se modifica (se centraliza en otra app) → <span class="st st-defer">Diferido</span>.
+    &nbsp;·&nbsp; <strong>Ya ejecutado sobre v2.2.3:</strong> aislamiento multi-tenant (MT-01) + fix del crash de "Mis Horas" (NUEVO-1), con tests, 35/35 verde y build OK.
+  </div>
+
+  <div class="bars">
+    <div class="panel">
+      <h2>Hallazgos y backlog por severidad</h2>
+      <div id="sevBars"></div>
+      <div class="legend" id="sevLegend"></div>
+    </div>
+    <div class="panel">
+      <h2>Estado de remediación</h2>
+      <div id="statusBars"></div>
+      <div class="legend">Olas de 2 semanas · ver plan de ejecución</div>
+    </div>
+  </div>
+
+  <div class="controls">
+    <div class="grp" id="sevFilters"></div>
+    <div class="grp" id="dimFilters"></div>
+    <span class="count" id="count"></span>
+  </div>
+
+  <table>
+    <thead><tr><th>ID</th><th>Sev</th><th>Dimensión</th><th>Hallazgo</th><th>Esf.</th><th>Estado</th><th>Ola</th></tr></thead>
+    <tbody id="tbody"></tbody>
+  </table>
+
+</div>
+<footer>
+  Generado por la auditoría de élite (Seguridad · Arquitectura · Funcional · UX · Datos). Evidencia completa en <code>01_AUDITORIA_CONSOLIDADA.md</code>; backlog accionable en <code>02_BACKLOG_PRIORIZADO.md</code>.
+</footer>
+
+<script>
+const D = [
+  ["MT-01","P0","Multi-tenant","company_id en las 8 ops update/delete del MCP","S","done","Hecho"],
+  ["NUEVO-1","P0","UX","Crash de 'Mis Horas' (myRecords sin declarar) en v2.2.3","S","done","Hecho"],
+  ["PROC-01","P1","Arquitectura","v2.2.3 solo en local: 7 commits sin pushear a GitHub","S","todo","Ola 1"],
+  ["NUEVO-2","P1","Seguridad","Nuevos secretos hardcodeados (Mooving321 x3 + API key Clockify)","S","todo","Ola 1"],
+  ["NUEVO-3","P2","Funcional","InactivityAlertBanner siempre alerta a 2 usuarios fijos","S","todo","Ola 3"],
+  ["NUEVO-4","P2","UX","KPI Concentración de Riesgo sobre top-N sin ordenar","S","todo","Ola 2"],
+  ["NUEVO-5","P2","Funcional","Contratos: bolsa mensual vs consumo multi-mes (% inflado)","M","todo","Ola 2"],
+  ["NUEVO-6","P2","Seguridad","ExportExcel: CSV sin protección de inyección de fórmulas","S","todo","Ola 3"],
+  ["NUEVO-7","P2","Multi-tenant","link_external_user reasigna registros con LIKE %...%","M","todo","Ola 2"],
+  ["NUEVO-8","P2","Datos","is_billable/source no están en el tipo TimeRecord","S","todo","Ola 2"],
+  ["NUEVO-9","P3","Arquitectura","Migración 0015 no idempotente + drift de schema.sql","S","todo","Ola 2"],
+  ["NUEVO-10","P3","Arquitectura","Test fantasma zendesk_and_filters (sin import de src/)","S","todo","Ola 3"],
+  ["NUEVO-11","P3","UX","JOIN sin tenant, capacidad sesgada, dark mode roto, clases TW v4","M","todo","Ola 3"],
+  ["SEC-06","P0","Seguridad","Secretos reales (sk_live_, tokens) commiteados — rotar","S","todo","Ola 1"],
+  ["SEC-01","P0","Seguridad","Endpoints MCP sin autenticación ni permisos","M","todo","Ola 1"],
+  ["SEC-02","P0","Seguridad","Bypass de auth en producción (ENVIRONMENT=development)","S","todo","Ola 1"],
+  ["SEC-03","P0","Seguridad","Control de acceso por rol es client-side (localStorage)","M","todo","Ola 1"],
+  ["DATA-01","P0","Datos","Importador CSV incompatible con el formato real","M","todo","Ola 1"],
+  ["DATA-02","P0","Datos","work_type mal inferido: reuniones/capacitaciones en 0","M","todo","Ola 1"],
+  ["UX-01","P0","UX","'Mis Horas' muestra datos de toda la empresa","S","todo","Ola 1"],
+  ["SEC-04","P0","Seguridad","Backdoors de password / texto plano","M","defer","Login"],
+  ["SEC-05","P0","Seguridad","Fallback de JWT_SECRET a valor público","S","defer","Login"],
+  ["SEC-07","P1","Seguridad","RBAC de backend mockeado (admin hardcodeado)","S","todo","Ola 1"],
+  ["MT-02","P1","Multi-tenant","company_id tomado del body del request","S","todo","Ola 1"],
+  ["DATA-03","P1","Datos","Re-importar reintroduce cliente 'Interno' fusionado","S","todo","Ola 2"],
+  ["DATA-04","P1","Datos","Solapamiento de los 2 CSV → doble conteo","S","todo","Ola 2"],
+  ["DATA-05","P1","Datos","Nombres inconsistentes + validación todo-o-nada","M","todo","Ola 2"],
+  ["FUNC-01","P1","Funcional","Políticas del Manual no se validan en el servidor","M","todo","Ola 2"],
+  ["FUNC-02","P1","Funcional","Ocupación cuenta vacaciones/licencias como trabajo","S","todo","Ola 2"],
+  ["FEAT-01","P1","Funcional","Rol Coordinador con scope RACI (no existe)","L","todo","Ola 2"],
+  ["FEAT-02","P1","Funcional","Bandeja de aprobación de horas","M","todo","Ola 2"],
+  ["FEAT-04","P1","Funcional","Panel C-level con dinero real (USD)","M","todo","Ola 2"],
+  ["ARCH-01","P1","Arquitectura","Docs describen Vue; la app es React; falta AGENTS.md","S","todo","Ola 2"],
+  ["ARCH-02","P1","Arquitectura","Versionado incoherente (6 fuentes en desacuerdo)","S","todo","Ola 2"],
+  ["ARCH-03","P1","Arquitectura","Cadena de migraciones D1 rota / schema triplicado","M","todo","Ola 2"],
+  ["ARCH-04","P1","Arquitectura","Re-renders en cascada; bundle 828KB sin split","M","todo","Ola 2"],
+  ["UX-02","P1","UX","alert()/confirm() nativos (prohibidos)","S","todo","Ola 2"],
+  ["UX-03","P1","UX","EditRecordModal viola Reglas de Hooks (riesgo de crash)","S","todo","Ola 2"],
+  ["UX-04","P1","UX","Marca inconsistente: UI en indigo, no azul Mooving","M","todo","Ola 2"],
+  ["SEC-08","P1","Seguridad","Login sin rate limiting","S","defer","Login"],
+  ["DATA-06","P2","Datos","Se pierden USD/grupo/equipo; is_billable no se guarda","M","todo","Ola 2"],
+  ["FUNC-03","P2","Funcional","DELETE físico contradice política 'nunca eliminar'","M","todo","Ola 3"],
+  ["FUNC-04","P2","Funcional","send_inactivity_alerts es simulado (no envía)","M","todo","Ola 3"],
+  ["FEAT-05","P2","Funcional","Vista salud de cartera del coordinador (RACI)","M","todo","Ola 3"],
+  ["FEAT-06","P2","Funcional","Pestaña Ejecutivo + tendencias temporales","M","todo","Ola 3"],
+  ["FEAT-07","P2","Funcional","Exportación a Excel/PDF","S","todo","Ola 3"],
+  ["FEAT-08","P2","Funcional","Deep-links contextuales a Senda por rol","S","todo","Ola 3"],
+  ["UX-05","P2","UX","Modales sin ARIA/focus; sin responsive real","M","todo","Ola 3"],
+  ["UX-06","P2","UX","Tablas sin orden/búsqueda/sticky; C-level sin destino","M","todo","Ola 3"],
+  ["UX-07","P2","UX","Color de disponibilidad invertido; KPIs redundantes","S","todo","Ola 3"],
+  ["SEC-10","P2","Seguridad","CORS refleja localhost / fallback permisivo","S","todo","Ola 1"],
+  ["SEC-09","P2","Seguridad","JWT en localStorage (robable vía XSS)","M","defer","Login"],
+  ["ARCH-05","P2","Arquitectura","MCP sin Zod; contexto sin tipar; código muerto","M","todo","Ola 3"],
+  ["ARCH-06","P2","Arquitectura","N+1 de inserts a D1 (sin batch)","S","todo","Ola 3"],
+  ["UX-08","P3","UX","Jerga técnica; términos inconsistentes; datos hardcodeados","S","todo","Ola 3"],
+  ["ARCH-07","P3","Arquitectura","Tests superficiales; 2 convenciones de carpeta","M","todo","Ola 3"],
+  ["SEC-11","P3","Seguridad","wrangler.toml versionado; PII hardcodeada","S","todo","Ola 3"]
+];
+const SEV=["P0","P1","P2","P3"], DIMS=["Seguridad","Multi-tenant","Datos","Funcional","UX","Arquitectura"];
+const SEVCOL={P0:"var(--p0)",P1:"var(--p1)",P2:"var(--p2)",P3:"var(--p3)"};
+let fSev=new Set(), fDim=new Set();
+
+// KPIs
+const done=D.filter(d=>d[5]==="done").length;
+const defer=D.filter(d=>d[5]==="defer").length;
+const p0=D.filter(d=>d[1]==="P0").length;
+document.getElementById("kpis").innerHTML=[
+  ["kpi",D.length,"Ítems (hallazgos + backlog)"],
+  ["kpi p0",p0,"Críticos (P0)"],
+  ["kpi ok",done,"Resueltos"],
+  ["kpi orange",D.length-done-defer,"En backlog activo"],
+  ["kpi","3","Olas de ejecución"],
+].map(k=>`<div class="${k[0]}"><div class="n">${k[1]}</div><div class="l">${k[2]}</div></div>`).join("");
+
+// severity bars
+const sevBars=SEV.map(s=>{const n=D.filter(d=>d[1]===s).length;const pct=Math.round(n/D.length*100);
+  return `<div class="row"><span class="lbl">${s}</span><div class="track"><div class="fill" style="width:${pct}%;background:${SEVCOL[s]}"></div></div><span class="v">${n}</span></div>`}).join("");
+document.getElementById("sevBars").innerHTML=sevBars;
+const p0done=D.filter(d=>d[1]==="P0"&&d[5]==="done").length, p0def=D.filter(d=>d[1]==="P0"&&d[5]==="defer").length;
+document.getElementById("sevLegend").textContent=`Total: ${D.length} ítems · ${p0} P0 (${p0done} resuelto, ${p0def} diferidos por login, ${p0-p0done-p0def} activos)`;
+
+// status bars
+const stMap={done:["Resueltos","var(--ok)"],todo:["En backlog","var(--azul)"],defer:["Diferidos (login)","var(--naranja)"]};
+document.getElementById("statusBars").innerHTML=Object.keys(stMap).map(k=>{
+  const n=D.filter(d=>d[5]===k).length;const pct=Math.round(n/D.length*100);
+  return `<div class="row"><span class="lbl">${stMap[k][0]}</span><div class="track"><div class="fill" style="width:${pct}%;background:${stMap[k][1]}"></div></div><span class="v">${n}</span></div>`}).join("");
+
+// filters
+function chip(txt,set,val,host){const b=document.createElement("button");b.className="f";b.textContent=txt;
+  b.onclick=()=>{set.has(val)?set.delete(val):set.add(val);b.classList.toggle("on");render();};host.appendChild(b);}
+SEV.forEach(s=>chip(s,fSev,s,document.getElementById("sevFilters")));
+DIMS.forEach(d=>chip(d,fDim,d,document.getElementById("dimFilters")));
+
+function stClass(s){return s==="done"?"st-done":s==="defer"?"st-defer":"st-todo"}
+function stTxt(s){return s==="done"?"✓ Resuelto":s==="defer"?"⏸ Diferido":"🔜 Pendiente"}
+function render(){
+  const rows=D.filter(d=>(fSev.size===0||fSev.has(d[1]))&&(fDim.size===0||fDim.has(d[2])));
+  document.getElementById("tbody").innerHTML=rows.map(d=>`<tr>
+    <td class="idc">${d[0]}</td>
+    <td><span class="pill b-${d[1].toLowerCase()}">${d[1]}</span></td>
+    <td class="dim">${d[2]}</td>
+    <td>${d[3]}</td>
+    <td>${d[4]}</td>
+    <td><span class="st ${stClass(d[5])}">${stTxt(d[5])}</span></td>
+    <td class="dim">${d[6]}</td></tr>`).join("");
+  document.getElementById("count").textContent=`${rows.length} de ${D.length} hallazgos`;
+}
+render();
+</script>
+</body>
+</html>
