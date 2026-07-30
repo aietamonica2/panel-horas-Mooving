@@ -63,7 +63,10 @@ export const useDataStore = create<AppState & {
       filtered = filtered.filter(r => state.filters.projects.includes(r.project_id))
     }
     if (state.filters.months.length > 0) {
-      filtered = filtered.filter(r => state.filters.months.includes(r.date.substring(5, 7)))
+      filtered = filtered.filter(r => 
+        state.filters.months.includes(r.date.substring(0, 7)) || 
+        state.filters.months.includes(r.date.substring(5, 7))
+      )
     }
     if (state.filters.workTypes.length > 0) {
       filtered = filtered.filter(r => state.filters.workTypes.includes(r.work_type))

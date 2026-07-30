@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.3] - 2026-07-30
+
+### Fixed
+- **Fix Filtro de Meses YYYY-MM en DataStore (`dataStore.ts`)**:
+  - Corregido el filtro global de registros por mes para evaluar tanto `YYYY-MM` como `MM`, resolviendo el problema donde seleccionar "Julio 2026" devolvía 0 registros.
+
 ## [2.2.2] - 2026-07-30
 
 ### Fixed
