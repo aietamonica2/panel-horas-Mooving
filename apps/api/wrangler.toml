@@ -7,8 +7,12 @@ binding = "DB"
 database_name = "panel-mooving-v1"
 database_id = "4f55653f-0f00-4c7d-bf84-3be78e096bfa"
 
+# The DEPLOYED worker must run as production so the auth middleware never grants
+# admin without a token (SEC-02). For local development, override with
+# ENVIRONMENT=development in apps/api/.dev.vars (git-ignored), which `wrangler dev`
+# loads automatically — do NOT set development here.
 [vars]
-ENVIRONMENT = "development"
+ENVIRONMENT = "production"
 SENDA_BASE_URL = "https://sendaqa.telar.ai/api"
 
 # Scheduled triggers
