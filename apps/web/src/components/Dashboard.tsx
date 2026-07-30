@@ -18,7 +18,9 @@ import { BagOfHoursTable } from './BagOfHoursTable'
 import { AnalyticsCharts } from './AnalyticsCharts'
 import { QuickLogModal } from './QuickLogModal'
 import { EditRecordModal } from './EditRecordModal'
-import { EmailRemindersModal } from './EmailRemindersModal'
+import { ClientContractsSection } from './ClientContractsSection'
+import { ExportExcelButton } from './ExportExcelButton'
+import { InactivityAlertBanner } from './InactivityAlertBanner'
 import { api } from '../api'
 
 const MOOVING_COLORS = {
@@ -126,6 +128,8 @@ export const Dashboard: React.FC = () => {
     clearFilters()
   }
 
+  const [allEmployeesList, setAllEmployeesList] = useState<{ id: string; name: string; is_active?: number }[]>([])
+
   const fetchRecords = async () => {
     try {
       const res = await api.listRecords()
@@ -134,6 +138,16 @@ export const Dashboard: React.FC = () => {
         if (json.success && json.data?.records) {
           useDataStore.setState({ records: json.data.records })
         }
+      }
+      const empRes = await api.callMcpTool('get_employees', {})
+      const empJson = await empRes.json()
+      if (empJson.success && empJson.result?.employees) {
+        setAllEmployeesList(empJson.result.employees)
+        const caps: Record<string, number> = {}
+        empJson.result.employees.forEach((e: any) => {
+          caps[e.id] = e.daily_hours_expected !== undefined ? Number(e.daily_hours_expected) : 8.0
+        })
+        setEmployeeCapacities(caps)
       }
     } catch (err) {
       console.error('Error fetching records:', err)
@@ -300,6 +314,7 @@ export const Dashboard: React.FC = () => {
             <span className="text-xs bg-indigo-200 text-indigo-800 px-3 py-1 rounded-full font-bold uppercase tracking-wider">Modo Integrado</span>
           </div>
           <div className="flex flex-wrap gap-3 mb-6">
+            <ExportExcelButton records={filteredRecords} />
             <button 
               onClick={() => setIsEmailModalOpen(true)}
               className="bg-indigo-600 hover:bg-indigo-700 text-white font-medium py-2 px-5 border border-indigo-700 rounded-lg shadow-sm transition flex items-center gap-2"
@@ -401,6 +416,13 @@ export const Dashboard: React.FC = () => {
             onReset={handleResetFilters}
           />
         )}
+
+        {/* Inactivity Alert Banner (Epic 1) */}
+        <InactivityAlertBanner
+          records={filteredRecords}
+          allEmployees={allEmployeesList}
+          onSendReminder={(name) => handleSendaAction('Envío de Alertas Inactividad')}
+        />
 
         {/* KPIs Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
@@ -614,6 +636,13 @@ export const Dashboard: React.FC = () => {
         {records.length > 0 && (
           <div className="mt-8">
             <BagOfHoursTable records={filteredRecords} />
+          </div>
+        )}
+
+        {/* Client Contracts & Retainers (Epic 4) */}
+        {records.length > 0 && (
+          <div className="mt-8">
+            <ClientContractsSection records={filteredRecords} />
           </div>
         )}
 

@@ -32,20 +32,25 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
     )
   }
 
-  // 1. Monthly hours trend
+  // 1. Monthly hours trend (Total vs Facturables)
   const getMonthlyData = () => {
-    const monthlyMap: { [month: string]: number } = {}
+    const totalMap: { [month: string]: number } = {}
+    const billableMap: { [month: string]: number } = {}
 
     records.forEach(r => {
       const month = r.date.substring(0, 7)
-      monthlyMap[month] = (monthlyMap[month] || 0) + r.duration_decimal
+      totalMap[month] = (totalMap[month] || 0) + r.duration_decimal
+      if (r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')) {
+        billableMap[month] = (billableMap[month] || 0) + r.duration_decimal
+      }
     })
 
-    return Object.entries(monthlyMap)
+    return Object.entries(totalMap)
       .sort()
       .map(([month, hours]) => ({
         month: monthFormat(month),
         horas: hours,
+        facturables: billableMap[month] || 0,
         fill: MOOVING_COLORS.secondary
       }))
   }
@@ -121,16 +126,21 @@ export const AnalyticsCharts: React.FC<AnalyticsChartsProps> = ({ records }) => 
                 borderRadius: '8px',
                 boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
               }}
-              formatter={(value: any) => [`${Number(value).toFixed(2)}h`, 'Horas']}
+              formatter={(value: any, name: any) => [`${Number(value).toFixed(1)}h`, name === 'horas' ? 'Total Horas' : 'Facturables']}
             />
-            <Bar dataKey="horas" fill={MOOVING_COLORS.secondary} radius={[8, 8, 0, 0]} />
+            <Legend />
+            <Bar dataKey="horas" name="Total Horas" fill={MOOVING_COLORS.secondary} radius={[8, 8, 0, 0]} />
+            <Bar dataKey="facturables" name="Horas Facturables" fill={MOOVING_COLORS.success} radius={[8, 8, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
 
-        <div className="mt-6 bg-orange-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.secondary }}>
+        <div className="mt-6 bg-orange-50 rounded-lg p-4 border-l-4 flex justify-between flex-wrap gap-2" style={{ borderColor: MOOVING_COLORS.secondary }}>
           <p className="text-sm text-gray-700">
-            <span className="font-bold" style={{ color: MOOVING_COLORS.secondary }}>Total anual:</span> {monthlyData.reduce((sum, m) => sum + m.horas, 0).toFixed(2)}h
-            <span className="ml-4"><span className="font-bold" style={{ color: MOOVING_COLORS.secondary }}>Promedio/mes:</span> {(monthlyData.reduce((sum, m) => sum + m.horas, 0) / (monthlyData.length || 1)).toFixed(2)}h</span>
+            <span className="font-bold" style={{ color: MOOVING_COLORS.secondary }}>Total acumulado:</span> {monthlyData.reduce((sum, m) => sum + m.horas, 0).toFixed(1)}h
+            <span className="ml-4"><span className="font-bold" style={{ color: MOOVING_COLORS.success }}>Total Facturable:</span> {monthlyData.reduce((sum, m) => sum + m.facturables, 0).toFixed(1)}h</span>
+          </p>
+          <p className="text-sm font-bold text-emerald-800">
+            Facturabilidad Global: {monthlyData.reduce((sum, m) => sum + m.horas, 0) > 0 ? ((monthlyData.reduce((sum, m) => sum + m.facturables, 0) / monthlyData.reduce((sum, m) => sum + m.horas, 0)) * 100).toFixed(1) : '0'}%
           </p>
         </div>
       </div>

@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-07-30
+
+### Added
+- **Epic 4 — Bolsa de Horas & Contratos de Clientes (`ClientContractsSection.tsx`, `0016_client_contracts.sql`)**:
+  - **Migración D1 `0016`**: Creación de la tabla `client_contracts` para gestionar horas contratadas (retainer) por cliente y mes.
+  - **Componente `ClientContractsSection.tsx`**: Visualización de horas consumidas vs contratadas con barra de progreso (🟢 <80%, 🟡 80-95%, 🔴 >95%) y modal para fijar bolsa por cliente.
+  - **Herramientas MCP**: Añadidas `get_client_contracts` y `set_client_contract` para administración de contratos.
+- **Epic 5 — Exportación a Excel (`ExportExcelButton.tsx`)**:
+  - Botón de exportación limpia a CSV/Excel con codificación UTF-8 BOM para soporte completo de caracteres en español y filtros aplicados.
+- **Epic 1 — Alerta de Inactividad de Carga (`InactivityAlertBanner.tsx`)**:
+  - Banner en la parte superior del Dashboard que detecta automáticamente los empleados activos sin registros en el período actual y habilita el envío rápido de recordatorios.
+- **Epic 2 — Vista del Empleado Mejorada (`MyTime.tsx`)**:
+  - Incorporada tarjeta de **Índice de Facturabilidad Personal (%)** y desglose interactivo de horas por Tipo de Trabajo (Proyectos, Reuniones, Interno, Capacitación).
+- **Epic 3 — Tendencia de Facturabilidad Global (`AnalyticsCharts.tsx`)**:
+  - Gráfico de barras dual que compara el total de horas vs. horas facturables mes a mes con cálculo de Facturabilidad Global acumulada.
+- **Epic 7 — Ordenamiento Dinámico por Columna (`DistributionTable.tsx`)**:
+  - Cabeceras interactivas clicables para ordenar de forma ascendente/descendente (🔼 / 🔽) por Nombre, Horas y Cantidad de Registros.
+
 ## [2.0.0] - 2026-07-30
 
 ### Added

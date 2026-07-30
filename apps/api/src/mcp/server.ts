@@ -30,6 +30,30 @@ export const TOOL_REGISTRY = {
     return { success: true };
   },
 
+  get_client_contracts: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { results } = await db.prepare('SELECT * FROM client_contracts WHERE company_id = ?').bind(company_id).all();
+    return { contracts: results || [] };
+  },
+  set_client_contract: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { client_id, month, contracted_hours } = params;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const id = `cnt_${client_id}_${month}`.replaceAll(/[^a-zA-Z0-9_]/g, '_');
+    const hours = Number(contracted_hours || 0);
+
+    await db.prepare(`
+      INSERT INTO client_contracts (id, company_id, client_id, month, contracted_hours, updated_at)
+      VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+      ON CONFLICT(company_id, client_id, month) DO UPDATE SET
+        contracted_hours = excluded.contracted_hours,
+        updated_at = CURRENT_TIMESTAMP
+    `).bind(id, company_id, client_id, month, hours).run();
+
+    return { success: true, contract_id: id };
+  },
+
   get_projects: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';

@@ -139,6 +139,29 @@ export const MyTime: React.FC = () => {
     }, {})
   ).map((c: any) => ({ ...c, value: Math.round(c.value * 100) / 100 })) as any[];
 
+  // Datos de desglose por Tipo de Trabajo (Epic 2)
+  const workTypeLabels: Record<string, string> = {
+    project: '📁 Proyectos',
+    meeting: '💬 Reuniones',
+    internal: '⚙️ Interno',
+    training: '🎓 Capacitación',
+    other: '📌 Otro'
+  };
+
+  const workTypeData = Object.values(
+    thisMonthRecords.reduce((acc: any, r: any) => {
+      const wt = r.work_type || 'project';
+      acc[wt] = acc[wt] || { name: workTypeLabels[wt] || wt, value: 0 };
+      acc[wt].value += r.duration_decimal;
+      return acc;
+    }, {})
+  ).map((w: any) => ({ ...w, value: Math.round(w.value * 100) / 100 })) as any[];
+
+  const billableHours = thisMonthRecords
+    .filter(r => r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project'))
+    .reduce((acc, r) => acc + (r.duration_decimal || 0), 0);
+  const billableRate = totalHoursThisMonth > 0 ? ((billableHours / totalHoursThisMonth) * 100).toFixed(0) : '0';
+
   return (
     <div className="flex-1 bg-slate-50 overflow-auto p-8">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -257,9 +280,28 @@ export const MyTime: React.FC = () => {
                 <div className="w-full bg-indigo-900/50 rounded-full h-2.5 mb-2">
                   <div className="bg-white h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
                 </div>
-                <p className="text-sm text-indigo-200">{progress}% de tu meta mensual</p>
+                <div className="flex justify-between items-center text-sm text-indigo-200 mt-2 font-medium">
+                  <span>{progress}% de meta mensual</span>
+                  <span className="bg-indigo-500/80 px-2 py-0.5 rounded text-white font-bold">{billableRate}% Facturable</span>
+                </div>
               </div>
               <CheckCircle className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" />
+            </div>
+
+            {/* Desglose por Tipo de Trabajo (Epic 2) */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <h3 className="text-gray-800 font-bold mb-3 text-sm">Distribución por Tipo de Trabajo</h3>
+              <div className="space-y-2 text-xs">
+                {workTypeData.map((item, idx) => (
+                  <div key={idx} className="flex justify-between items-center p-2 rounded bg-slate-50 border border-slate-100">
+                    <span className="font-semibold text-slate-700">{item.name}</span>
+                    <span className="font-bold text-indigo-600 font-mono">{item.value.toFixed(1)}h</span>
+                  </div>
+                ))}
+                {workTypeData.length === 0 && (
+                  <p className="text-slate-400 italic text-center py-2">Sin registros en el mes</p>
+                )}
+              </div>
             </div>
 
             <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">

@@ -24,6 +24,18 @@ export const DistributionTable: React.FC<DistributionTableProps> = ({
   title,
   groupBy,
 }) => {
+  const [sortField, setSortField] = React.useState<'name' | 'total' | 'count'>('total')
+  const [sortOrder, setSortOrder] = React.useState<'asc' | 'desc'>('desc')
+
+  const handleSort = (field: 'name' | 'total' | 'count') => {
+    if (sortField === field) {
+      setSortOrder(prev => (prev === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortField(field)
+      setSortOrder('desc')
+    }
+  }
+
   // Aggregate data based on groupBy
   const aggregateData = () => {
     const grouped = new Map<string, { name: string; total: number; count: number }>()
@@ -49,7 +61,16 @@ export const DistributionTable: React.FC<DistributionTableProps> = ({
       grouped.set(key, existing)
     })
 
-    return Array.from(grouped.values()).sort((a, b) => b.total - a.total)
+    const list = Array.from(grouped.values())
+    return list.sort((a, b) => {
+      if (sortField === 'name') {
+        return sortOrder === 'asc' ? a.name.localeCompare(b.name) : b.name.localeCompare(a.name)
+      } else if (sortField === 'count') {
+        return sortOrder === 'asc' ? a.count - b.count : b.count - a.count
+      } else {
+        return sortOrder === 'asc' ? a.total - b.total : b.total - a.total
+      }
+    })
   }
 
   const data = aggregateData()
@@ -70,16 +91,29 @@ export const DistributionTable: React.FC<DistributionTableProps> = ({
         <table className="w-full text-sm">
           <thead style={{ backgroundColor: MOOVING_COLORS.lightBg }}>
             <tr>
-              <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>
+              <th
+                onClick={() => handleSort('name')}
+                className="px-6 py-3 text-left font-semibold cursor-pointer hover:bg-slate-100 transition"
+                style={{ color: MOOVING_COLORS.primary }}
+              >
                 {groupBy === 'client' && 'Cliente'}
                 {groupBy === 'employee' && 'Empleado'}
                 {groupBy === 'project' && 'Proyecto'}
+                {sortField === 'name' ? (sortOrder === 'asc' ? ' 🔼' : ' 🔽') : ''}
               </th>
-              <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>
-                Horas
+              <th
+                onClick={() => handleSort('total')}
+                className="px-6 py-3 text-center font-semibold cursor-pointer hover:bg-slate-100 transition"
+                style={{ color: MOOVING_COLORS.primary }}
+              >
+                Horas {sortField === 'total' ? (sortOrder === 'asc' ? ' 🔼' : ' 🔽') : ''}
               </th>
-              <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>
-                Registros
+              <th
+                onClick={() => handleSort('count')}
+                className="px-6 py-3 text-center font-semibold cursor-pointer hover:bg-slate-100 transition"
+                style={{ color: MOOVING_COLORS.primary }}
+              >
+                Registros {sortField === 'count' ? (sortOrder === 'asc' ? ' 🔼' : ' 🔽') : ''}
               </th>
               <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>
                 % del Total
