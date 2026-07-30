@@ -20,7 +20,8 @@ import { QuickLogModal } from './QuickLogModal'
 import { EditRecordModal } from './EditRecordModal'
 import { ClientContractsSection } from './ClientContractsSection'
 import { ExportExcelButton } from './ExportExcelButton'
-import { InactivityAlertBanner } from './InactivityAlertBanner'
+import { EmployeeComparisonModal } from './EmployeeComparisonModal'
+import { ExecutiveDrilldownModal } from './ExecutiveDrilldownModal'
 import { api } from '../api'
 
 const MOOVING_COLORS = {
@@ -67,6 +68,9 @@ export const Dashboard: React.FC = () => {
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<any | null>(null)
   const [currentPage, setCurrentPage] = useState<number>(1)
+  const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
+  const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false)
+  const [executiveDrilldownType, setExecutiveDrilldownType] = useState<'billable' | 'overhead' | 'risk' | null>(null)
   const [employeeCapacities, setEmployeeCapacities] = useState<Record<string, number>>({})
   const pageSize = 15
 
@@ -278,7 +282,7 @@ export const Dashboard: React.FC = () => {
   ).slice(0, 6)
 
   return (
-    <div style={{ backgroundColor: MOOVING_COLORS.lightBg }} className="min-h-screen relative">
+    <div style={{ backgroundColor: isDarkMode ? '#0f172a' : MOOVING_COLORS.lightBg }} className={`min-h-screen relative transition-colors ${isDarkMode ? 'dark bg-slate-900 text-slate-100' : ''}`}>
       {/* Toast Notification para Senda AI */}
       {aiMessage && (
         <div className="fixed top-6 right-6 z-50 bg-indigo-900 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 transition-all animate-fade-in-down border border-indigo-400">
@@ -294,9 +298,23 @@ export const Dashboard: React.FC = () => {
               <h1 className="text-4xl font-bold">Panel de Operaciones</h1>
               <p className="text-blue-100 mt-1">Mooving • Análisis de Horas y Capacidad</p>
             </div>
-            <div className="text-right">
-              <p className="text-blue-100">{APP_VERSION}</p>
-              <p className="text-sm text-blue-200">{RELEASE_DATE}</p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => setIsCompareModalOpen(true)}
+                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-xs border border-white/20 transition flex items-center gap-1.5"
+              >
+                <span>🔄</span> Comparar Empleados
+              </button>
+              <button
+                onClick={() => setIsDarkMode(!isDarkMode)}
+                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-xs border border-white/20 transition flex items-center gap-1.5"
+              >
+                <span>{isDarkMode ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}</span>
+              </button>
+              <div className="text-right">
+                <p className="text-blue-100 font-bold">{APP_VERSION}</p>
+                <p className="text-xs text-blue-200">{RELEASE_DATE}</p>
+              </div>
             </div>
           </div>
         </div>
@@ -495,8 +513,15 @@ export const Dashboard: React.FC = () => {
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
               {/* Facturabilidad */}
-              <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/5">
-                <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Índice de Facturabilidad</p>
+              <div 
+                onClick={() => setExecutiveDrilldownType('billable')}
+                className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/5 cursor-pointer hover:bg-white/15 transition group"
+                title="Click para ver desglose detallado de horas facturables"
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <p className="text-sm text-gray-400 font-medium uppercase tracking-wider">Índice de Facturabilidad</p>
+                  <span className="text-xs text-indigo-300 opacity-0 group-hover:opacity-100 transition font-semibold">Ver detalle 🔍</span>
+                </div>
                 <div className="flex items-end gap-3">
                   <p className="text-3xl font-bold text-green-400">
                     {totalHours > 0 ? ((filteredRecords.filter(r => r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')).reduce((acc, r) => acc + r.duration_decimal, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
@@ -506,8 +531,15 @@ export const Dashboard: React.FC = () => {
               </div>
 
               {/* Fuga de Capital / Overhead */}
-              <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/5">
-                <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Carga de Overhead</p>
+              <div 
+                onClick={() => setExecutiveDrilldownType('overhead')}
+                className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/5 cursor-pointer hover:bg-white/15 transition group"
+                title="Click para ver desglose detallado de horas no facturables"
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <p className="text-sm text-gray-400 font-medium uppercase tracking-wider">Carga de Overhead</p>
+                  <span className="text-xs text-indigo-300 opacity-0 group-hover:opacity-100 transition font-semibold">Ver detalle 🔍</span>
+                </div>
                 <div className="flex items-end gap-3">
                   <p className="text-3xl font-bold text-red-400">
                     {totalHours > 0 ? (((totalHours - filteredRecords.filter(r => r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')).reduce((acc, r) => acc + r.duration_decimal, 0)) / totalHours) * 100).toFixed(1) : '0.0'}%
@@ -517,8 +549,15 @@ export const Dashboard: React.FC = () => {
               </div>
 
               {/* Cliente Riesgoso / Vampiro */}
-              <div className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/5">
-                <p className="text-sm text-gray-400 font-medium uppercase tracking-wider mb-1">Concentración de Riesgo</p>
+              <div 
+                onClick={() => setExecutiveDrilldownType('risk')}
+                className="bg-white/10 p-4 rounded-lg backdrop-blur-sm border border-white/5 cursor-pointer hover:bg-white/15 transition group"
+                title="Click para ver desglose detallado de horas del cliente concentrado"
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <p className="text-sm text-gray-400 font-medium uppercase tracking-wider">Concentración de Riesgo</p>
+                  <span className="text-xs text-indigo-300 opacity-0 group-hover:opacity-100 transition font-semibold">Ver detalle 🔍</span>
+                </div>
                 <div className="flex items-end gap-3">
                   <p className="text-xl font-bold text-yellow-400 truncate">
                     {[...clientData].sort((a, b) => b.value - a.value)[0]?.name || 'N/A'}
@@ -773,6 +812,20 @@ export const Dashboard: React.FC = () => {
         <QuickLogModal 
           isOpen={isQuickLogOpen} 
           onClose={() => setIsQuickLogOpen(false)} 
+        />
+
+        <EmployeeComparisonModal
+          isOpen={isCompareModalOpen}
+          onClose={() => setIsCompareModalOpen(false)}
+          records={filteredRecords}
+          employees={allEmployeesList}
+        />
+
+        <ExecutiveDrilldownModal
+          isOpen={!!executiveDrilldownType}
+          onClose={() => setExecutiveDrilldownType(null)}
+          type={executiveDrilldownType}
+          records={filteredRecords}
         />
 
         <EditRecordModal

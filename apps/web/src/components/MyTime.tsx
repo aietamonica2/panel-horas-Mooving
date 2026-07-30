@@ -162,6 +162,19 @@ export const MyTime: React.FC = () => {
     .reduce((acc, r) => acc + (r.duration_decimal || 0), 0);
   const billableRate = totalHoursThisMonth > 0 ? ((billableHours / totalHoursThisMonth) * 100).toFixed(0) : '0';
 
+  // Historial personal de 6 meses (Epic 2 - E2-05)
+  const historyData = React.useMemo(() => {
+    const monthlyMap: Record<string, number> = {}
+    myRecords.forEach(r => {
+      const m = r.date.slice(0, 7)
+      monthlyMap[m] = (monthlyMap[m] || 0) + (r.duration_decimal || 0)
+    })
+    return Object.entries(monthlyMap)
+      .sort()
+      .slice(-6)
+      .map(([m, val]) => ({ month: m.slice(5), hours: Math.round(val * 10) / 10 }))
+  }, [myRecords])
+
   return (
     <div className="flex-1 bg-slate-50 overflow-auto p-8">
       <div className="max-w-6xl mx-auto space-y-8">
@@ -286,6 +299,25 @@ export const MyTime: React.FC = () => {
                 </div>
               </div>
               <CheckCircle className="absolute -right-4 -bottom-4 w-32 h-32 text-white/10" />
+            </div>
+
+            {/* Historial 6 Meses (Epic 2 - E2-05) */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-5">
+              <h3 className="text-gray-800 font-bold mb-3 text-sm">Evolución Últimos 6 Meses</h3>
+              <div className="h-32 w-full">
+                {historyData.length > 0 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={historyData} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                      <XAxis dataKey="month" stroke="#94a3b8" tick={{ fontSize: 10 }} />
+                      <YAxis stroke="#94a3b8" tick={{ fontSize: 10 }} />
+                      <RechartsTooltip formatter={(val: number) => [`${val}h`, 'Horas']} />
+                      <Bar dataKey="hours" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center text-xs text-gray-400">Sin historial</div>
+                )}
+              </div>
             </div>
 
             {/* Desglose por Tipo de Trabajo (Epic 2) */}

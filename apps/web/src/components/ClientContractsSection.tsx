@@ -27,6 +27,8 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
   const [loading, setLoading] = useState(false)
   const [editingClient, setEditingClient] = useState<{ id: string; name: string; hours: number } | null>(null)
   const [inputHours, setInputHours] = useState<string>('')
+  const [showOnlyConfigured, setShowOnlyConfigured] = useState<boolean>(true)
+  const [isExpanded, setIsExpanded] = useState<boolean>(true)
 
   const fetchContracts = async () => {
     setLoading(true)
@@ -98,6 +100,12 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
     return null
   }
 
+  const configuredClientsCount = clientData.filter(c => (contractsMap[c.id] || 0) > 0).length
+
+  const displayClients = showOnlyConfigured && configuredClientsCount > 0
+    ? clientData.filter(c => (contractsMap[c.id] || 0) > 0)
+    : clientData
+
   const highRiskClients = clientData.filter(c => {
     const contracted = contractsMap[c.id] || 0
     return contracted > 0 && (c.consumed / contracted) >= 0.8
@@ -105,26 +113,49 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
 
   return (
     <div className="bg-white rounded-xl shadow-md p-6 border-t-4 border-amber-500">
-      <div className="flex flex-wrap justify-between items-center mb-6">
+      <div className="flex flex-wrap justify-between items-center gap-3">
         <div>
-          <h2 className="text-xl font-bold flex items-center gap-2" style={{ color: MOOVING_COLORS.primary }}>
+          <h2 className="text-xl font-bold flex items-center gap-2 cursor-pointer" onClick={() => setIsExpanded(!isExpanded)} style={{ color: MOOVING_COLORS.primary }}>
             <Briefcase className="w-6 h-6 text-amber-500" />
-            Contratos y Bolsas de Horas por Cliente
+            Contratos y Bolsas de Horas por Cliente <span className="text-xs text-slate-400 font-normal">(Opcional)</span>
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            Seguimiento de consumo contra bolsas contratadas por cliente. Alertas al 80% y 95%.
+            Módulo opcional: Seguimiento de abonos/bolsas de horas contratadas ({configuredClientsCount} clientes configurados).
           </p>
         </div>
-        {highRiskClients.length > 0 && (
-          <div className="flex items-center gap-2 bg-amber-50 text-amber-800 border border-amber-200 px-3 py-1.5 rounded-lg text-xs font-semibold animate-pulse">
-            <AlertTriangle className="w-4 h-4 text-amber-600" />
-            {highRiskClients.length} {highRiskClients.length === 1 ? 'cliente superó' : 'clientes superaron'} el 80% de su bolsa
-          </div>
-        )}
+
+        <div className="flex items-center gap-3 flex-wrap">
+          {configuredClientsCount > 0 && (
+            <label className="flex items-center gap-1.5 text-xs text-slate-600 font-medium cursor-pointer bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200">
+              <input
+                type="checkbox"
+                checked={showOnlyConfigured}
+                onChange={e => setShowOnlyConfigured(e.target.checked)}
+                className="rounded border-slate-300 text-amber-600 focus:ring-amber-500"
+              />
+              Solo con contrato activo ({configuredClientsCount})
+            </label>
+          )}
+
+          <button
+            onClick={() => setIsExpanded(!isExpanded)}
+            className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-lg transition"
+          >
+            {isExpanded ? '▼ Ocultar' : '▲ Mostrar'}
+          </button>
+        </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse text-sm">
+      {isExpanded && (
+        <div className="mt-6">
+          {configuredClientsCount === 0 && (
+            <div className="mb-4 bg-amber-50 border border-amber-200 rounded-lg p-4 text-xs text-amber-800 flex items-center justify-between">
+              <span>💡 La mayoría de los clientes no usan bolsa de horas. Podés definir una bolsa contratada a cualquier cliente cuando lo requiera.</span>
+            </div>
+          )}
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse text-sm">
           <thead>
             <tr className="bg-slate-50 text-slate-600 border-b border-slate-200 text-xs font-semibold uppercase tracking-wider">
               <th className="py-3 px-4">Cliente</th>
@@ -136,7 +167,7 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {clientData.map(client => {
+            {displayClients.map(client => {
               const contracted = contractsMap[client.id] || 0
               const percentage = contracted > 0 ? (client.consumed / contracted) * 100 : 0
 
@@ -209,6 +240,8 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
           </tbody>
         </table>
       </div>
+    </div>
+  )}
 
       {/* Modal para editar horas contratadas */}
       {editingClient && (

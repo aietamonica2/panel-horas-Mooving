@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-07-30
+
+### Added
+- **Dark Mode Toggle (Epic 7 - E7-03)**:
+  - Botón selector de tema en la barra superior ("Modo Oscuro" / "Modo Claro") con estilos CSS condicionales oscuros.
+- **Bolsa de Horas Opcional (Epic 4)**:
+  - Rediseño de `ClientContractsSection.tsx` para ser completamente **opcional y desplegable/colapsable**.
+  - Filtro "Solo con contrato activo" habilitado por defecto para no saturar cuando la mayoría de los clientes no tienen abonos contratados.
+- **Comparativa Side-by-Side de Empleados (Epic 1 - E1-07)**:
+  - Componente modal `EmployeeComparisonModal.tsx` para seleccionar 2 empleados y comparar horas totales, % facturable, promedio diario y desglose de clientes top en tiempo real.
+- **Drill-Down Ejecutivo C-Level (Epic 3 - E3-06)**:
+  - Componente modal `ExecutiveDrilldownModal.tsx` interactivo al hacer click en las tarjetas ejecutivas de Facturabilidad, Carga de Overhead o Concentración de Riesgo.
+- **Evolución Histórica de 6 Meses del Empleado (Epic 2 - E2-05)**:
+  - Gráfico de barras en "Mi Tiempo" (`MyTime.tsx`) con la evolución histórica personal de horas cargadas durante los últimos 6 meses.
+
 ## [2.1.0] - 2026-07-30
 
 ### Added
