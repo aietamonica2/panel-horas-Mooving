@@ -19,14 +19,16 @@ export const TOOL_REGISTRY = {
   update_client: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id, name } = params;
-    await db.prepare('UPDATE clients SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .bind(name, id).run();
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    await db.prepare('UPDATE clients SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?')
+      .bind(name, id, company_id).run();
     return { success: true };
   },
   delete_client: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id } = params;
-    await db.prepare('DELETE FROM clients WHERE id = ?').bind(id).run();
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    await db.prepare('DELETE FROM clients WHERE id = ? AND company_id = ?').bind(id, company_id).run();
     return { success: true };
   },
 
@@ -72,14 +74,16 @@ export const TOOL_REGISTRY = {
   update_project: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id, client_id, name } = params;
-    await db.prepare('UPDATE projects SET client_id = ?, name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .bind(client_id, name, id).run();
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    await db.prepare('UPDATE projects SET client_id = ?, name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?')
+      .bind(client_id, name, id, company_id).run();
     return { success: true };
   },
   delete_project: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id } = params;
-    await db.prepare('DELETE FROM projects WHERE id = ?').bind(id).run();
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    await db.prepare('DELETE FROM projects WHERE id = ? AND company_id = ?').bind(id, company_id).run();
     return { success: true };
   },
 
@@ -104,21 +108,23 @@ export const TOOL_REGISTRY = {
     const db = c.env.DB;
     const { id, name, email, is_active, daily_hours_expected } = params;
     const active = is_active !== undefined ? (is_active ? 1 : 0) : 1;
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
     let query = 'UPDATE employees SET name = ?, email = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP';
     const bindParams: any[] = [name, email || null, active];
     if (daily_hours_expected !== undefined) {
       query += ', daily_hours_expected = ?';
       bindParams.push(Number(daily_hours_expected));
     }
-    query += ' WHERE id = ?';
-    bindParams.push(id);
+    query += ' WHERE id = ? AND company_id = ?';
+    bindParams.push(id, company_id);
     await db.prepare(query).bind(...bindParams).run();
     return { success: true };
   },
   delete_employee: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id } = params;
-    await db.prepare('DELETE FROM employees WHERE id = ?').bind(id).run();
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    await db.prepare('DELETE FROM employees WHERE id = ? AND company_id = ?').bind(id, company_id).run();
     return { success: true };
   },
 
@@ -140,14 +146,16 @@ export const TOOL_REGISTRY = {
   update_category: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id, name } = params;
-    await db.prepare('UPDATE categories SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?')
-      .bind(name, id).run();
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    await db.prepare('UPDATE categories SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?')
+      .bind(name, id, company_id).run();
     return { success: true };
   },
   delete_category: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id } = params;
-    await db.prepare('DELETE FROM categories WHERE id = ?').bind(id).run();
+    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    await db.prepare('DELETE FROM categories WHERE id = ? AND company_id = ?').bind(id, company_id).run();
     return { success: true };
   },
 
