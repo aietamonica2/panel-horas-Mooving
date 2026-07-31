@@ -1781,8 +1781,13 @@ export const TOOL_REGISTRY = {
       ? 'Resend API' 
       : (sendgridKey ? 'SendGrid API (v3)' : (useMailChannels ? 'Cloudflare MailChannels (Worker Nativo)' : 'Simulación / Mailto Interactivo'));
     
-    const fromEmail = (c.env.RESEND_FROM_EMAIL || c.env.SENDGRID_FROM_EMAIL || 'no-reply@moovingtech.cloud').trim();
-    const fromName = 'Mónica Aieta - Mooving Tech';
+    // Remitente unificado: preferimos ALERT_FROM_EMAIL (notificaciones@mooving.cloud,
+    // dominio verificado en Resend). RESEND_FROM_EMAIL/SENDGRID quedan sólo como
+    // respaldo. Identidad neutral "Mooving Tech" (ya no un remitente personal).
+    const fromEmailRaw = (c.env.ALERT_FROM_EMAIL || c.env.RESEND_FROM_EMAIL || c.env.SENDGRID_FROM_EMAIL || 'notificaciones@mooving.cloud').trim();
+    const fromEmail = fromEmailRaw.includes('<') ? (fromEmailRaw.match(/<([^>]+)>/)?.[1] || fromEmailRaw) : fromEmailRaw;
+    const fromName = 'Mooving Tech';
+    const fromHeader = `${fromName} <${fromEmail}>`;
     
     let realEmailsSent = 0;
     const failedEmails: string[] = [];
@@ -1819,7 +1824,7 @@ export const TOOL_REGISTRY = {
 
             if (resendKey) {
               // 1. Primary Provider: Resend API (Using moovingtech.cloud domain)
-              const resendFrom = `Mónica Aieta <${fromEmail}>`;
+              const resendFrom = fromHeader;
 
               const resendPayload = {
                 from: resendFrom,
@@ -1843,7 +1848,7 @@ export const TOOL_REGISTRY = {
                 console.warn(`[Resend] Domain ${fromEmail} pending verification (403). Retrying with onboarding@resend.dev...`);
                 const fallbackResendPayload = {
                   ...resendPayload,
-                  from: 'Mónica Aieta <onboarding@resend.dev>'
+                  from: 'Mooving Tech <onboarding@resend.dev>'
                 };
 
                 emailRes = await fetch('https://api.resend.com/emails', {
@@ -1871,8 +1876,8 @@ export const TOOL_REGISTRY = {
                     }
                   ],
                   from: {
-                    email: 'monica.aieta@moovingtech.com',
-                    name: 'Mónica Aieta - Mooving Tech'
+                    email: fromEmail,
+                    name: fromName
                   },
                   subject: d.subject,
                   content: [{ type: 'text/plain', value: d.body }]
@@ -1904,7 +1909,7 @@ export const TOOL_REGISTRY = {
                     subject: d.subject
                   }
                 ],
-                from: { email: fromEmail, name: 'Mónica Aieta - Mooving Tech' },
+                from: { email: fromEmail, name: fromName },
                 content: [{ type: 'text/plain', value: d.body }]
               };
 
@@ -1929,8 +1934,8 @@ export const TOOL_REGISTRY = {
                   }
                 ],
                 from: {
-                  email: fromEmail.includes('<') ? (fromEmail.match(/<([^>]+)>/)?.[1] || fromEmail) : fromEmail,
-                  name: 'Mónica Aieta - Mooving Tech'
+                  email: fromEmail,
+                  name: fromName
                 },
                 subject: d.subject,
                 content: [{ type: 'text/plain', value: d.body }]

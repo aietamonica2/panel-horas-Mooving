@@ -35,7 +35,7 @@ async function sendViaEmailProvider(
 
   try {
     if (cleanResend) {
-      const resendFrom = fromEmail.includes('<') ? fromEmail : `Mónica Aieta <${fromEmail}>`;
+      const resendFrom = fromEmail.includes('<') ? fromEmail : `${fromName} <${fromEmail}>`;
       const resendRes = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: {
@@ -259,7 +259,9 @@ export async function handleEmailRemindersCron(env: Env): Promise<void> {
   const db = env.DB;
   const resendKey = env.RESEND_API_KEY;
   const sendgridKey = env.SENDGRID_API_KEY;
-  const fromEmail = env.RESEND_FROM_EMAIL || env.SENDGRID_FROM_EMAIL || 'Mónica Aieta <onboarding@resend.dev>';
+  // Remitente unificado con el resto del sistema: preferimos ALERT_FROM_EMAIL
+  // (notificaciones@mooving.cloud, dominio verificado en Resend).
+  const fromEmail = env.ALERT_FROM_EMAIL || env.RESEND_FROM_EMAIL || env.SENDGRID_FROM_EMAIL || 'notificaciones@mooving.cloud';
   const clockifyToken = env.CLOCKIFY_API_TOKEN;
 
   if (!resendKey && !sendgridKey) {
@@ -291,7 +293,7 @@ export async function handleEmailRemindersCron(env: Env): Promise<void> {
   for (const setting of settings as any[]) {
     const companyId = setting.company_id;
     const defaultCc = setting.default_cc || '';
-    const fromName = setting.from_name || 'Mónica Aieta - Mooving Tech';
+    const fromName = setting.from_name || 'Mooving Tech';
 
     console.log(`[EmailCron] Processing tenant: ${companyId}`);
 
