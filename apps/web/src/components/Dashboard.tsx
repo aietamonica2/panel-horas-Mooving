@@ -332,6 +332,84 @@ export const Dashboard: React.FC = () => {
     return { totalHours, avgHours, uniqueEmployees, uniqueClients }
   }, [filteredRecords])
 
+  // Etiqueta corta para una clave de mes YYYY-MM → "Jul 2026".
+  const fmtMonthKey = (key: string): string => {
+    const abbr = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
+    const [yy, mm] = (key || '').split('-')
+    const idx = parseInt(mm, 10) - 1
+    return idx >= 0 && idx < 12 ? `${abbr[idx]} ${yy}` : key
+  }
+
+  // E1-03: Comparativa mes vs mes anterior (Δ% de horas del equipo). Agrupa los
+  // registros filtrados por mes (YYYY-MM) y compara los dos meses más recientes
+  // con datos. Devuelve null si hay menos de dos meses en el período filtrado.
+  const monthOverMonth = useMemo(() => {
+    const byMonth = new Map<string, number>()
+    for (const r of filteredRecords) {
+      const m = (r.date || '').slice(0, 7)
+      if (m.length === 7) byMonth.set(m, (byMonth.get(m) || 0) + (r.duration_decimal || 0))
+    }
+    const months = Array.from(byMonth.keys()).sort()
+    if (months.length < 2) return null
+    const curKey = months[months.length - 1]
+    const prevKey = months[months.length - 2]
+    const cur = byMonth.get(curKey) || 0
+    const prev = byMonth.get(prevKey) || 0
+    const deltaPct = prev > 0 ? ((cur - prev) / prev) * 100 : null
+    return { curKey, prevKey, cur, prev, deltaPct }
+  }, [filteredRecords])
+
+  // E0-07 / E3-02: Forecast de cierre del mes en curso. Proyecta el total de
+  // horas al cierre = registradas en el mes + (capacidad diaria del equipo ×
+  // días hábiles restantes, hoy incluido) y lo compara contra la capacidad
+  // esperada del mes completo. Usa la capacidad real por empleado (Epic 0) y
+  // sólo cae a 8h/empleado si aún no se cargaron las capacidades.
+  const forecast = useMemo(() => {
+    const now = new Date()
+    const y = now.getFullYear()
+    const mo = now.getMonth() // 0-based
+    const today = now.getDate()
+    const monthKey = `${y}-${String(mo + 1).padStart(2, '0')}`
+
+    const countBiz = (from: number, to: number) => {
+      let n = 0
+      for (let d = from; d <= to; d++) {
+        const wd = new Date(y, mo, d).getDay() // 0 domingo, 6 sábado
+        if (wd !== 0 && wd !== 6) n++
+      }
+      return n
+    }
+    const daysInMonth = new Date(y, mo + 1, 0).getDate()
+    const totalBiz = countBiz(1, daysInMonth)
+    const remainingBiz = countBiz(today, daysInMonth) // incluye hoy
+
+    const monthRecords = filteredRecords.filter(r => (r.date || '').slice(0, 7) === monthKey)
+    const registered = monthRecords.reduce((s, r) => s + (r.duration_decimal || 0), 0)
+
+    const activeEmps = allEmployeesList.filter(e => e.is_active !== 0)
+    let teamDaily = activeEmps.reduce((s, e) => s + (employeeCapacities[e.id] ?? 8), 0)
+    if (teamDaily <= 0) {
+      const uniq = new Set(monthRecords.map(r => r.employee_id)).size
+      teamDaily = (uniq || new Set(filteredRecords.map(r => r.employee_id)).size) * 8
+    }
+
+    const forecastTotal = registered + teamDaily * remainingBiz
+    const expectedFull = teamDaily * totalBiz
+    const pctOfExpected = expectedFull > 0 ? (forecastTotal / expectedFull) * 100 : null
+
+    return {
+      monthKey,
+      registered,
+      forecastTotal,
+      expectedFull,
+      remainingBiz,
+      totalBiz,
+      teamDaily,
+      pctOfExpected,
+      hasData: monthRecords.length > 0,
+    }
+  }, [filteredRecords, allEmployeesList, employeeCapacities])
+
   const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -683,6 +761,14 @@ export const Dashboard: React.FC = () => {
               <div className="text-4xl">⏱️</div>
             </div>
             <p className="text-xs text-gray-400 mt-4">de {filteredRecords.length} registros</p>
+            {monthOverMonth && monthOverMonth.deltaPct !== null && (
+              <p
+                className={`text-xs mt-1 font-semibold ${monthOverMonth.deltaPct >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-red-600 dark:text-red-400'}`}
+                title={`${fmtMonthKey(monthOverMonth.curKey)}: ${monthOverMonth.cur.toFixed(1)}h · ${fmtMonthKey(monthOverMonth.prevKey)}: ${monthOverMonth.prev.toFixed(1)}h`}
+              >
+                {monthOverMonth.deltaPct >= 0 ? '▲' : '▼'} {Math.abs(monthOverMonth.deltaPct).toFixed(1)}% vs {fmtMonthKey(monthOverMonth.prevKey)}
+              </p>
+            )}
           </div>
 
           {/* Daily Average */}
@@ -727,6 +813,55 @@ export const Dashboard: React.FC = () => {
             <p className="text-xs text-gray-400 mt-4">en cartera</p>
           </div>
         </div>
+
+        {/* Forecast de cierre de mes (E0-07 / E3-02) */}
+        {forecast.hasData && (
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 mb-8 border-l-4" style={{ borderColor: '#6366f1' }}>
+            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+              <div>
+                <p className="text-sm font-semibold text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                  🔮 Proyección de cierre — {fmtMonthKey(forecast.monthKey)}
+                </p>
+                <p className="text-4xl font-bold mt-2" style={{ color: MOOVING_COLORS.primary }}>
+                  {forecast.forecastTotal.toFixed(0)}h
+                  <span className="text-base font-normal text-gray-400"> proyectadas</span>
+                </p>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  {forecast.registered.toFixed(0)}h ya registradas + {(forecast.teamDaily * forecast.remainingBiz).toFixed(0)}h estimadas
+                  {' '}({forecast.remainingBiz} {forecast.remainingBiz === 1 ? 'día hábil restante' : 'días hábiles restantes'}, hoy incluido)
+                </p>
+              </div>
+              <div className="md:text-right">
+                <p className="text-sm text-gray-500 dark:text-gray-300">Capacidad esperada del mes</p>
+                <p className="text-2xl font-bold" style={{ color: MOOVING_COLORS.secondary }}>{forecast.expectedFull.toFixed(0)}h</p>
+                {forecast.pctOfExpected !== null && (
+                  <span
+                    className={`inline-block mt-1 text-xs font-bold px-2 py-0.5 rounded-full ${
+                      forecast.pctOfExpected >= 90
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : forecast.pctOfExpected >= 70
+                          ? 'bg-amber-100 text-amber-800'
+                          : 'bg-red-100 text-red-800'
+                    }`}
+                  >
+                    {forecast.pctOfExpected.toFixed(0)}% de la capacidad esperada
+                  </span>
+                )}
+              </div>
+            </div>
+            {forecast.expectedFull > 0 && (
+              <div className="mt-4 h-2 w-full bg-gray-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                <div
+                  className="h-full rounded-full"
+                  style={{
+                    width: `${Math.min(100, (forecast.forecastTotal / forecast.expectedFull) * 100)}%`,
+                    backgroundColor: '#6366f1',
+                  }}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Executive Insights (C-Level) */}
         {filteredRecords.length > 0 && (
