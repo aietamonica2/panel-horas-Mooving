@@ -328,6 +328,81 @@ export const TOOL_REGISTRY = {
     return { records: results };
   },
   
+  // ---------------------------------------------------------------------------
+  // FEAT-02 — Flujo de aprobación de horas (approval workflow).
+  // Todas derivan `company_id` del principal autenticado (nunca del body) para
+  // preservar el aislamiento multi-tenant (MT-02: tenant-from-principal).
+  // ---------------------------------------------------------------------------
+
+  get_pending_time_records: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { employee_id, month } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+    let query = "SELECT * FROM time_records WHERE company_id = ? AND status = 'pending'";
+    const queryParams: any[] = [company_id];
+
+    if (employee_id) {
+      query += ' AND employee_id = ?';
+      queryParams.push(employee_id);
+    }
+    if (month) {
+      query += ' AND strftime("%Y-%m", date) = ?';
+      queryParams.push(month);
+    }
+
+    query += ' ORDER BY date DESC';
+
+    const { results } = await db.prepare(query).bind(...queryParams).all();
+    return { records: results || [], count: (results || []).length };
+  },
+
+  approve_time_record: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+    await db.prepare("UPDATE time_records SET status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?")
+      .bind(id, company_id).run();
+    return { success: true };
+  },
+
+  reject_time_record: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id, reason } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+    // La tabla time_records (esquema en migración 0004 + columnas de 0017) NO tiene
+    // una columna dedicada para el motivo de rechazo. Para no inventar esquema:
+    // si viene `reason`, lo anexamos al final de `description` (" [Rechazado: <reason>]");
+    // si no viene, se hace el UPDATE simple. En ambos caminos se mantiene el scope
+    // de tenant (WHERE id = ? AND company_id = ?).
+    if (reason) {
+      await db.prepare("UPDATE time_records SET status = 'rejected', description = COALESCE(description, '') || ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?")
+        .bind(` [Rechazado: ${reason}]`, id, company_id).run();
+    } else {
+      await db.prepare("UPDATE time_records SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?")
+        .bind(id, company_id).run();
+    }
+    return { success: true };
+  },
+
+  approve_all_pending: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { employee_id } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+    let query = "UPDATE time_records SET status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE status = 'pending' AND company_id = ?";
+    const queryParams: any[] = [company_id];
+
+    if (employee_id) {
+      query += ' AND employee_id = ?';
+      queryParams.push(employee_id);
+    }
+
+    const res = await db.prepare(query).bind(...queryParams).run();
+    return { success: true, approved_count: res?.meta?.changes ?? 0 };
+  },
+
   get_availability_metrics: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { month } = params;

@@ -11,6 +11,10 @@ import { validateTimeRecord } from '../lib/policyValidation'
 
 export const dataRouter = new Hono()
 
+// DATA_API_VERSION: única fuente de verdad para el campo `version` de las
+// respuestas de este router. Mantener en sync con /VERSION (raíz del repo).
+const DATA_API_VERSION = 'v2.2.4'
+
 // Validation schema for time records
 const TimeRecordSchema = z.object({
   employee_id: z.string().min(1),
@@ -109,7 +113,7 @@ dataRouter.post(
           company_id,
         },
         timestamp: new Date().toISOString(),
-        version: 'v1.0.0',
+        version: DATA_API_VERSION,
       }
       return c.json(response)
     } catch (error) {
@@ -118,7 +122,7 @@ dataRouter.post(
         success: false,
         error: 'Error interno',
         timestamp: new Date().toISOString(),
-        version: 'v1.0.0',
+        version: DATA_API_VERSION,
       }, 400)
     }
   }
@@ -163,7 +167,7 @@ dataRouter.post(
         success: true,
         data: { id, message: 'Registro creado exitosamente' },
         timestamp: new Date().toISOString(),
-        version: 'v1.0.0'
+        version: DATA_API_VERSION
       })
     } catch (error) {
       console.error(error)
@@ -203,7 +207,7 @@ dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
         limit: parseInt(limit),
       },
       timestamp: new Date().toISOString(),
-      version: 'v1.0.0',
+      version: DATA_API_VERSION,
     }
     return c.json(response)
   } catch (error) {
@@ -212,7 +216,7 @@ dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
       success: false,
       error: 'Error interno',
       timestamp: new Date().toISOString(),
-      version: 'v1.0.0',
+      version: DATA_API_VERSION,
     }, 500)
   }
 })
@@ -248,7 +252,7 @@ dataRouter.put(
         id, company_id
       ).run()
 
-      return c.json({ success: true, timestamp: new Date().toISOString(), version: 'v1.0.0' })
+      return c.json({ success: true, timestamp: new Date().toISOString(), version: DATA_API_VERSION })
     } catch (error) {
       console.error(error)
       return c.json({ success: false, error: 'Error interno' }, 500)
@@ -280,7 +284,7 @@ dataRouter.delete('/records/:id', async (c: HonoContext): Promise<Response> => {
     }
 
     await c.env.DB.prepare('DELETE FROM time_records WHERE id = ? AND company_id = ?').bind(id, company_id).run()
-    return c.json({ success: true, timestamp: new Date().toISOString(), version: 'v1.0.0' })
+    return c.json({ success: true, timestamp: new Date().toISOString(), version: DATA_API_VERSION })
   } catch (error) {
     console.error(error)
     return c.json({ success: false, error: 'Error interno' }, 500)

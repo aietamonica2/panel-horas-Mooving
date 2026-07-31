@@ -10,6 +10,7 @@ import { MyTime } from './components/MyTime'
 import { Sidebar } from './components/Sidebar'
 import { Documentation } from './components/Documentation'
 import { AdminPanel } from './components/AdminPanel'
+import { ApprovalQueue } from './components/ApprovalQueue'
 
 declare global {
   namespace JSX {
@@ -28,7 +29,7 @@ export function App() {
   const userName = localStorage.getItem('mooving_user_name') || 'Usuario'
   const isAdmin = userRole === 'admin'
   
-  const [currentView, setCurrentView] = useState<'dashboard' | 'mytime' | 'documentation' | 'admin'>(isAdmin ? 'dashboard' : 'mytime')
+  const [currentView, setCurrentView] = useState<'dashboard' | 'mytime' | 'documentation' | 'admin' | 'approvals'>(isAdmin ? 'dashboard' : 'mytime')
 
   const handleLogout = () => {
     localStorage.removeItem('mooving_auth')
@@ -60,6 +61,7 @@ export function App() {
         {currentView === 'mytime' && <MyTime />}
         {currentView === 'documentation' && <Documentation />}
         {currentView === 'admin' && isAdmin && <AdminPanel />}
+        {currentView === 'approvals' && isAdmin && <ApprovalQueue />}
       </div>
 
       {/* Senda Chat Widget Integration */}

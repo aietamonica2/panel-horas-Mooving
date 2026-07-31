@@ -5,6 +5,7 @@
 
 import { create } from 'zustand'
 import { AppState, TimeRecord, Employee, Client, FilterState } from '../types'
+import { APP_VERSION } from '../version'
 
 const initialState: AppState = {
   records: [],
@@ -21,7 +22,7 @@ const initialState: AppState = {
   },
   isLoading: false,
   error: null,
-  version: 'v1.0.0',
+  version: APP_VERSION,
 }
 
 export const useDataStore = create<AppState & {
