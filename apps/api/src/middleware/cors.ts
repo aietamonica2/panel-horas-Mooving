@@ -1,6 +1,14 @@
 /**
  * CORS middleware
- * Handles cross-origin requests from frontend
+ * Handles cross-origin requests from frontend.
+ *
+ * Hardening (SEC-10):
+ *  - The production frontend origins (the *.pages.dev list) are always allowed.
+ *  - http://localhost:* is reflected ONLY when ENVIRONMENT === 'development'.
+ *  - Unknown origins receive NO Access-Control-Allow-Origin header — there is no
+ *    permissive `allowedOrigins[0]` fallback.
+ *  - The specific origin is reflected (never a `*` wildcard) and is never paired
+ *    with Access-Control-Allow-Credentials.
  */
 
 import { Context, Next } from 'hono'
@@ -9,19 +17,24 @@ import { HonoContext } from '../types'
 export const cors = async (c: HonoContext, next: Next) => {
   const origin = c.req.header('Origin') || ''
   
+  // Production frontend origins — the real deployed frontend. Do NOT remove these.
   const allowedOrigins = [
     'https://panel-horas-web.pages.dev',
-    'https://panel-horas-mooving.pages.dev',
-    'http://localhost:5173',
-    'http://localhost:4173'
+    'https://panel-horas-mooving.pages.dev'
   ]
 
-  // Allow localhost unconditionally for dev, but in production enforce allowedOrigins
-  if (allowedOrigins.includes(origin) || origin.startsWith('http://localhost:')) {
+  const isDevelopment = c.env?.ENVIRONMENT === 'development'
+
+  // Reflect the request Origin ONLY when it is explicitly allowed: a known
+  // production origin (always), or any http://localhost:* origin but ONLY in
+  // development. Unknown origins get NO Access-Control-Allow-Origin header —
+  // there is no permissive `allowedOrigins[0]` fallback.
+  if (
+    allowedOrigins.includes(origin) ||
+    (isDevelopment && origin.startsWith('http://localhost:'))
+  ) {
     c.header('Access-Control-Allow-Origin', origin)
-  } else {
-    // Fallback or deny - for now just set to the first allowed origin or omit
-    c.header('Access-Control-Allow-Origin', allowedOrigins[0])
+    c.header('Vary', 'Origin')
   }
 
   c.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')

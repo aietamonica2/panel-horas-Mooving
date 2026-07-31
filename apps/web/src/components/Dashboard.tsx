@@ -270,7 +270,7 @@ export const Dashboard: React.FC = () => {
       acc.set(key, existing)
       return acc
     }, new Map()).values()
-  ).slice(0, 8)
+  ).sort((a, b) => b.horas - a.horas).slice(0, 8)
 
   // Chart data - Distribution by client
   const clientData = Array.from(
@@ -281,7 +281,7 @@ export const Dashboard: React.FC = () => {
       acc.set(key, existing)
       return acc
     }, new Map()).values()
-  ).slice(0, 6)
+  ).sort((a, b) => b.value - a.value).slice(0, 6)
 
   return (
     <div style={{ backgroundColor: isDarkMode ? '#0f172a' : MOOVING_COLORS.lightBg }} className={`min-h-screen relative transition-colors ${isDarkMode ? 'dark bg-slate-900 text-slate-100' : ''}`}>

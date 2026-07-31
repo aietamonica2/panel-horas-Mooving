@@ -643,10 +643,12 @@ export const TOOL_REGISTRY = {
     const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
 
     // Query time_records with external sources (zendesk/clockify) that don't match any employee ID in employees table
+    // Tenant-scoped JOIN: match only employees of the same company_id so a homonym
+    // in another tenant cannot make a genuinely-unlinked user look linked (or vice versa).
     const { results } = await db.prepare(`
       SELECT DISTINCT tr.employee_id, tr.employee_name, tr.source
       FROM time_records tr
-      LEFT JOIN employees e ON tr.employee_id = e.id OR tr.employee_name = e.name
+      LEFT JOIN employees e ON (tr.employee_id = e.id OR tr.employee_name = e.name) AND e.company_id = tr.company_id
       WHERE tr.company_id = ? AND tr.source IN ('zendesk', 'clockify') AND e.id IS NULL
     `).bind(company_id).all();
 
@@ -681,20 +683,31 @@ export const TOOL_REGISTRY = {
     const aliasEmail = alias_identifier.includes('@') ? alias_identifier.toLowerCase().trim() : '';
     const aliasName = alias_identifier;
 
-    // Save alias mapping
+    // Save alias mapping — dedupe by (company_id, alias). The employee_aliases table
+    // (migration 0014) has no UNIQUE index on the alias columns (only the random PK id),
+    // so INSERT OR REPLACE cannot dedupe and would pile up a new row on every call.
+    // Use an idempotent delete-then-insert keyed by the tenant + alias identity instead.
     await db.prepare(`
-      INSERT OR REPLACE INTO employee_aliases (id, company_id, alias_email, alias_name, employee_id)
+      DELETE FROM employee_aliases
+      WHERE company_id = ? AND alias_email = ? AND alias_name = ?
+    `).bind(company_id, aliasEmail, aliasName).run();
+
+    await db.prepare(`
+      INSERT INTO employee_aliases (id, company_id, alias_email, alias_name, employee_id)
       VALUES (?, ?, ?, ?, ?)
     `).bind(aliasId, company_id, aliasEmail, aliasName, emp.id).run();
 
-    // Update all historical time_records for this external identity
+    // Update historical time_records for this external identity using EXACT (case-insensitive)
+    // equality on employee_id/employee_name, scoped to the tenant. A previous LIKE %alias%
+    // match could mass-reassign records of unrelated employees when the alias was short/common.
+    const aliasLower = alias_identifier.toLowerCase();
     const updateResult = await db.prepare(`
       UPDATE time_records
       SET employee_id = ?, employee_name = ?
       WHERE company_id = ? AND (
-        LOWER(employee_id) = LOWER(?) OR LOWER(employee_name) = LOWER(?) OR LOWER(employee_id) LIKE ?
+        LOWER(employee_id) = ? OR LOWER(employee_name) = ?
       )
-    `).bind(emp.id, emp.name, company_id, alias_identifier, alias_identifier, `%${alias_identifier}%`).run();
+    `).bind(emp.id, emp.name, company_id, aliasLower, aliasLower).run();
 
     return {
       success: true,

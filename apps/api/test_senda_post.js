@@ -1,5 +1,6 @@
 
-const API_KEY = "sk_live_8e8cb42b7fc7e15edf2fd6d6dadaa631713967cc1511f016a2fa76a0863e2c85";
+// Requiere variables de entorno (ver .dev.vars). NO hardcodear secretos.
+const API_KEY = process.env.SENDA_MCP_TOKEN || "";
 const BASE_URL = "https://sendaqa.telar.ai/api/v1";
 
 async function run() {

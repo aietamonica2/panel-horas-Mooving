@@ -1,5 +1,7 @@
+// Requiere variables de entorno (ver .dev.vars). NO hardcodear secretos.
 const API_URL = "https://sendaqa.telar.ai/api";
 const MCP_URL = "https://panel-horas-api.aietamonica.workers.dev/api/protected/mcp/v1/tools/call";
+const MCP_TOKEN = process.env.SENDA_MCP_TOKEN || "";
 
 const actionsToCreate = [
   { name: 'get_clients', desc: 'Obtener la lista de clientes', method: 'POST', tool: 'get_clients' },
@@ -33,7 +35,7 @@ async function run() {
   const loginRes = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: "monica@mooving.ai", password: "Mooving321" })
+    body: JSON.stringify({ email: "monica@mooving.ai", password: process.env.SENDA_ADMIN_PASSWORD || "" })
   });
   
   const setCookie = loginRes.headers.get('set-cookie');
@@ -83,7 +85,7 @@ async function run() {
           description: "Permite insertar múltiples registros de horas (bulk) usando un rango de fechas o días de la semana.",
           endpoint: "https://panel-horas-api.aietamonica.workers.dev/api/protected/mcp/v1/tools/call",
           method: "POST",
-          headers_json: "{\n  \"Authorization\": \"Bearer sk_live_8e8cb42b7fc7e15edf2fd6d6dadaa631713967cc1511f016a2fa76a0863e2c85\",\n  \"Content-Type\": \"application/json\"\n}",
+          headers_json: `{\n  "Authorization": "Bearer ${MCP_TOKEN}",\n  "Content-Type": "application/json"\n}`,
           payload_template: "{\n  \"toolName\": \"create_bulk_time_records\",\n  \"params\": {\n    \"employee_id\": \"{{employee_id}}\",\n    \"client_id\": \"{{client_id}}\",\n    \"project_id\": \"{{project_id}}\",\n    \"duration_decimal\": \"{{duration_decimal}}\",\n    \"start_date\": \"{{start_date}}\",\n    \"end_date\": \"{{end_date}}\",\n    \"days_of_week\": \"{{days_of_week}}\",\n    \"work_type\": \"{{work_type}}\",\n    \"description\": \"{{description}}\"\n  }\n}",
           action_type: "http",
           api_key: null,

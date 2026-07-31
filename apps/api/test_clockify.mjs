@@ -1,4 +1,5 @@
-const API_KEY = "ZGIzZGI2ZWItMWI3MS00OGM3LTg2NTktOGNiMDY0NTk3MzAw";
+// Requiere variables de entorno (ver .dev.vars). NO hardcodear secretos.
+const API_KEY = process.env.CLOCKIFY_API_KEY || "";
 const BASE_URL = "https://api.clockify.me/api/v1";
 const REPORTS_URL = "https://reports.api.clockify.me/v1";
 

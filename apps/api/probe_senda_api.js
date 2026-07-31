@@ -1,3 +1,4 @@
+// Requiere variables de entorno (ver .dev.vars). NO hardcodear secretos.
 // Probe Senda QA API endpoints
 import { readFileSync } from 'fs';
 import { join } from 'path';
@@ -8,7 +9,7 @@ async function run() {
   const loginRes = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: "monica@mooving.ai", password: "Mooving321" })
+    body: JSON.stringify({ email: "monica@mooving.ai", password: process.env.SENDA_ADMIN_PASSWORD || "" })
   });
   const setCookie = loginRes.headers.get('set-cookie');
   const cookie = setCookie.split(';')[0];

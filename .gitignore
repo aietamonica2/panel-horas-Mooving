@@ -38,3 +38,7 @@ wrangler.toml
 # Build artifacts
 dist/
 .turbo/
+
+# Secretos locales — nunca commitear
+*.local.js
+apps/api/.dev.vars

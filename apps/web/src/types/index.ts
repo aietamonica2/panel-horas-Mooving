@@ -20,6 +20,8 @@ export interface TimeRecord {
   description: string
   created_at: string
   updated_at: string
+  is_billable?: number | boolean
+  source?: string
 }
 
 export interface Employee {
