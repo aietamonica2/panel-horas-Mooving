@@ -5,6 +5,7 @@ import {
   DEFAULT_TEMPLATES,
   renderTemplate,
   loadTemplate,
+  buildEmployeeHoursResolver,
 } from './email_templates';
 
 /**
@@ -72,7 +73,9 @@ function buildInactivityEmail(
   tpl: { subject: string; body: string }
 ): { subject: string; body: string } {
   const firstName = firstNameFrom(emp.name);
-  const vars = { firstName, days };
+  // U4: mostrar los días REALES sin cargar (days_inactive), no el umbral. Si el
+  // empleado nunca cargó (null), caemos al umbral como referencia.
+  const vars = { firstName, days: emp.days_inactive ?? days };
   return {
     subject: renderTemplate(tpl.subject, vars),
     body: renderTemplate(tpl.body, vars),
@@ -378,15 +381,15 @@ export const TOOL_REGISTRY = {
     let project_name = params.project_name || '';
     
     if (!employee_name && employee_id) {
-        const { results } = await db.prepare('SELECT name FROM employees WHERE id = ?').bind(employee_id).all();
+        const { results } = await db.prepare('SELECT name FROM employees WHERE id = ? AND company_id = ?').bind(employee_id, company_id).all();
         if (results.length > 0) employee_name = results[0].name;
     }
     if (!client_name && client_id) {
-        const { results } = await db.prepare('SELECT name FROM clients WHERE id = ?').bind(client_id).all();
+        const { results } = await db.prepare('SELECT name FROM clients WHERE id = ? AND company_id = ?').bind(client_id, company_id).all();
         if (results.length > 0) client_name = results[0].name;
     }
     if (!project_name && project_id) {
-        const { results } = await db.prepare('SELECT name FROM projects WHERE id = ?').bind(project_id).all();
+        const { results } = await db.prepare('SELECT name FROM projects WHERE id = ? AND company_id = ?').bind(project_id, company_id).all();
         if (results.length > 0) project_name = results[0].name;
     }
 
@@ -426,15 +429,15 @@ export const TOOL_REGISTRY = {
     let project_name = params.project_name || '';
     
     if (!employee_name && employee_id) {
-        const { results } = await db.prepare('SELECT name FROM employees WHERE id = ?').bind(employee_id).all();
+        const { results } = await db.prepare('SELECT name FROM employees WHERE id = ? AND company_id = ?').bind(employee_id, company_id).all();
         if (results.length > 0) employee_name = results[0].name;
     }
     if (!client_name && client_id) {
-        const { results } = await db.prepare('SELECT name FROM clients WHERE id = ?').bind(client_id).all();
+        const { results } = await db.prepare('SELECT name FROM clients WHERE id = ? AND company_id = ?').bind(client_id, company_id).all();
         if (results.length > 0) client_name = results[0].name;
     }
     if (!project_name && project_id) {
-        const { results } = await db.prepare('SELECT name FROM projects WHERE id = ?').bind(project_id).all();
+        const { results } = await db.prepare('SELECT name FROM projects WHERE id = ? AND company_id = ?').bind(project_id, company_id).all();
         if (results.length > 0) project_name = results[0].name;
     }
 
@@ -784,9 +787,12 @@ export const TOOL_REGISTRY = {
     const company_id = c.get('auth')?.company_id || 'mooving-default';
     const { month, start_date, end_date } = params || {};
 
-    // JOIN por employee_id O employee_name (los orígenes guardan uno u otro),
-    // scopeado al mismo tenant. COALESCE aplica la tarifa por defecto cuando el
-    // empleado no matchea o hourly_rate_usd es NULL.
+    // U3: la tarifa se resuelve con una SUBCONSULTA correlacionada (una tarifa por
+    // registro, priorizando el match por id sobre el match por nombre) en lugar de
+    // un LEFT JOIN con OR. El JOIN con OR podía matchear un mismo time_record a
+    // VARIAS fichas de empleado (por identidades duplicadas), y eso DUPLICABA horas
+    // e ingresos. Con la subconsulta + LIMIT 1, `FROM time_records` produce
+    // exactamente una fila por registro. COALESCE aplica la tarifa default.
     let query = `
       SELECT
         tr.employee_id       AS employee_id,
@@ -795,11 +801,14 @@ export const TOOL_REGISTRY = {
         tr.work_type         AS work_type,
         tr.is_billable       AS is_billable,
         tr.duration_decimal  AS duration_decimal,
-        COALESCE(e.hourly_rate_usd, ?) AS hourly_rate_usd
+        COALESCE((
+          SELECT e.hourly_rate_usd FROM employees e
+          WHERE e.company_id = tr.company_id
+            AND (e.id = tr.employee_id OR e.name = tr.employee_name)
+          ORDER BY (e.id = tr.employee_id) DESC
+          LIMIT 1
+        ), ?) AS hourly_rate_usd
       FROM time_records tr
-      LEFT JOIN employees e
-        ON (tr.employee_id = e.id OR tr.employee_name = e.name)
-       AND e.company_id = tr.company_id
       WHERE tr.company_id = ?`;
     const queryParams: any[] = [DEFAULT_HOURLY_RATE, company_id];
 
@@ -974,13 +983,13 @@ export const TOOL_REGISTRY = {
             INSERT OR IGNORE INTO time_records (
               id, company_id, employee_id, employee_name, client_id, client_name,
               project_id, project_name, duration_decimal, duration_hours, duration_minutes,
-              date, work_type, description, source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              date, work_type, description, source, is_billable
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
             id, company_id, empCache[employee_name], employee_name,
             cliCache[client_name], client_name, projCache[project_name], project_name,
             duration_decimal, Math.floor(duration_decimal), Math.round((duration_decimal % 1) * 60),
-            dateStr, work_type, desc, 'clockify'
+            dateStr, work_type, desc, 'clockify', work_type === 'project' ? 1 : 0
           ).run();
           
           // result.changes es 1 si se insertó, 0 si fue ignorado
@@ -1245,9 +1254,22 @@ export const TOOL_REGISTRY = {
     const days = Number(params.days ?? params.inactive_days ?? params.days_threshold) || DEFAULT_INACTIVITY_DAYS;
 
     // Cálculo REAL de inactivos (compartido con get_inactivity_preview).
-    const { inactive, cutoffStr, company_id } = await computeInactiveEmployees(c, days);
+    const { inactive: inactiveAll, cutoffStr, company_id } = await computeInactiveEmployees(c, days);
 
-    // Nadie inactivo: no hay nada que enviar. No inventamos conteos.
+    // U2: si el llamador especifica destinatarios puntuales (ids o emails) —p.ej.
+    // el botón "enviar recordatorio a X" del banner manda { recipients: [id] }—
+    // acotamos la alerta SÓLO a esos empleados. Sin este filtro, un envío puntual
+    // disparaba mails reales a TODOS los inactivos, no sólo al seleccionado.
+    const recipientList: string[] = Array.isArray(params.recipients) ? params.recipients : [];
+    const recipientSet = new Set(recipientList.map((r) => String(r).toLowerCase().trim()).filter(Boolean));
+    const inactive = recipientSet.size > 0
+      ? inactiveAll.filter((e) =>
+          recipientSet.has(String(e.employee_id).toLowerCase()) ||
+          (!!e.email && recipientSet.has(String(e.email).toLowerCase()))
+        )
+      : inactiveAll;
+
+    // Nadie inactivo (o ningún destinatario seleccionado coincide): no se envía nada.
     if (inactive.length === 0) {
       return {
         success: true,
@@ -1695,37 +1717,9 @@ export const TOOL_REGISTRY = {
       aliasRows = (aliasRes.results || []) as any[];
     } catch { /* tabla de alias opcional */ }
 
-    const normKey = (s: string) => (s || '')
-      .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .replace(/[.\s_@-]+/g, '');
-
-    // identificador normalizado (nombre o local-part del email del alias) -> employee_id canónico
-    const aliasToEmp: Record<string, string> = {};
-    for (const a of aliasRows) {
-      if (a.alias_name) aliasToEmp[normKey(a.alias_name)] = a.employee_id;
-      if (a.alias_email) aliasToEmp[normKey(String(a.alias_email).split('@')[0])] = a.employee_id;
-    }
-
-    const monthRecords = (records || []) as any[];
-    // Suma robusta de horas del mes para un empleado dado (id exacto, nombre/id
-    // normalizado, local-part del email, o resolución por alias).
-    const resolveHours = (emp: any): number => {
-      const empNorm = normKey(emp.name);
-      const emailLocal = normKey(String(emp.email || '').split('@')[0]);
-      let total = 0;
-      for (const r of monthRecords) {
-        const rIdNorm = normKey(r.employee_id);
-        const rNameNorm = normKey(r.employee_name);
-        const canonical = aliasToEmp[rIdNorm] || aliasToEmp[rNameNorm];
-        const matches =
-          r.employee_id === emp.id ||
-          rNameNorm === empNorm || rIdNorm === empNorm ||
-          (!!emailLocal && (rNameNorm === emailLocal || rIdNorm === emailLocal)) ||
-          canonical === emp.id;
-        if (matches) total += (r.total_hours || 0);
-      }
-      return total;
-    };
+    // Resolvedor robusto de horas (id exacto, nombre/id normalizado, local-part
+    // del email, o alias). Compartido con el cron mensual para calcular idéntico.
+    const resolveHours = buildEmployeeHoursResolver((records || []) as any[], aliasRows);
 
     const monthIdx = parseInt(targetMonth.split('-')[1], 10) - 1;
     const yearStr = targetMonth.split('-')[0];

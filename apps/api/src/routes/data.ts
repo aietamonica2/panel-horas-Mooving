@@ -241,14 +241,16 @@ dataRouter.put(
         return c.json({ success: false, error: 'No tienes permisos para editar' }, 403)
       }
 
+      // U7: recomputar is_billable según el (posiblemente nuevo) work_type, para
+      // que reclasificar de proyecto a interno deje de contar como facturable.
       await c.env.DB.prepare(`
-        UPDATE time_records SET 
-          employee_id = ?, employee_name = ?, client_id = ?, client_name = ?, project_id = ?, project_name = ?, 
-          duration_decimal = ?, duration_hours = ?, duration_minutes = ?, date = ?, work_type = ?, description = ?
+        UPDATE time_records SET
+          employee_id = ?, employee_name = ?, client_id = ?, client_name = ?, project_id = ?, project_name = ?,
+          duration_decimal = ?, duration_hours = ?, duration_minutes = ?, date = ?, work_type = ?, description = ?, is_billable = ?
         WHERE id = ? AND company_id = ?
       `).bind(
         data.employee_id, data.employee_name, data.client_id, data.client_name, data.project_id, data.project_name,
-        data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || '',
+        data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || '', resolveIsBillable(data),
         id, company_id
       ).run()
 

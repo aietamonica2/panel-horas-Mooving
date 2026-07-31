@@ -13,7 +13,7 @@
  */
 
 import { Env } from '../types';
-import { loadTemplate, renderTemplate } from '../mcp/email_templates';
+import { loadTemplate, renderTemplate, buildEmployeeHoursResolver } from '../mcp/email_templates';
 
 /**
  * Sends an email via SendGrid API v3.
@@ -330,19 +330,26 @@ export async function handleEmailRemindersCron(env: Env): Promise<void> {
       continue;
     }
 
-    // Fetch hours per employee for the current month
+    // Fetch hours per employee for the current month + aliases, for a ROBUST match
+    // (mismo resolvedor que get_email_reminder_drafts). Sin esto varias personas
+    // recibían "0h" en el mail automático por diferencias de formato/acentos.
     const { results: records } = await db
       .prepare(
-        'SELECT employee_id, employee_name, SUM(duration_decimal) as total_hours FROM time_records WHERE company_id = ? AND date LIKE ? GROUP BY employee_name',
+        'SELECT employee_id, employee_name, SUM(duration_decimal) as total_hours FROM time_records WHERE company_id = ? AND date LIKE ? GROUP BY employee_id, employee_name',
       )
       .bind(companyId, `${targetMonth}-%`)
       .all();
 
-    const hoursMap: Record<string, number> = {};
-    for (const r of (records || []) as any[]) {
-      if (r.employee_name) hoursMap[r.employee_name.toLowerCase()] = r.total_hours || 0;
-      if (r.employee_id) hoursMap[r.employee_id] = r.total_hours || 0;
-    }
+    let aliasRows: any[] = [];
+    try {
+      const aliasRes = await db
+        .prepare('SELECT alias_email, alias_name, employee_id FROM employee_aliases WHERE company_id = ?')
+        .bind(companyId)
+        .all();
+      aliasRows = (aliasRes.results || []) as any[];
+    } catch { /* tabla de alias opcional */ }
+
+    const resolveHours = buildEmployeeHoursResolver((records || []) as any[], aliasRows);
 
     const monthIdx = parseInt(targetMonth.split('-')[1], 10) - 1;
     const yearStr = targetMonth.split('-')[0];
@@ -378,7 +385,7 @@ export async function handleEmailRemindersCron(env: Env): Promise<void> {
       const email =
         emp.email ||
         `${(emp.name as string).toLowerCase().replace(/\s+/g, '.')}@moovingtech.com`;
-      const hours = hoursMap[emp.id] || hoursMap[(emp.name as string).toLowerCase()] || 0;
+      const hours = resolveHours(emp);
 
       const cleanName = (emp.name as string).replace(/\./g, ' ').trim();
       const nameParts = cleanName

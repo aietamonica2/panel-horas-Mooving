@@ -48,11 +48,11 @@ export const ExecutiveDrilldownModal: React.FC<ExecutiveDrilldownModalProps> = (
   if (type === 'billable') {
     title = '🟢 Desglose de Horas Facturables (Proyectos)'
     description = 'Listado detallado de todas las horas asociadas a proyectos o marcadas como facturables en la DB.'
-    filteredRecords = records.filter(r => r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project'))
+    filteredRecords = records.filter(r => r.is_billable === 1 || r.is_billable === true || r.work_type === 'project')
   } else if (type === 'overhead') {
     title = '🔴 Desglose de Carga de Overhead (No Facturables)'
     description = 'Reuniones internas, tareas administrativas y capacitaciones que representan costo indirecto.'
-    filteredRecords = records.filter(r => !(r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')))
+    filteredRecords = records.filter(r => !(r.is_billable === 1 || r.is_billable === true || r.work_type === 'project'))
   } else if (type === 'risk') {
     // Find top client
     const clientMap: Record<string, number> = {}

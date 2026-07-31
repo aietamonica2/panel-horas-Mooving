@@ -54,7 +54,7 @@ const getAmountUsd = (r: TimeRecord): number => {
 // Regla de facturabilidad existente, centralizada para reutilizar en las
 // derivaciones sin cambiar la semántica original.
 const isBillableRecord = (r: TimeRecord): boolean =>
-  r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')
+  r.is_billable === 1 || r.is_billable === true || r.work_type === 'project'
 
 const fmtUsd = (n: number, decimals = 0): string =>
   new Intl.NumberFormat('en-US', {
@@ -383,14 +383,19 @@ export const Dashboard: React.FC = () => {
     const totalBiz = countBiz(1, daysInMonth)
     const remainingBiz = countBiz(today, daysInMonth) // incluye hoy
 
-    const monthRecords = filteredRecords.filter(r => (r.date || '').slice(0, 7) === monthKey)
+    // U5: el forecast es una métrica de EQUIPO, así que usa `records` sin filtrar
+    // tanto en el numerador (horas del mes) como en el denominador (capacidad del
+    // equipo). Antes el numerador respetaba los filtros y el denominador no, así que
+    // al filtrar por 1 persona proyectaba cientos de horas contra la capacidad de
+    // todo el equipo. Ahora el forecast se mantiene estable ante los filtros de tabla.
+    const monthRecords = records.filter(r => (r.date || '').slice(0, 7) === monthKey)
     const registered = monthRecords.reduce((s, r) => s + (r.duration_decimal || 0), 0)
 
     const activeEmps = allEmployeesList.filter(e => e.is_active !== 0)
     let teamDaily = activeEmps.reduce((s, e) => s + (employeeCapacities[e.id] ?? 8), 0)
     if (teamDaily <= 0) {
       const uniq = new Set(monthRecords.map(r => r.employee_id)).size
-      teamDaily = (uniq || new Set(filteredRecords.map(r => r.employee_id)).size) * 8
+      teamDaily = (uniq || new Set(records.map(r => r.employee_id)).size) * 8
     }
 
     const forecastTotal = registered + teamDaily * remainingBiz
@@ -408,7 +413,7 @@ export const Dashboard: React.FC = () => {
       pctOfExpected,
       hasData: monthRecords.length > 0,
     }
-  }, [filteredRecords, allEmployeesList, employeeCapacities])
+  }, [records, allEmployeesList, employeeCapacities])
 
   const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]

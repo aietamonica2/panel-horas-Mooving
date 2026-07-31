@@ -171,7 +171,7 @@ export const MyTime: React.FC = () => {
   ).map((w: any) => ({ ...w, value: Math.round(w.value * 100) / 100 })) as any[];
 
   const billableHours = thisMonthRecords
-    .filter(r => r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project'))
+    .filter(r => r.is_billable === 1 || r.is_billable === true || r.work_type === 'project')
     .reduce((acc, r) => acc + (r.duration_decimal || 0), 0);
   const billableRate = totalHoursThisMonth > 0 ? ((billableHours / totalHoursThisMonth) * 100).toFixed(0) : '0';
 
