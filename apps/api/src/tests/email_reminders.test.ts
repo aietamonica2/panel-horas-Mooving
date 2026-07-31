@@ -75,13 +75,13 @@ describe('Email Reminders MCP Tools', () => {
     const felipeDraft = result.drafts.find((d: any) => d.employee_name.includes('Felipe'));
     expect(felipeDraft).toBeDefined();
     expect(felipeDraft.hours_formatted).toBe('64,75');
-    expect(felipeDraft.body).toContain('Tenemos registradas 64,75 horas');
+    expect(felipeDraft.body).toContain('figuran 64,75 horas registradas');
 
     // Augusto (0 hours)
     const augustoDraft = result.drafts.find((d: any) => d.employee_name.includes('Augusto'));
     expect(augustoDraft).toBeDefined();
     expect(augustoDraft.hours_formatted).toBe('0,00');
-    expect(augustoDraft.body).toContain('No tenemos horas registradas');
+    expect(augustoDraft.body).toContain('Todavía no figuran horas cargadas');
 
     // Ex Empleado should NOT be in default drafts
     const inactiveDraft = result.drafts.find((d: any) => d.employee_name.includes('Ex'));

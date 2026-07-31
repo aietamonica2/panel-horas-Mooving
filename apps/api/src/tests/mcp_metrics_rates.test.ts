@@ -209,7 +209,7 @@ describe('get_inactivity_preview — inactivos + email SIN enviar', () => {
       expect(ana.email).toBe('ana@moovingtech.com')
       expect(ana.last_record_date).toBe('2026-07-10')
       expect(ana.days_inactive).toBe(21)
-      expect(ana.email_subject).toContain('registrá tus horas')
+      expect(ana.email_subject).toContain('Recordá cargar tus horas')
       expect(ana.email_body).toContain('Hola Ana')
 
       const caro = res.inactive_employees.find((e: any) => e.name === 'Caro')

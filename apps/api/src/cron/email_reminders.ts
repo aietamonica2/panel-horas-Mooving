@@ -13,6 +13,7 @@
  */
 
 import { Env } from '../types';
+import { loadTemplate, renderTemplate } from '../mcp/email_templates';
 
 /**
  * Sends an email via SendGrid API v3.
@@ -362,6 +363,11 @@ export async function handleEmailRemindersCron(env: Env): Promise<void> {
       })
       .filter(Boolean) as Array<{ email: string }>;
 
+    // Editable templates for this tenant (DB override → default). Loaded once per
+    // tenant, rendered per employee. Mirrors the get_email_reminder_drafts MCP tool.
+    const tplHours = await loadTemplate(db, companyId, 'reminder_hours');
+    const tplZero = await loadTemplate(db, companyId, 'reminder_zero');
+
     // -------------------------------------------------------------------
     // 4. Send emails via SendGrid
     // -------------------------------------------------------------------
@@ -381,14 +387,12 @@ export async function handleEmailRemindersCron(env: Env): Promise<void> {
       const firstName = nameParts[0] || cleanName;
       const hoursFormatted = hours.toFixed(2).replace('.', ',');
 
-      let body: string;
-      if (hours > 0) {
-        body = `Hola ${firstName},\n\nTenemos registradas ${hoursFormatted} horas a tu nombre para el mes de ${monthName}. Por favor revisá los valores y avisanos si encontrás alguna diferencia.\n\nSaludos,`;
-      } else {
-        body = `Hola ${firstName},\n\nNo tenemos horas registradas en Clockify a tu nombre para el mes en curso. Por favor registralas a la brevedad.\n\nSaludos,`;
-      }
-
-      const subject = `Registro de horas — ${fullMonthYearStr}`;
+      // Template per case (DB override → default) + interpolation. Variables:
+      // firstName, hours (formatted hoursFormatted) and month (month name, monthName).
+      const tpl = hours > 0 ? tplHours : tplZero;
+      const tplVars = { firstName, hours: hoursFormatted, month: monthName };
+      const subject = renderTemplate(tpl.subject, tplVars);
+      const body = renderTemplate(tpl.body, tplVars);
 
       const success = await sendViaEmailProvider(
         resendKey,

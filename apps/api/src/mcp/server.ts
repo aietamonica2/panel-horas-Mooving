@@ -1,4 +1,11 @@
 import { HonoContext } from '../types';
+import {
+  TEMPLATE_KEYS,
+  TEMPLATE_META,
+  DEFAULT_TEMPLATES,
+  renderTemplate,
+  loadTemplate,
+} from './email_templates';
 
 /**
  * FEAT-01 — Visibilidad por cartera para Coordinadores.
@@ -54,24 +61,22 @@ function firstNameFrom(name: string): string {
  * Contenido (asunto + cuerpo) del email de alerta de inactividad para un empleado.
  * Compartido por send_inactivity_alerts (envío real) y get_inactivity_preview
  * (vista previa) para que lo que se previsualiza sea EXACTAMENTE lo que se envía.
+ *
+ * El asunto y el cuerpo salen de la plantilla `inactivity` (override del tenant o
+ * default), que el llamador ya resolvió con loadTemplate(). Sólo interpola las
+ * variables disponibles para este caso: firstName y days.
  */
 function buildInactivityEmail(
-  emp: { name: string; last_record_date: string | null; days_inactive: number | null },
-  days: number
+  emp: { name: string; last_record_date?: string | null; days_inactive?: number | null },
+  days: number,
+  tpl: { subject: string; body: string }
 ): { subject: string; body: string } {
   const firstName = firstNameFrom(emp.name);
-  const subject = 'Recordatorio: registrá tus horas — Mooving Tech';
-  const sinceInfo = emp.last_record_date
-    ? `Tu último registro de horas es del ${emp.last_record_date}` +
-      (emp.days_inactive != null ? ` (hace ${emp.days_inactive} días).` : '.')
-    : 'No encontramos ningún registro de horas reciente a tu nombre.';
-  const body =
-    `Hola ${firstName},\n\n` +
-    `${sinceInfo} No registrás horas en los últimos ${days} días. ` +
-    `Por favor cargá tus horas en Clockify a la brevedad para mantener tu planilla al día.\n\n` +
-    `Si ya las cargaste, ignorá este mensaje.\n\n` +
-    `Saludos,\nEquipo Mooving Tech`;
-  return { subject, body };
+  const vars = { firstName, days };
+  return {
+    subject: renderTemplate(tpl.subject, vars),
+    body: renderTemplate(tpl.body, vars),
+  };
 }
 
 /**
@@ -1240,7 +1245,7 @@ export const TOOL_REGISTRY = {
     const days = Number(params.days ?? params.inactive_days ?? params.days_threshold) || DEFAULT_INACTIVITY_DAYS;
 
     // Cálculo REAL de inactivos (compartido con get_inactivity_preview).
-    const { inactive, cutoffStr } = await computeInactiveEmployees(c, days);
+    const { inactive, cutoffStr, company_id } = await computeInactiveEmployees(c, days);
 
     // Nadie inactivo: no hay nada que enviar. No inventamos conteos.
     if (inactive.length === 0) {
@@ -1284,6 +1289,10 @@ export const TOOL_REGISTRY = {
     let alertsSent = 0;
     const failed: string[] = [];
 
+    // Plantilla editable de inactividad (override del tenant o default). Se carga
+    // una sola vez y se reutiliza para cada empleado (mismo texto para todos).
+    const inactivityTpl = await loadTemplate(c.env.DB, company_id, 'inactivity');
+
     // Envío REAL por Resend, un email por empleado inactivo. Contamos SÓLO lo que Resend confirma.
     for (const emp of inactive) {
       const to = emp.email
@@ -1293,7 +1302,7 @@ export const TOOL_REGISTRY = {
         continue;
       }
 
-      const { subject, body } = buildInactivityEmail(emp, days);
+      const { subject, body } = buildInactivityEmail(emp, days, inactivityTpl);
       try {
         const res = await fetch('https://api.resend.com/emails', {
           method: 'POST',
@@ -1341,12 +1350,15 @@ export const TOOL_REGISTRY = {
   // send_inactivity_alerts. Usa la MISMA lógica de cálculo y el MISMO cuerpo de email.
   get_inactivity_preview: async (params: any, c: HonoContext) => {
     const days = Number(params.days ?? params.inactive_days ?? params.days_threshold) || DEFAULT_INACTIVITY_DAYS;
-    const { inactive, cutoffStr } = await computeInactiveEmployees(c, days);
+    const { inactive, cutoffStr, company_id } = await computeInactiveEmployees(c, days);
+
+    // Misma plantilla editable (override o default) que usa el envío real.
+    const inactivityTpl = await loadTemplate(c.env.DB, company_id, 'inactivity');
 
     const inactive_employees = inactive.map((emp) => {
       const to = emp.email
         || (emp.name ? `${String(emp.name).toLowerCase().replace(/\s+/g, '.')}@moovingtech.com` : '');
-      const { subject, body } = buildInactivityEmail(emp, days);
+      const { subject, body } = buildInactivityEmail(emp, days, inactivityTpl);
       return {
         employee_id: emp.employee_id,
         name: emp.name,
@@ -1686,6 +1698,11 @@ export const TOOL_REGISTRY = {
     const fullMonthYearStr = `${monthName} ${yearStr}`;
     const dateTodayStr = new Date().toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' });
 
+    // Plantillas editables (override del tenant o default). Se cargan una sola vez
+    // y se renderizan por empleado: reminder_hours cuando hay horas, reminder_zero si 0.
+    const tplHours = await loadTemplate(db, company_id, 'reminder_hours');
+    const tplZero = await loadTemplate(db, company_id, 'reminder_zero');
+
     const drafts: any[] = [];
     let reportText = `Borradores de mail — Horas registradas, ${fullMonthYearStr}\nUn mail por persona, listo para copiar y pegar. Datos: Clockify, al ${dateTodayStr}.\n\n`;
 
@@ -1699,12 +1716,12 @@ export const TOOL_REGISTRY = {
       const firstName = nameParts[0] || fullName;
       const hoursFormatted = hours.toFixed(2).replace('.', ',');
 
-      let body = '';
-      if (hours > 0) {
-        body = `Hola ${firstName},\n\nTenemos registradas ${hoursFormatted} horas a tu nombre para el mes de ${monthName}. Por favor revisá los valores y avisanos si encontrás alguna diferencia.\n\nSaludos,`;
-      } else {
-        body = `Hola ${firstName},\n\nNo tenemos horas registradas en Clockify a tu nombre para el mes en curso. Por favor registralas a la brevedad.\n\nSaludos,`;
-      }
+      // Plantilla del caso + interpolación. Variables: firstName, hours (ya formateado
+      // como hoursFormatted) y month (nombre del mes actual, monthName).
+      const tpl = hours > 0 ? tplHours : tplZero;
+      const tplVars = { firstName, hours: hoursFormatted, month: monthName };
+      const subject = renderTemplate(tpl.subject, tplVars);
+      const body = renderTemplate(tpl.body, tplVars);
 
       drafts.push({
         number: index + 1,
@@ -1712,7 +1729,7 @@ export const TOOL_REGISTRY = {
         employee_name: fullName,
         email,
         cc: defaultCc,
-        subject: `Registro de horas — ${fullMonthYearStr}`,
+        subject,
         body,
         hours,
         hours_formatted: hoursFormatted,
@@ -1722,7 +1739,7 @@ export const TOOL_REGISTRY = {
       reportText += `${index + 1}. ${fullName}\n`;
       reportText += `Para: ${email}\n`;
       reportText += `CC: ${defaultCc}\n`;
-      reportText += `Asunto: Registro de horas — ${fullMonthYearStr}\n`;
+      reportText += `Asunto: ${subject}\n`;
       reportText += `${body}\n\n`;
     });
 
@@ -2026,6 +2043,75 @@ export const TOOL_REGISTRY = {
       cron_schedule: cronVal,
       message: 'Configuración de automatización de recordatorios guardada exitosamente.'
     };
+  },
+
+  // get_email_templates — Devuelve los mensajes estándar editables (asunto + cuerpo)
+  // de los TRES casos para la empresa del principal. Para cada caso entrega el
+  // override guardado en email_templates si existe, o el texto por defecto
+  // (DEFAULT_TEMPLATES) marcado con is_default:true. Siempre scopeado por el
+  // company_id del principal (MT-02: tenant-from-principal).
+  get_email_templates: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+    const templates = [];
+    for (const template_key of TEMPLATE_KEYS) {
+      const meta = TEMPLATE_META[template_key];
+      const loaded = await loadTemplate(db, company_id, template_key);
+      templates.push({
+        template_key,
+        label: meta.label,
+        subject: loaded.subject,
+        body: loaded.body,
+        is_default: loaded.is_default,
+        variables: meta.variables,
+      });
+    }
+
+    return { templates };
+  },
+
+  // set_email_template — Guarda (upsert) el override de asunto/cuerpo de UN caso
+  // para la empresa del principal. Dato de configuración: SÓLO admin puede
+  // escribirlo (mismo patrón que set_employee_rate). Valida que template_key sea
+  // uno de los tres casos y que asunto y cuerpo no estén vacíos. Siempre scopeado
+  // por company_id del principal (MT-02: tenant-from-principal).
+  set_email_template: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const auth = c.get('auth');
+    const role = auth?.role || '';
+    if (role !== 'admin') {
+      return { success: false, error: 'No autorizado' };
+    }
+
+    const company_id = auth?.company_id || 'mooving-default';
+    const { template_key } = params;
+
+    if (!TEMPLATE_KEYS.includes(template_key)) {
+      throw new Error(
+        `template_key inválido: "${template_key}". Válidos: ${TEMPLATE_KEYS.join(', ')}.`
+      );
+    }
+
+    const subject = String(params.subject ?? '').trim();
+    const body = String(params.body ?? '').trim();
+    if (!subject || !body) {
+      throw new Error('El asunto y el cuerpo del mensaje son obligatorios y no pueden estar vacíos.');
+    }
+
+    await db.prepare(`
+      INSERT INTO email_templates (id, company_id, template_key, subject, body, updated_at)
+      VALUES (?, ?, ?, ?, ?, datetime('now'))
+      ON CONFLICT(company_id, template_key) DO UPDATE SET
+        subject = excluded.subject,
+        body = excluded.body,
+        updated_at = datetime('now')
+    `).bind(
+      crypto.randomUUID().replace(/-/g, '').slice(0, 16),
+      company_id, template_key, subject, body
+    ).run();
+
+    return { success: true, template_key, subject, body, is_default: false };
   },
 };
 

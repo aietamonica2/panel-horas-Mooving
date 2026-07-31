@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Users, Briefcase, FolderGit2, Tags, Plus, Trash2, Loader2, Edit2, Clock, Mail, Link, Check, Lock } from 'lucide-react';
+import { Users, Briefcase, FolderGit2, Tags, Plus, Trash2, Loader2, Edit2, Clock, Mail, Link, Check, Lock, MessageSquare } from 'lucide-react';
 import { EmailRemindersModal } from './EmailRemindersModal';
+import { EmailTemplatesEditor } from './EmailTemplatesEditor';
 import { ConfirmModal } from './ConfirmModal';
 
-type TabType = 'employees' | 'clients' | 'projects' | 'categories' | 'aliases';
+type TabType = 'employees' | 'clients' | 'projects' | 'categories' | 'aliases' | 'email_templates';
 
 export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<TabType>('employees');
@@ -246,6 +247,7 @@ export function AdminPanel() {
     { id: 'projects', name: 'Proyectos', icon: FolderGit2 },
     { id: 'categories', name: 'Categorías', icon: Tags },
     { id: 'aliases', name: 'Vinculación de Empleados', icon: Link },
+    { id: 'email_templates', name: 'Mensajes de Email', icon: MessageSquare },
   ];
 
   return (
@@ -397,6 +399,8 @@ export function AdminPanel() {
                   </div>
                 )}
               </div>
+            ) : activeTab === 'email_templates' ? (
+              <EmailTemplatesEditor />
             ) : (
               <>
                 <div className="flex justify-between items-center mb-6">
