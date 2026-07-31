@@ -14,10 +14,16 @@ database_id = "4f55653f-0f00-4c7d-bf84-3be78e096bfa"
 [vars]
 ENVIRONMENT = "production"
 SENDA_BASE_URL = "https://sendaqa.telar.ai/api"
+# INACTIVITY_DAYS: threshold (in days) for the inactivity-alerts cron below. An
+# employee with no logged hours in the last N days gets an alert. The handler
+# falls back to 3 if this is unset; set it here to override.
+INACTIVITY_DAYS = "3"
 
-# Scheduled triggers
-# Cron 1: Bulk load — every Tuesday at 08:00 UTC
-# Cron 2: Email reminders — 28th of each month at 12:00 UTC (09:00 ARG)
+# Scheduled triggers — keep in sync with the `scheduled` dispatcher in src/index.ts.
+# Cron 1 ("0 8 * * 2"):    Bulk load — every Tuesday at 08:00 UTC.
+# Cron 2 ("0 12 28 * *"):  Email reminders — 28th of each month at 12:00 UTC (09:00 ARG).
+# Cron 3 ("0 9 * * 1-5"):  Inactivity alerts — weekdays (Mon–Fri) at 09:00 UTC. Auto-sends
+#                          alerts to employees with no hours in the last INACTIVITY_DAYS
+#                          days (default 3, configurable via the INACTIVITY_DAYS var).
 [triggers]
-crons = ["0 8 * * 2", "0 12 28 * *"]
-
+crons = ["0 8 * * 2", "0 12 28 * *", "0 9 * * 1-5"]

@@ -21,6 +21,70 @@ const MOOVING_COLORS = {
   pink: '#ec4899',
 }
 
+// --- Sub-clasificación de tareas internas ---------------------------------
+// Orden de prioridad y de despliegue de las sub-categorías.
+const INTERNAL_SUBCATEGORIES = [
+  'Ausencias (Vac./Lic.)',
+  'Capacitación',
+  'Reuniones',
+  'Entrevistas',
+  'RRHH',
+  'Comercial',
+  'Investigación',
+  'Operaciones',
+  'Otras internas',
+] as const
+
+const SUBCATEGORY_COLORS: { [k: string]: string } = {
+  'Ausencias (Vac./Lic.)': '#ef4444', // rojo
+  'Capacitación': '#0ea5e9',          // celeste
+  'Reuniones': '#ec4899',             // rosa
+  'Entrevistas': '#8b5cf6',           // violeta
+  'RRHH': '#f97316',                  // naranja mooving
+  'Comercial': '#10b981',             // verde
+  'Investigación': '#6366f1',         // índigo
+  'Operaciones': '#1a5f7a',           // azul mooving
+  'Otras internas': '#64748b',        // gris
+}
+
+/** Normaliza texto a minúsculas y sin acentos (case/acento-insensitive). */
+function normalizeDesc(text: string): string {
+  return (text || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '') // elimina diacríticos combinantes
+}
+
+/** Deriva la sub-categoría de una tarea interna por palabra clave en la descripción. */
+function internalSubcategory(record: TimeRecord): string {
+  const d = normalizeDesc(record.description)
+  if (/vacacion|licencia|franco|ausencia/.test(d)) return 'Ausencias (Vac./Lic.)'
+  if (/capacitacion|onboarding|formacion/.test(d)) return 'Capacitación'
+  if (/reunion|daily|sync|scrum/.test(d)) return 'Reuniones'
+  if (/entrevista/.test(d)) return 'Entrevistas'
+  if (/rrhh|recursos humanos/.test(d)) return 'RRHH'
+  if (/comercial|venta/.test(d)) return 'Comercial'
+  if (/investigacion|research/.test(d)) return 'Investigación'
+  if (/operacion/.test(d)) return 'Operaciones'
+  return 'Otras internas'
+}
+
+/** Agrupa horas y cantidad de registros internos por sub-categoría (orden fijo). */
+function summarizeInternalSubcategories(
+  internalRecords: TimeRecord[]
+): { cat: string; hours: number; count: number }[] {
+  const hoursByCat = new Map<string, number>()
+  const countByCat = new Map<string, number>()
+  internalRecords.forEach(r => {
+    const cat = internalSubcategory(r)
+    hoursByCat.set(cat, (hoursByCat.get(cat) || 0) + r.duration_decimal)
+    countByCat.set(cat, (countByCat.get(cat) || 0) + 1)
+  })
+  return INTERNAL_SUBCATEGORIES
+    .filter(cat => (countByCat.get(cat) || 0) > 0)
+    .map(cat => ({ cat, hours: hoursByCat.get(cat) || 0, count: countByCat.get(cat) || 0 }))
+}
+
 export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selectedMonth }) => {
   // Filter for internal tasks, meetings, and training (overhead)
   const bagRecords = records.filter(r => r.work_type === 'internal' || r.work_type === 'meeting' || r.work_type === 'training')
@@ -83,6 +147,10 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
   const internalMatrix = buildTypeMatrix(internalRecords)
   const meetingMatrix = buildTypeMatrix(meetingRecords)
   const allMatrix = buildMatrix()
+
+  // Desglose de tareas internas por sub-categoría (derivado de la descripción)
+  const internalSubcatBreakdown = summarizeInternalSubcategories(internalRecords)
+  const internalTotalHours = internalRecords.reduce((sum, r) => sum + r.duration_decimal, 0)
 
   const monthFormat = (month: string) => {
     const monthNames: { [key: string]: string } = {
@@ -160,10 +228,10 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
     <div className="bg-white rounded-xl shadow-md p-8">
       <div className="mb-8">
         <h2 className="text-2xl font-bold mb-2" style={{ color: MOOVING_COLORS.primary }}>
-          ⏰ Bolsa de Horas - Tareas Internas y Reuniones
+          ⏰ Distribución de Horas Internas
         </h2>
-        <p className="text-gray-600 text-sm">
-          Desglose de horas dedicadas a tareas internas y reuniones de equipo por usuario y mes
+        <p className="text-gray-600 dark:text-gray-300 text-sm">
+          Desglose de horas internas y reuniones por sub-categoría, usuario y mes
         </p>
       </div>
 
@@ -184,7 +252,7 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
         </div>
 
         <div className="bg-orange-50 rounded-lg p-6 border-l-4" style={{ borderColor: MOOVING_COLORS.secondary }}>
-          <div className="text-sm text-gray-600 uppercase font-semibold mb-2">📊 Total Bolsa</div>
+          <div className="text-sm text-gray-600 uppercase font-semibold mb-2">📊 Total Distribución</div>
           <div className="text-3xl font-bold" style={{ color: MOOVING_COLORS.secondary }}>
             {bagRecords.reduce((sum, r) => sum + r.duration_decimal, 0).toFixed(2)}h
           </div>
@@ -214,6 +282,38 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
         </div>
       </div>
 
+      {/* Desglose de Tareas Internas por Sub-categoría */}
+      {internalSubcatBreakdown.length > 0 && (
+        <div className="mb-8">
+          <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
+            Desglose de Tareas Internas por Sub-categoría
+          </h3>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3">
+            {internalSubcatBreakdown.map(({ cat, hours, count }) => {
+              const color = SUBCATEGORY_COLORS[cat] || MOOVING_COLORS.indigo
+              const pct = internalTotalHours > 0 ? (hours / internalTotalHours) * 100 : 0
+              return (
+                <div
+                  key={cat}
+                  className="rounded-lg p-3 bg-gray-50 dark:bg-slate-700/40"
+                  style={{ borderLeft: `4px solid ${color}` }}
+                >
+                  <div className="text-xs font-medium text-gray-600 dark:text-gray-300 leading-tight min-h-[2.5em]">
+                    {cat}
+                  </div>
+                  <div className="text-xl font-bold mt-1" style={{ color }}>
+                    {hours.toFixed(2)}h
+                  </div>
+                  <div className="text-[11px] text-gray-400 mt-0.5">
+                    {pct.toFixed(1)}% · {count} reg.
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Tables */}
       <Table
         title="⚙️ TAREAS INTERNAS"
@@ -229,7 +329,7 @@ export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selec
 
       {/* Combined Table */}
       <Table
-        title="📊 TOTAL BOLSA DE HORAS"
+        title="📊 TOTAL DISTRIBUCIÓN DE HORAS"
         color={MOOVING_COLORS.secondary}
         matrix={allMatrix}
       />
