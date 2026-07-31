@@ -22,6 +22,28 @@ const MOOVING_COLORS = {
 
 const COLORS = ['#1a5f7a', '#f97316', '#10b981', '#0ea5e9', '#8b5cf6', '#ec4899', '#f59e0b', '#06b6d4']
 
+/**
+ * Counts business days (Monday–Friday), inclusive, between two ISO dates
+ * (YYYY-MM-DD). Timezone-safe: parses the date parts and iterates in UTC so
+ * getUTCDay() is never shifted by the runtime's local timezone. Returns 0 for
+ * empty/invalid input or when the end date is before the start date.
+ */
+const countWeekdays = (startISO: string, endISO: string): number => {
+  if (!startISO || !endISO) return 0
+  const [sy, sm, sd] = startISO.slice(0, 10).split('-').map(Number)
+  const [ey, em, ed] = endISO.slice(0, 10).split('-').map(Number)
+  const start = Date.UTC(sy, sm - 1, sd)
+  const end = Date.UTC(ey, em - 1, ed)
+  if (Number.isNaN(start) || Number.isNaN(end) || start > end) return 0
+  const DAY_MS = 24 * 60 * 60 * 1000
+  let count = 0
+  for (let t = start; t <= end; t += DAY_MS) {
+    const day = new Date(t).getUTCDay() // 0 = Sunday, 6 = Saturday
+    if (day !== 0 && day !== 6) count++
+  }
+  return count
+}
+
 export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps> = ({ records, employeeCapacities = {} }) => {
   if (records.length === 0) {
     return (
@@ -31,8 +53,15 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
     )
   }
 
-  // Get unique dates
-  const uniqueDatesCount = new Set(records.map(r => r.date)).size || 1
+  // Analyzed period = actual date span of the filtered records (min → max).
+  // NUEVO-11: the capacity denominator must be the REAL business days (Mon–Fri)
+  // in that span, not the count of distinct dates that happen to have records.
+  // Using "days with data" let anyone who logged only a few days appear to
+  // comply (3 días → esperado 3*8=24h); real weekdays fix that understatement.
+  const sortedDates = records.map(r => r.date).filter(Boolean).sort()
+  const periodStart = sortedDates[0] ?? ''
+  const periodEnd = sortedDates[sortedDates.length - 1] ?? ''
+  const periodWeekdays = countWeekdays(periodStart, periodEnd)
 
   // Get unique employees
   const uniqueEmployees = Array.from(new Set(
@@ -44,7 +73,8 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
     const empRecords = records.filter(r => r.employee_name === empName)
     const empId = empRecords[0]?.employee_id || ''
     const dailyExpected = employeeCapacities[empId] !== undefined ? employeeCapacities[empId] : 8.0
-    const expectedPeriodHours = dailyExpected * uniqueDatesCount
+    // Expected = daily capacity × real business days of the period (see above).
+    const expectedPeriodHours = dailyExpected * periodWeekdays
 
     const projectRecords = empRecords.filter(r => r.work_type === 'project')
     const breakdown: { [client: string]: number } = {}
@@ -123,7 +153,7 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
                     <span className="text-xs text-slate-500 font-medium">Meta diaria: {b.dailyExpected}h/día</span>
                   </div>
                   <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${b.statusColor}`}>
-                    {b.statusIcon} ({b.complianceRate.toFixed(0)}%)
+                    {b.statusIcon} ({b.expectedPeriodHours > 0 ? `${b.complianceRate.toFixed(0)}%` : '—'})
                   </span>
                 </div>
 
@@ -167,7 +197,7 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
                 <div>
                   <span className="text-slate-400 font-medium block uppercase text-[10px]">Desviación Δ</span>
                   <span className={`font-bold text-sm ${b.totalLoggedAll >= b.expectedPeriodHours ? 'text-emerald-600' : 'text-amber-600'}`}>
-                    {(b.totalLoggedAll - b.expectedPeriodHours).toFixed(1)}h
+                    {b.expectedPeriodHours > 0 ? `${(b.totalLoggedAll - b.expectedPeriodHours).toFixed(1)}h` : '—'}
                   </span>
                 </div>
               </div>

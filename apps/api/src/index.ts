@@ -8,6 +8,10 @@ import { HonoContext, ApiResponse, CloudflareEnv } from './types'
 import { handleBulkLoadCron } from './cron/bulk_load'
 import { handleEmailRemindersCron } from './cron/email_reminders'
 
+// API_VERSION: única fuente de verdad interna para el campo `version` de las
+// respuestas. Mantener en sync con /VERSION (raíz del repo).
+const API_VERSION = 'v2.2.4'
+
 const app = new Hono<{ Bindings: CloudflareEnv }>()
 
 // Global middleware
@@ -27,11 +31,11 @@ app.get('/', (c) => {
   const response: ApiResponse = {
     success: true,
     data: {
-      message: 'Panel Horas API v1.9.0',
+      message: `Panel Horas API ${API_VERSION}`,
       endpoints: ['/api/health', '/api/data/records', '/api/data/upload'],
     },
     timestamp: new Date().toISOString(),
-    version: 'v1.9.0',
+    version: API_VERSION,
   }
   return c.json(response)
 })
@@ -42,7 +46,7 @@ app.notFound((c) => {
     success: false,
     error: 'Not found',
     timestamp: new Date().toISOString(),
-    version: 'v1.9.0',
+    version: API_VERSION,
   }, 404)
 })
 
@@ -53,7 +57,7 @@ app.onError((err, c) => {
     success: false,
     error: err instanceof Error ? err.message : 'Internal server error',
     timestamp: new Date().toISOString(),
-    version: 'v1.9.0',
+    version: API_VERSION,
   }, 500)
 })
 

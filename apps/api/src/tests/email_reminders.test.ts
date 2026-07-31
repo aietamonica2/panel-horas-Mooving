@@ -1,6 +1,16 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeAll, afterAll } from 'vitest';
 import { executeToolCall } from '../mcp/server';
 import { HonoContext } from '../types';
+
+// Deterministic email provider: stub fetch so the send path never hits the real
+// MailChannels/Resend/SendGrid network (which made this suite flaky under load).
+const realFetch = globalThis.fetch;
+beforeAll(() => {
+  globalThis.fetch = vi.fn(async () => new Response('OK', { status: 200 })) as any;
+});
+afterAll(() => {
+  globalThis.fetch = realFetch;
+});
 
 describe('Email Reminders MCP Tools', () => {
   const mockEmployees = [

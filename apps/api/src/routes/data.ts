@@ -7,8 +7,13 @@ import { Hono } from 'hono'
 import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { HonoContext, ApiResponse, TimeRecordPayload } from '../types'
+import { validateTimeRecord } from '../lib/policyValidation'
 
 export const dataRouter = new Hono()
+
+// DATA_API_VERSION: única fuente de verdad para el campo `version` de las
+// respuestas de este router. Mantener en sync con /VERSION (raíz del repo).
+const DATA_API_VERSION = 'v2.2.4'
 
 // Validation schema for time records
 const TimeRecordSchema = z.object({
@@ -23,7 +28,26 @@ const TimeRecordSchema = z.object({
   work_type: z.enum(['project', 'internal', 'meeting', 'training', 'other']),
   description: z.string().optional(),
   source: z.string().optional(),
+  // DATA-06: optional billing / status fields. Accepted (not required) so
+  // payloads that omit them keep working; persisted with safe defaults.
+  is_billable: z.union([z.boolean(), z.number()]).optional(),
+  rate_usd: z.number().optional(),
+  amount_usd: z.number().optional(),
+  status: z.string().optional(),
 })
+
+// DATA-06: resolve the billable flag as a 0/1 integer. If the record carries an
+// explicit is_billable it wins (boolean or number); otherwise it is derived
+// from work_type === 'project'.
+function resolveIsBillable(record: {
+  is_billable?: boolean | number
+  work_type?: string
+}): number {
+  if (record.is_billable !== undefined && record.is_billable !== null) {
+    return record.is_billable ? 1 : 0
+  }
+  return record.work_type === 'project' ? 1 : 0
+}
 
 const CsvUploadSchema = z.object({
   records: z.array(TimeRecordSchema).min(1),
@@ -38,32 +62,58 @@ dataRouter.post(
       const data = c.req.valid('json')
       const company_id = c.get('auth')?.company_id || 'mooving-default'
 
-      // Insert records into D1 database
-      for (const record of data.records) {
+      // FUNC-01: validate every row against the load policies before insert.
+      // Rows with errors are rejected (not inserted); rows with only warnings
+      // are inserted and their warnings are reported back.
+      const rejected: Array<{ index: number; errors: string[] }> = []
+      const warnings: Array<{ index: number; warnings: string[] }> = []
+      let inserted = 0
+
+      for (let index = 0; index < data.records.length; index++) {
+        const record = data.records[index]
+
+        const validation = validateTimeRecord(record)
+        if (!validation.valid) {
+          rejected.push({ index, errors: validation.errors })
+          continue
+        }
+        if (validation.warnings.length > 0) {
+          warnings.push({ index, warnings: validation.warnings })
+        }
+
+        // DATA-06: persist billable flag, USD rate/amount and approval status.
         const id = crypto.randomUUID()
         await c.env.DB.prepare(`
           INSERT INTO time_records (
             id, company_id, employee_id, employee_name, client_id, client_name,
             project_id, project_name, duration_decimal, duration_hours, duration_minutes,
-            date, work_type, description
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            date, work_type, description, is_billable, rate_usd, amount_usd, status, source
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
           id, company_id, record.employee_id, record.employee_name,
           record.client_id, record.client_name, record.project_id, record.project_name,
           record.duration_decimal, Math.floor(record.duration_decimal),
           Math.round((record.duration_decimal % 1) * 60),
-          record.date, record.work_type, record.description || ''
+          record.date, record.work_type, record.description || '',
+          resolveIsBillable(record), record.rate_usd ?? 0, record.amount_usd ?? 0,
+          record.status ?? 'approved', record.source ?? 'csv'
         ).run()
+
+        inserted++
       }
 
       const response: ApiResponse = {
         success: true,
         data: {
-          uploaded: data.records.length,
+          // `uploaded` kept for backwards compatibility, now = rows inserted.
+          uploaded: inserted,
+          inserted,
+          rejected,
+          warnings,
           company_id,
         },
         timestamp: new Date().toISOString(),
-        version: 'v1.0.0',
+        version: DATA_API_VERSION,
       }
       return c.json(response)
     } catch (error) {
@@ -72,7 +122,7 @@ dataRouter.post(
         success: false,
         error: 'Error interno',
         timestamp: new Date().toISOString(),
-        version: 'v1.0.0',
+        version: DATA_API_VERSION,
       }, 400)
     }
   }
@@ -100,21 +150,24 @@ dataRouter.post(
 
       const id = crypto.randomUUID()
 
+      // DATA-06: persist billable flag, USD rate/amount and approval status.
       await c.env.DB.prepare(`
         INSERT INTO time_records (
-          id, company_id, employee_id, employee_name, client_id, client_name, project_id, project_name, 
-          duration_decimal, duration_hours, duration_minutes, date, work_type, description, source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          id, company_id, employee_id, employee_name, client_id, client_name, project_id, project_name,
+          duration_decimal, duration_hours, duration_minutes, date, work_type, description, source,
+          is_billable, rate_usd, amount_usd, status
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
         id, company_id, data.employee_id, data.employee_name, data.client_id, data.client_name, data.project_id, data.project_name,
-        data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || '', data.source || 'manual'
+        data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || '', data.source || 'manual',
+        resolveIsBillable(data), data.rate_usd ?? 0, data.amount_usd ?? 0, data.status ?? 'approved'
       ).run()
 
       return c.json({
         success: true,
         data: { id, message: 'Registro creado exitosamente' },
         timestamp: new Date().toISOString(),
-        version: 'v1.0.0'
+        version: DATA_API_VERSION
       })
     } catch (error) {
       console.error(error)
@@ -154,7 +207,7 @@ dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
         limit: parseInt(limit),
       },
       timestamp: new Date().toISOString(),
-      version: 'v1.0.0',
+      version: DATA_API_VERSION,
     }
     return c.json(response)
   } catch (error) {
@@ -163,7 +216,7 @@ dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
       success: false,
       error: 'Error interno',
       timestamp: new Date().toISOString(),
-      version: 'v1.0.0',
+      version: DATA_API_VERSION,
     }, 500)
   }
 })
@@ -199,7 +252,7 @@ dataRouter.put(
         id, company_id
       ).run()
 
-      return c.json({ success: true, timestamp: new Date().toISOString(), version: 'v1.0.0' })
+      return c.json({ success: true, timestamp: new Date().toISOString(), version: DATA_API_VERSION })
     } catch (error) {
       console.error(error)
       return c.json({ success: false, error: 'Error interno' }, 500)
@@ -231,7 +284,7 @@ dataRouter.delete('/records/:id', async (c: HonoContext): Promise<Response> => {
     }
 
     await c.env.DB.prepare('DELETE FROM time_records WHERE id = ? AND company_id = ?').bind(id, company_id).run()
-    return c.json({ success: true, timestamp: new Date().toISOString(), version: 'v1.0.0' })
+    return c.json({ success: true, timestamp: new Date().toISOString(), version: DATA_API_VERSION })
   } catch (error) {
     console.error(error)
     return c.json({ success: false, error: 'Error interno' }, 500)

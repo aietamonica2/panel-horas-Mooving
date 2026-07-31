@@ -1,16 +1,17 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Clock, 
-  BookOpen, 
-  LogOut, 
+import {
+  LayoutDashboard,
+  Clock,
+  BookOpen,
+  LogOut,
   UserCircle,
-  Settings
+  Settings,
+  ClipboardCheck
 } from 'lucide-react';
 
 interface SidebarProps {
   currentView: string;
-  setCurrentView: (view: 'dashboard' | 'mytime' | 'documentation' | 'admin') => void;
+  setCurrentView: (view: 'dashboard' | 'mytime' | 'documentation' | 'admin' | 'approvals') => void;
   isAdmin: boolean;
   userName: string;
   userRole: string;
@@ -66,6 +67,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <Settings className="w-5 h-5" />
               <span>Administración</span>
+            </button>
+            <button
+              onClick={() => setCurrentView('approvals')}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+                currentView === 'approvals'
+                  ? 'bg-indigo-600/10 text-indigo-400 font-medium'
+                  : 'hover:bg-slate-800 hover:text-white'
+              }`}
+            >
+              <ClipboardCheck className="w-5 h-5" />
+              <span>Aprobaciones</span>
             </button>
           </>
         )}

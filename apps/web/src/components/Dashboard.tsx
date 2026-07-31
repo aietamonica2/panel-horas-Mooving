@@ -3,8 +3,9 @@
  * Professional operations dashboard with modern design
  */
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useDataStore } from '../stores/dataStore'
+import { TimeRecord } from '../types'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
 import { APP_VERSION, RELEASE_DATE } from '../version'
 import { FilterPanel } from './FilterPanel'
@@ -25,6 +26,7 @@ import { InactivityAlertBanner } from './InactivityAlertBanner'
 import { EmployeeComparisonModal } from './EmployeeComparisonModal'
 import { ExecutiveDrilldownModal } from './ExecutiveDrilldownModal'
 import { api } from '../api'
+import { parseCsv, mapTogglRows } from '../utils/csvImport'
 
 const MOOVING_COLORS = {
   primary: '#1a5f7a',    // Mooving dark blue
@@ -38,6 +40,29 @@ const MOOVING_COLORS = {
 }
 
 const CHART_COLORS = ['#1a5f7a', '#f97316', '#10b981', '#0ea5e9', '#8b5cf6', '#ec4899']
+
+// FEAT-04: campos de facturación USD persistidos por otra tarea. Se leen de
+// forma defensiva (cast local) para no depender de cambios en types/ y para
+// que tsc no falle si el campo aún no está declarado en la interfaz global.
+type BillingFields = { rate_usd?: number; amount_usd?: number }
+
+const getAmountUsd = (r: TimeRecord): number => {
+  const v = (r as TimeRecord & BillingFields).amount_usd
+  return typeof v === 'number' && isFinite(v) ? v : 0
+}
+
+// Regla de facturabilidad existente, centralizada para reutilizar en las
+// derivaciones sin cambiar la semántica original.
+const isBillableRecord = (r: TimeRecord): boolean =>
+  r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')
+
+const fmtUsd = (n: number, decimals = 0): string =>
+  new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(Number.isFinite(n) ? n : 0)
 
 export const Dashboard: React.FC = () => {
   const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
@@ -76,13 +101,19 @@ export const Dashboard: React.FC = () => {
   const [employeeCapacities, setEmployeeCapacities] = useState<Record<string, number>>({})
   const pageSize = 15
 
-  const filteredRecords = getFilteredRecords()
+  // ARCH-04: memoizar el resultado de filtrado. getFilteredRecords lee records
+  // y filters del store vía get(); recomputamos solo cuando esas entradas
+  // cambian, evitando arrays nuevos en cada render que re-renderizan hijos.
+  const filteredRecords = useMemo(
+    () => getFilteredRecords(),
+    [records, filters, getFilteredRecords]
+  )
 
   // Senda AI action handler via MCP
-  const handleSendaAction = async (action: string) => {
+  const handleSendaAction = async (action: string, recipients?: string[]) => {
     let toolName = ''
     let params: any = {}
-    
+
     if (action === 'Sincronización Clockify') {
       toolName = 'sync_clockify_hours'
     } else if (action === 'Sincronización Zendesk Support') {
@@ -91,7 +122,9 @@ export const Dashboard: React.FC = () => {
       toolName = 'audit_timesheet'
     } else if (action === 'Envío de Alertas Inactividad') {
       toolName = 'send_inactivity_alerts'
-      params = { users: ['monica.aieta', 'federico.gomez'] }
+      // NUEVO-3: enviar los destinatarios REALES que reporta el banner
+      // (empleado puntual o lista completa de inactivos), no una lista fija.
+      params = recipients && recipients.length > 0 ? { recipients } : {}
     } else {
       return
     }
@@ -165,6 +198,18 @@ export const Dashboard: React.FC = () => {
     fetchRecords()
   }, [])
 
+  // NUEVO-11: Dark mode funcional con Tailwind darkMode:'class'.
+  // Togglea la clase `dark` en el root del documento para que las variantes
+  // `dark:` apliquen globalmente. Limpia al desmontar para no filtrar el modo
+  // oscuro a otras vistas (p.ej. el login).
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.documentElement.classList.toggle('dark', isDarkMode)
+    return () => {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
+
   // Sync state filters to Zustand store (consolidated to prevent cascading re-renders)
   React.useEffect(() => {
     setFilters({
@@ -177,11 +222,15 @@ export const Dashboard: React.FC = () => {
     setCurrentPage(1)
   }, [selectedMonths, selectedEmployees, selectedClients, selectedProjects, selectedCategories, setFilters])
 
-  const totalHours = filteredRecords.reduce((sum, r) => sum + (r.duration_decimal || 0), 0)
-  const uniqueDatesCount = new Set(filteredRecords.map(r => r.date)).size
-  const avgHours = uniqueDatesCount > 0 ? (totalHours / uniqueDatesCount).toFixed(2) : '0.00'
-  const uniqueEmployees = new Set(filteredRecords.map(r => r.employee_id)).size
-  const uniqueClients = new Set(filteredRecords.map(r => r.client_id)).size
+  // ARCH-04: KPIs agregados memoizados (una sola pasada por deps estables).
+  const { totalHours, avgHours, uniqueEmployees, uniqueClients } = useMemo(() => {
+    const totalHours = filteredRecords.reduce((sum, r) => sum + (r.duration_decimal || 0), 0)
+    const uniqueDatesCount = new Set(filteredRecords.map(r => r.date)).size
+    const avgHours = uniqueDatesCount > 0 ? (totalHours / uniqueDatesCount).toFixed(2) : '0.00'
+    const uniqueEmployees = new Set(filteredRecords.map(r => r.employee_id)).size
+    const uniqueClients = new Set(filteredRecords.map(r => r.client_id)).size
+    return { totalHours, avgHours, uniqueEmployees, uniqueClients }
+  }, [filteredRecords])
 
   const handleCsvUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -191,65 +240,31 @@ export const Dashboard: React.FC = () => {
 
     try {
       const text = await file.text()
-      const lines = text.split('\n')
-      
-      // Fetch dynamic entities for mapping
-      const [empRes, cliRes, projRes] = await Promise.all([
-        api.callMcpTool('get_employees', {}).then(res => res.json()),
-        api.callMcpTool('get_clients', {}).then(res => res.json()),
-        api.callMcpTool('get_projects', {}).then(res => res.json())
-      ])
-      
-      const dbEmployees = empRes.success ? empRes.result.employees : []
-      const dbClients = cliRes.success ? cliRes.result.clients : []
-      const dbProjects = projRes.success ? projRes.result.projects : []
 
-      const recordsToUpload = lines.slice(1)
-        .filter(line => line.trim())
-        .map(line => {
-          const values = line.split(',').map(v => v.trim())
-          const dur = parseFloat(values[6])
-          
-          // Validate and normalize work_type to fit enum with Spanish fallback mapping
-          const rawWt = (values[8] || '').toLowerCase()
-          let wt = 'project'
-          if (rawWt.includes('reun') || rawWt.includes('meet') || rawWt.includes('call')) wt = 'meeting'
-          else if (rawWt.includes('intern')) wt = 'internal'
-          else if (rawWt.includes('capacit') || rawWt.includes('train')) wt = 'training'
-          else if (rawWt.includes('otro') || rawWt.includes('other')) wt = 'other'
-          else if (['project', 'internal', 'meeting', 'training', 'other'].includes(rawWt)) wt = rawWt
-
-          const empName = values[1] || 'Unknown Employee';
-          const cliName = values[3] || 'Unknown Client';
-          const projName = values[5] || 'Unknown Project';
-
-          const matchedEmp = dbEmployees.find((e: any) => e.name.toLowerCase() === empName.toLowerCase())
-          const matchedCli = dbClients.find((c: any) => c.name.toLowerCase() === cliName.toLowerCase())
-          const matchedProj = dbProjects.find((p: any) => p.name.toLowerCase() === projName.toLowerCase())
-
-          return {
-            employee_id: matchedEmp ? matchedEmp.id : (values[0] || 'unknown-emp'),
-            employee_name: matchedEmp ? matchedEmp.name : empName,
-            client_id: matchedCli ? matchedCli.id : (values[2] || 'unknown-client'),
-            client_name: matchedCli ? matchedCli.name : cliName,
-            project_id: matchedProj ? matchedProj.id : (values[4] || 'unknown-project'),
-            project_name: matchedProj ? matchedProj.name : projName,
-            duration_decimal: isNaN(dur) ? 1.0 : dur,
-            date: values[7] || new Date().toISOString().split('T')[0],
-            work_type: wt as any,
-            description: values[9] || ''
-          }
-        })
+      // Robust RFC-4180 parse + header-name based mapping (Toggl/Clockify export).
+      // Invalid rows are rejected (never fabricated with 1.0 / hoy()).
+      const rows = parseCsv(text)
+      const { records: recordsToUpload, rejected } = mapTogglRows(rows)
 
       if (recordsToUpload.length === 0) {
-        setAiMessage('❌ Error: El archivo CSV está vacío.')
+        setAiMessage(
+          rejected.length > 0
+            ? `❌ No se importó ninguna fila: ${rejected.length} fila(s) rechazada(s) por fecha/duración inválida.`
+            : '❌ Error: El archivo CSV no contiene filas válidas para importar.'
+        )
         return
       }
 
       const res = await api.uploadCSV({ records: recordsToUpload })
       const json = await res.json()
       if (res.ok && json.success) {
-        setAiMessage(`✅ Senda QA Agent: Se subieron y guardaron ${json.data.uploaded} registros.`)
+        const uploaded = json.data?.uploaded ?? recordsToUpload.length
+        const base = `✅ Senda QA Agent: Se subieron y guardaron ${uploaded} registros.`
+        setAiMessage(
+          rejected.length > 0
+            ? `${base} ⚠️ ${rejected.length} fila(s) se rechazaron por fecha o duración inválida.`
+            : base
+        )
         await fetchRecords()
       } else {
         setAiMessage(`❌ Error al subir: ${json.error || 'Error de validación'}`)
@@ -257,34 +272,114 @@ export const Dashboard: React.FC = () => {
     } catch (err) {
       setAiMessage(`❌ Error de conexión: ${err instanceof Error ? err.message : 'Error'}`)
     } finally {
-      setTimeout(() => setAiMessage(null), 5000)
+      // Allow re-uploading the same file by clearing the input value.
+      e.target.value = ''
+      setTimeout(() => setAiMessage(null), 6000)
     }
   }
 
-  // Chart data - Distribution by employee
-  const employeeData = Array.from(
-    filteredRecords.reduce((acc, r) => {
-      const key = r.employee_name
-      const existing = acc.get(key) || { name: key, horas: 0 }
-      existing.horas += r.duration_decimal
-      acc.set(key, existing)
-      return acc
-    }, new Map()).values()
-  ).sort((a, b) => b.horas - a.horas).slice(0, 8)
+  // Chart data - Distribution by employee (ARCH-04: memoizado)
+  const employeeData = useMemo(
+    () =>
+      Array.from(
+        filteredRecords.reduce((acc, r) => {
+          const key = r.employee_name
+          const existing = acc.get(key) || { name: key, horas: 0 }
+          existing.horas += r.duration_decimal
+          acc.set(key, existing)
+          return acc
+        }, new Map()).values()
+      )
+        .sort((a, b) => b.horas - a.horas)
+        .slice(0, 8),
+    [filteredRecords]
+  )
 
-  // Chart data - Distribution by client
-  const clientData = Array.from(
-    filteredRecords.reduce((acc, r) => {
-      const key = r.client_name
-      const existing = acc.get(key) || { name: key, value: 0 }
-      existing.value += r.duration_decimal
-      acc.set(key, existing)
-      return acc
-    }, new Map()).values()
-  ).sort((a, b) => b.value - a.value).slice(0, 6)
+  // Chart data - Distribution by client (ARCH-04: memoizado)
+  const clientData = useMemo(
+    () =>
+      Array.from(
+        filteredRecords.reduce((acc, r) => {
+          const key = r.client_name
+          const existing = acc.get(key) || { name: key, value: 0 }
+          existing.value += r.duration_decimal
+          acc.set(key, existing)
+          return acc
+        }, new Map()).values()
+      )
+        .sort((a, b) => b.value - a.value)
+        .slice(0, 6),
+    [filteredRecords]
+  )
+
+  // ARCH-04 + FEAT-04: métricas ejecutivas memoizadas. Una sola pasada calcula
+  // horas facturables/overhead y los montos USD reales (amount_usd). Si ningún
+  // registro trae amount_usd > 0, hasBillingData=false y la UI cae al proxy
+  // porcentual rotulado como "estimado" en vez de inventar cifras.
+  const billing = useMemo(() => {
+    let billableHours = 0
+    let totalUsd = 0
+    let billableUsd = 0
+    let nonBillableUsd = 0
+    let anyAmount = false
+    const clientUsd: Record<string, { usd: number; hours: number }> = {}
+
+    for (const r of filteredRecords) {
+      const hrs = r.duration_decimal || 0
+      const amt = getAmountUsd(r)
+      if (amt > 0) anyAmount = true
+      totalUsd += amt
+      if (isBillableRecord(r)) {
+        billableHours += hrs
+        billableUsd += amt
+      } else {
+        nonBillableUsd += amt
+      }
+      if (r.client_name) {
+        const c = clientUsd[r.client_name] || { usd: 0, hours: 0 }
+        c.usd += amt
+        c.hours += hrs
+        clientUsd[r.client_name] = c
+      }
+    }
+
+    const revenuePerClient = Object.entries(clientUsd)
+      .map(([name, v]) => ({ name, usd: v.usd, hours: v.hours, perHour: v.hours > 0 ? v.usd / v.hours : 0 }))
+      .sort((a, b) => b.usd - a.usd)
+
+    const billableRatio = totalHours > 0 ? (billableHours / totalHours) * 100 : 0
+    const overheadRatio = totalHours > 0 ? 100 - billableRatio : 0
+
+    return {
+      hasBillingData: anyAmount,
+      billableHours,
+      billableRatio,
+      overheadRatio,
+      totalUsd,
+      billableUsd,
+      nonBillableUsd,
+      clientUsd,
+      revenuePerClient,
+    }
+  }, [filteredRecords, totalHours])
+
+  // ARCH-04: cliente de mayor consumo memoizado. clientData ya viene ordenado
+  // desc por horas, así que el tope es el primer elemento (sin re-sort en render).
+  const topRiskClient = useMemo(() => {
+    const top = clientData[0]
+    if (!top) return null
+    const usdInfo = billing.clientUsd[top.name]
+    return {
+      name: top.name,
+      hours: top.value,
+      ratio: totalHours > 0 ? (top.value / totalHours) * 100 : 0,
+      usd: usdInfo?.usd ?? 0,
+      perHour: usdInfo && usdInfo.hours > 0 ? usdInfo.usd / usdInfo.hours : 0,
+    }
+  }, [clientData, billing, totalHours])
 
   return (
-    <div style={{ backgroundColor: isDarkMode ? '#0f172a' : MOOVING_COLORS.lightBg }} className={`min-h-screen relative transition-colors ${isDarkMode ? 'dark bg-slate-900 text-slate-100' : ''}`}>
+    <div className="min-h-screen relative transition-colors bg-slate-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100">
       {/* Toast Notification para Senda AI */}
       {aiMessage && (
         <div className="fixed top-6 right-6 z-50 bg-indigo-900 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 transition-all animate-fade-in-down border border-indigo-400">
@@ -293,7 +388,7 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* Header */}
-      <div style={{ backgroundColor: MOOVING_COLORS.primary }} className="text-white shadow-lg">
+      <div className="bg-[#1a5f7a] dark:bg-slate-800 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div>
@@ -303,13 +398,13 @@ export const Dashboard: React.FC = () => {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsCompareModalOpen(true)}
-                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-xs border border-white/20 transition flex items-center gap-1.5"
+                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-sm border border-white/20 transition flex items-center gap-1.5"
               >
                 <span>🔄</span> Comparar Empleados
               </button>
               <button
                 onClick={() => setIsDarkMode(!isDarkMode)}
-                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-xs border border-white/20 transition flex items-center gap-1.5"
+                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-sm border border-white/20 transition flex items-center gap-1.5"
               >
                 <span>{isDarkMode ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}</span>
               </button>
@@ -441,16 +536,16 @@ export const Dashboard: React.FC = () => {
         <InactivityAlertBanner
           records={filteredRecords}
           allEmployees={allEmployeesList}
-          onSendReminder={(name) => handleSendaAction('Envío de Alertas Inactividad')}
+          onSendReminder={(recipientIds) => handleSendaAction('Envío de Alertas Inactividad', recipientIds)}
         />
 
         {/* KPIs Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Hours */}
-          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 hover:shadow-lg transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Total Horas</p>
+                <p className="text-gray-500 dark:text-gray-300 text-sm font-medium">Total Horas</p>
                 <p className="text-4xl font-bold mt-2" style={{ color: MOOVING_COLORS.primary }}>
                   {totalHours.toFixed(1)}
                 </p>
@@ -461,10 +556,10 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Daily Average */}
-          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 hover:shadow-lg transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Promedio Diario</p>
+                <p className="text-gray-500 dark:text-gray-300 text-sm font-medium">Promedio Diario</p>
                 <p className="text-4xl font-bold mt-2" style={{ color: MOOVING_COLORS.secondary }}>
                   {avgHours}h
                 </p>
@@ -475,10 +570,10 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Employees */}
-          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 hover:shadow-lg transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Empleados</p>
+                <p className="text-gray-500 dark:text-gray-300 text-sm font-medium">Empleados</p>
                 <p className="text-4xl font-bold mt-2" style={{ color: MOOVING_COLORS.success }}>
                   {uniqueEmployees}
                 </p>
@@ -489,10 +584,10 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Clients */}
-          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 hover:shadow-lg transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Clientes</p>
+                <p className="text-gray-500 dark:text-gray-300 text-sm font-medium">Clientes</p>
                 <p className="text-4xl font-bold mt-2" style={{ color: MOOVING_COLORS.info }}>
                   {uniqueClients}
                 </p>
@@ -510,7 +605,14 @@ export const Dashboard: React.FC = () => {
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <span className="text-yellow-400">👑</span> Métricas Ejecutivas (C-Level)
               </h2>
-              <span className="text-xs bg-gray-700 px-3 py-1 rounded-full uppercase tracking-widest text-gray-300">Confidencial</span>
+              <div className="flex items-center gap-2">
+                {billing.hasBillingData ? (
+                  <span className="text-xs bg-emerald-900/60 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full uppercase tracking-widest">USD real</span>
+                ) : (
+                  <span className="text-xs bg-amber-900/50 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-full uppercase tracking-widest" title="No hay amount_usd en los registros: se muestran proxies estimados">Estimado</span>
+                )}
+                <span className="text-xs bg-gray-700 px-3 py-1 rounded-full uppercase tracking-widest text-gray-300">Confidencial</span>
+              </div>
             </div>
             
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -526,10 +628,17 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex items-end gap-3">
                   <p className="text-3xl font-bold text-green-400">
-                    {totalHours > 0 ? ((filteredRecords.filter(r => r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')).reduce((acc, r) => acc + r.duration_decimal, 0) / totalHours) * 100).toFixed(1) : '0.0'}%
+                    {billing.billableRatio.toFixed(1)}%
                   </p>
+                  {billing.hasBillingData && (
+                    <p className="text-base font-semibold text-green-300 mb-1">{fmtUsd(billing.billableUsd)}</p>
+                  )}
                 </div>
-                <p className="text-xs text-gray-400 mt-2">Objetivo saludable: &gt; 75% (basado en is_billable real)</p>
+                {billing.hasBillingData ? (
+                  <p className="text-xs text-gray-400 mt-2">Facturación real facturable (amount_usd) · {billing.billableHours.toFixed(1)}h</p>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-2">Objetivo saludable: &gt; 75% · sin datos de facturación USD (estimado por is_billable)</p>
+                )}
               </div>
 
               {/* Fuga de Capital / Overhead */}
@@ -544,10 +653,17 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex items-end gap-3">
                   <p className="text-3xl font-bold text-red-400">
-                    {totalHours > 0 ? (((totalHours - filteredRecords.filter(r => r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')).reduce((acc, r) => acc + r.duration_decimal, 0)) / totalHours) * 100).toFixed(1) : '0.0'}%
+                    {billing.overheadRatio.toFixed(1)}%
                   </p>
+                  {billing.hasBillingData && (
+                    <p className="text-base font-semibold text-red-300 mb-1">{fmtUsd(billing.nonBillableUsd)}</p>
+                  )}
                 </div>
-                <p className="text-xs text-gray-400 mt-2">Tiempo en reuniones internas / tareas no facturables</p>
+                {billing.hasBillingData ? (
+                  <p className="text-xs text-gray-400 mt-2">Costo no facturable real (amount_usd) en reuniones / tareas internas</p>
+                ) : (
+                  <p className="text-xs text-gray-400 mt-2">Tiempo en reuniones internas / tareas no facturables · sin datos de facturación USD</p>
+                )}
               </div>
 
               {/* Cliente Riesgoso / Vampiro */}
@@ -562,13 +678,79 @@ export const Dashboard: React.FC = () => {
                 </div>
                 <div className="flex items-end gap-3">
                   <p className="text-xl font-bold text-yellow-400 truncate">
-                    {[...clientData].sort((a, b) => b.value - a.value)[0]?.name || 'N/A'}
+                    {topRiskClient?.name || 'N/A'}
                   </p>
+                  {billing.hasBillingData && topRiskClient && (
+                    <p className="text-sm font-semibold text-yellow-200 mb-0.5">{fmtUsd(topRiskClient.usd)}</p>
+                  )}
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
-                  Consume el {totalHours > 0 ? (([...clientData].sort((a, b) => b.value - a.value)[0]?.value || 0) / totalHours * 100).toFixed(1) : '0.0'}% del tiempo total
+                  Consume el {topRiskClient ? topRiskClient.ratio.toFixed(1) : '0.0'}% del tiempo total
+                  {billing.hasBillingData && topRiskClient && ` · ${fmtUsd(topRiskClient.perHour, 2)}/h`}
                 </p>
               </div>
+            </div>
+
+            {/* FEAT-04: Facturación en USD real (amount_usd). Fallback honesto a
+                proxy "estimado" cuando no hay datos persistidos. */}
+            <div className="mt-6 border-t border-gray-700 pt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
+                  <span>💵</span> Facturación (USD)
+                </h3>
+                {billing.hasBillingData ? (
+                  <span className="text-[10px] text-emerald-300 uppercase tracking-wider font-semibold">Monto real (amount_usd)</span>
+                ) : (
+                  <span className="text-[10px] text-amber-300 uppercase tracking-wider font-semibold">Estimado · sin datos de facturación</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-white/5 p-4 rounded-lg border border-white/5">
+                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Facturación Total</p>
+                  {billing.hasBillingData ? (
+                    <p className="text-2xl font-bold text-emerald-300 mt-1">{fmtUsd(billing.totalUsd)}</p>
+                  ) : (
+                    <>
+                      <p className="text-2xl font-bold text-gray-400 mt-1">{billing.billableRatio.toFixed(1)}%</p>
+                      <p className="text-[11px] text-amber-300/80 mt-1">Proxy estimado (facturabilidad) · sin datos de facturación</p>
+                    </>
+                  )}
+                </div>
+                <div className="bg-white/5 p-4 rounded-lg border border-white/5">
+                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Facturable</p>
+                  {billing.hasBillingData ? (
+                    <p className="text-2xl font-bold text-green-300 mt-1">{fmtUsd(billing.billableUsd)}</p>
+                  ) : (
+                    <p className="text-sm font-semibold text-gray-500 mt-2">Sin datos de facturación</p>
+                  )}
+                </div>
+                <div className="bg-white/5 p-4 rounded-lg border border-white/5">
+                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">No Facturable</p>
+                  {billing.hasBillingData ? (
+                    <p className="text-2xl font-bold text-red-300 mt-1">{fmtUsd(billing.nonBillableUsd)}</p>
+                  ) : (
+                    <p className="text-sm font-semibold text-gray-500 mt-2">Sin datos de facturación</p>
+                  )}
+                </div>
+              </div>
+
+              {billing.hasBillingData && billing.revenuePerClient.some(c => c.usd > 0) && (
+                <div className="mt-4">
+                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-2">Ingreso por hora por cliente</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                    {billing.revenuePerClient.filter(c => c.usd > 0).slice(0, 6).map(c => (
+                      <div key={c.name} className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-lg border border-white/5 text-xs">
+                        <span className="text-gray-300 truncate max-w-[55%]" title={c.name}>{c.name}</span>
+                        <span className="text-right">
+                          <span className="font-bold text-emerald-300">{fmtUsd(c.perHour, 2)}/h</span>
+                          <span className="text-gray-500 block text-[10px]">{fmtUsd(c.usd)} · {c.hours.toFixed(1)}h</span>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

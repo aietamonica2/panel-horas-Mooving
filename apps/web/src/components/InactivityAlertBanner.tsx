@@ -10,7 +10,9 @@ import { AlertCircle, UserX, Send } from 'lucide-react'
 interface InactivityAlertBannerProps {
   records: TimeRecord[]
   allEmployees?: { id: string; name: string; is_active?: number }[]
-  onSendReminder?: (employeeName: string) => void
+  // NUEVO-3: propaga los identificadores REALES de los inactivos a alertar
+  // (un empleado puntual o la lista completa), nunca una lista fija.
+  onSendReminder?: (recipientIds: string[]) => void
 }
 
 export const InactivityAlertBanner: React.FC<InactivityAlertBannerProps> = ({
@@ -20,9 +22,6 @@ export const InactivityAlertBanner: React.FC<InactivityAlertBannerProps> = ({
 }) => {
   if (records.length === 0 && allEmployees.length === 0) return null
 
-  // Active employees in organization
-  const activeEmployeeIds = new Set(allEmployees.filter(e => e.is_active !== 0).map(e => e.id))
-  
   // Employees who logged at least 1 hour in current records view
   const loggedEmployeeIds = new Set(records.map(r => r.employee_id))
 
@@ -53,13 +52,13 @@ export const InactivityAlertBanner: React.FC<InactivityAlertBannerProps> = ({
 
         <div className="flex items-center gap-2 flex-wrap">
           {inactiveEmployees.slice(0, 5).map(emp => (
-            <div key={emp.id} className="flex items-center gap-1.5 bg-white border border-red-200 px-3 py-1 rounded-lg text-xs font-semibold text-slate-800 shadow-2xs">
+            <div key={emp.id} className="flex items-center gap-1.5 bg-white border border-red-200 px-3 py-1 rounded-lg text-xs font-semibold text-slate-800 shadow-sm">
               <span>{emp.name}</span>
               {onSendReminder && (
                 <button
-                  onClick={() => onSendReminder(emp.name)}
+                  onClick={() => onSendReminder([emp.id])}
                   className="text-indigo-600 hover:text-indigo-800 p-0.5 rounded transition"
-                  title="Enviar recordatorio"
+                  title={`Enviar recordatorio a ${emp.name}`}
                 >
                   <Send className="w-3 h-3" />
                 </button>
@@ -68,6 +67,16 @@ export const InactivityAlertBanner: React.FC<InactivityAlertBannerProps> = ({
           ))}
           {inactiveEmployees.length > 5 && (
             <span className="text-xs font-bold text-red-700">+{inactiveEmployees.length - 5} más</span>
+          )}
+          {onSendReminder && inactiveEmployees.length > 1 && (
+            <button
+              onClick={() => onSendReminder(inactiveEmployees.map(e => e.id))}
+              className="flex items-center gap-1.5 bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded-lg text-xs font-semibold shadow-sm transition"
+              title="Enviar recordatorio a todos los inactivos"
+            >
+              <Send className="w-3 h-3" />
+              <span>Alertar a todos</span>
+            </button>
           )}
         </div>
       </div>

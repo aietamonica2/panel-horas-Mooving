@@ -3,14 +3,14 @@ import { HonoContext } from '../types';
 export const TOOL_REGISTRY = {
   get_clients: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const { results } = await db.prepare('SELECT * FROM clients WHERE company_id = ?').bind(company_id).all();
     return { clients: results };
   },
   create_client: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { company_id, name } = params;
-    const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { name } = params;
+    const cid = c.get('auth')?.company_id || 'mooving-default';
     const id = 'cli_' + crypto.randomUUID().split('-')[0];
     await db.prepare('INSERT INTO clients (id, company_id, name) VALUES (?, ?, ?)')
       .bind(id, cid, name).run();
@@ -19,7 +19,7 @@ export const TOOL_REGISTRY = {
   update_client: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id, name } = params;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     await db.prepare('UPDATE clients SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?')
       .bind(name, id, company_id).run();
     return { success: true };
@@ -27,21 +27,21 @@ export const TOOL_REGISTRY = {
   delete_client: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id } = params;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     await db.prepare('DELETE FROM clients WHERE id = ? AND company_id = ?').bind(id, company_id).run();
     return { success: true };
   },
 
   get_client_contracts: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const { results } = await db.prepare('SELECT * FROM client_contracts WHERE company_id = ?').bind(company_id).all();
     return { contracts: results || [] };
   },
   set_client_contract: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { client_id, month, contracted_hours } = params;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const id = `cnt_${client_id}_${month}`.replaceAll(/[^a-zA-Z0-9_]/g, '_');
     const hours = Number(contracted_hours || 0);
 
@@ -58,14 +58,14 @@ export const TOOL_REGISTRY = {
 
   get_projects: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const { results } = await db.prepare('SELECT * FROM projects WHERE company_id = ?').bind(company_id).all();
     return { projects: results };
   },
   create_project: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { company_id, client_id, name } = params;
-    const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { client_id, name } = params;
+    const cid = c.get('auth')?.company_id || 'mooving-default';
     const id = 'proj_' + crypto.randomUUID().split('-')[0];
     await db.prepare('INSERT INTO projects (id, company_id, client_id, name) VALUES (?, ?, ?, ?)')
       .bind(id, cid, client_id, name).run();
@@ -74,7 +74,7 @@ export const TOOL_REGISTRY = {
   update_project: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id, client_id, name } = params;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     await db.prepare('UPDATE projects SET client_id = ?, name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?')
       .bind(client_id, name, id, company_id).run();
     return { success: true };
@@ -82,21 +82,21 @@ export const TOOL_REGISTRY = {
   delete_project: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id } = params;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     await db.prepare('DELETE FROM projects WHERE id = ? AND company_id = ?').bind(id, company_id).run();
     return { success: true };
   },
 
   get_employees: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const { results } = await db.prepare('SELECT * FROM employees WHERE company_id = ?').bind(company_id).all();
     return { employees: results };
   },
   create_employee: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { company_id, name, email, is_active, daily_hours_expected } = params;
-    const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { name, email, is_active, daily_hours_expected } = params;
+    const cid = c.get('auth')?.company_id || 'mooving-default';
     const id = 'emp_' + crypto.randomUUID().split('-')[0];
     const active = is_active !== undefined ? (is_active ? 1 : 0) : 1;
     const dailyHours = daily_hours_expected !== undefined ? Number(daily_hours_expected) : 8.0;
@@ -108,7 +108,7 @@ export const TOOL_REGISTRY = {
     const db = c.env.DB;
     const { id, name, email, is_active, daily_hours_expected } = params;
     const active = is_active !== undefined ? (is_active ? 1 : 0) : 1;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     let query = 'UPDATE employees SET name = ?, email = ?, is_active = ?, updated_at = CURRENT_TIMESTAMP';
     const bindParams: any[] = [name, email || null, active];
     if (daily_hours_expected !== undefined) {
@@ -123,21 +123,21 @@ export const TOOL_REGISTRY = {
   delete_employee: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id } = params;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     await db.prepare('DELETE FROM employees WHERE id = ? AND company_id = ?').bind(id, company_id).run();
     return { success: true };
   },
 
   get_categories: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const { results } = await db.prepare('SELECT * FROM categories WHERE company_id = ?').bind(company_id).all();
     return { categories: results };
   },
   create_category: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { company_id, name } = params;
-    const cid = company_id || c.get('auth')?.company_id || 'mooving-default';
+    const { name } = params;
+    const cid = c.get('auth')?.company_id || 'mooving-default';
     const id = crypto.randomUUID().split('-')[0];
     await db.prepare('INSERT INTO categories (id, company_id, name) VALUES (?, ?, ?)')
       .bind(id, cid, name).run();
@@ -146,7 +146,7 @@ export const TOOL_REGISTRY = {
   update_category: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id, name } = params;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     await db.prepare('UPDATE categories SET name = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?')
       .bind(name, id, company_id).run();
     return { success: true };
@@ -154,7 +154,7 @@ export const TOOL_REGISTRY = {
   delete_category: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const { id } = params;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     await db.prepare('DELETE FROM categories WHERE id = ? AND company_id = ?').bind(id, company_id).run();
     return { success: true };
   },
@@ -164,7 +164,7 @@ export const TOOL_REGISTRY = {
     const { employee_id, client_id, project_id, duration_decimal, date, work_type, description } = params;
     
     // Auto-detect company from auth if not provided
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     
     // Simple lookup for names if not provided
     let employee_name = params.employee_name || '';
@@ -213,7 +213,7 @@ export const TOOL_REGISTRY = {
     const db = c.env.DB;
     const { employee_id, client_id, project_id, duration_decimal, work_type, description, start_date, end_date, days_of_week } = params;
     
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     
     let employee_name = params.employee_name || '';
     let client_name = params.client_name || '';
@@ -307,8 +307,9 @@ export const TOOL_REGISTRY = {
 
   get_time_records: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { company_id, month, employee_id } = params;
-    
+    const { month, employee_id } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
     let query = 'SELECT * FROM time_records WHERE company_id = ?';
     const queryParams: any[] = [company_id];
     
@@ -327,10 +328,86 @@ export const TOOL_REGISTRY = {
     return { records: results };
   },
   
+  // ---------------------------------------------------------------------------
+  // FEAT-02 — Flujo de aprobación de horas (approval workflow).
+  // Todas derivan `company_id` del principal autenticado (nunca del body) para
+  // preservar el aislamiento multi-tenant (MT-02: tenant-from-principal).
+  // ---------------------------------------------------------------------------
+
+  get_pending_time_records: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { employee_id, month } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+    let query = "SELECT * FROM time_records WHERE company_id = ? AND status = 'pending'";
+    const queryParams: any[] = [company_id];
+
+    if (employee_id) {
+      query += ' AND employee_id = ?';
+      queryParams.push(employee_id);
+    }
+    if (month) {
+      query += ' AND strftime("%Y-%m", date) = ?';
+      queryParams.push(month);
+    }
+
+    query += ' ORDER BY date DESC';
+
+    const { results } = await db.prepare(query).bind(...queryParams).all();
+    return { records: results || [], count: (results || []).length };
+  },
+
+  approve_time_record: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+    await db.prepare("UPDATE time_records SET status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?")
+      .bind(id, company_id).run();
+    return { success: true };
+  },
+
+  reject_time_record: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { id, reason } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+    // La tabla time_records (esquema en migración 0004 + columnas de 0017) NO tiene
+    // una columna dedicada para el motivo de rechazo. Para no inventar esquema:
+    // si viene `reason`, lo anexamos al final de `description` (" [Rechazado: <reason>]");
+    // si no viene, se hace el UPDATE simple. En ambos caminos se mantiene el scope
+    // de tenant (WHERE id = ? AND company_id = ?).
+    if (reason) {
+      await db.prepare("UPDATE time_records SET status = 'rejected', description = COALESCE(description, '') || ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?")
+        .bind(` [Rechazado: ${reason}]`, id, company_id).run();
+    } else {
+      await db.prepare("UPDATE time_records SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?")
+        .bind(id, company_id).run();
+    }
+    return { success: true };
+  },
+
+  approve_all_pending: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const { employee_id } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+    let query = "UPDATE time_records SET status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE status = 'pending' AND company_id = ?";
+    const queryParams: any[] = [company_id];
+
+    if (employee_id) {
+      query += ' AND employee_id = ?';
+      queryParams.push(employee_id);
+    }
+
+    const res = await db.prepare(query).bind(...queryParams).run();
+    return { success: true, approved_count: res?.meta?.changes ?? 0 };
+  },
+
   get_availability_metrics: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { company_id, month } = params;
-    
+    const { month } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
     let query = 'SELECT SUM(duration_decimal) as total_hours, employee_id FROM time_records WHERE company_id = ?';
     const queryParams: any[] = [company_id];
     
@@ -347,13 +424,14 @@ export const TOOL_REGISTRY = {
 
   get_employee_insights: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const { company_id, employee_id, month } = params;
-    
+    const { employee_id, month } = params;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
     // Assume 160h standard month for full time
     const expected_monthly_hours = 160;
 
     let query = 'SELECT * FROM time_records WHERE company_id = ? AND employee_id = ?';
-    const queryParams: any[] = [company_id || c.get('auth')?.company_id || 'mooving-default', employee_id];
+    const queryParams: any[] = [company_id, employee_id];
 
     if (month) {
       query += ' AND strftime("%Y-%m", date) = ?';
@@ -389,7 +467,7 @@ export const TOOL_REGISTRY = {
 
   sync_clockify_hours: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const token = c.env.CLOCKIFY_API_TOKEN;
     
     if (!token) {
@@ -510,7 +588,7 @@ export const TOOL_REGISTRY = {
 
   sync_zendesk_tickets: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const subdomain = c.env.ZENDESK_SUBDOMAIN;
     const email = c.env.ZENDESK_EMAIL;
     const token = c.env.ZENDESK_API_TOKEN;
@@ -640,7 +718,7 @@ export const TOOL_REGISTRY = {
 
   get_unlinked_external_users: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
 
     // Query time_records with external sources (zendesk/clockify) that don't match any employee ID in employees table
     // Tenant-scoped JOIN: match only employees of the same company_id so a homonym
@@ -666,7 +744,7 @@ export const TOOL_REGISTRY = {
 
   link_external_user: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const { alias_identifier, target_employee_id } = params;
 
     if (!alias_identifier || !target_employee_id) {
@@ -719,7 +797,7 @@ export const TOOL_REGISTRY = {
 
   audit_timesheet: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     
     // Buscamos empleados con exceso de horas en un mismo día (> 12 horas)
     const { results } = await db.prepare(`
@@ -744,21 +822,116 @@ export const TOOL_REGISTRY = {
   },
 
   send_inactivity_alerts: async (params: any, c: HonoContext) => {
-    // Simula envío de alertas usando Cloudflare Email Routing
-    const { company_id, users } = params;
-    
+    const db = c.env.DB;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+    // Umbral de inactividad en días (default 3, o el parámetro recibido).
+    const days = Number(params.days ?? params.inactive_days ?? params.days_threshold) || 3;
+
+    // Fecha de corte: quien no cargó horas en/después de esta fecha se considera inactivo.
+    const cutoff = new Date();
+    cutoff.setUTCDate(cutoff.getUTCDate() - days);
+    const cutoffStr = cutoff.toISOString().split('T')[0];
+
+    // 1. Empleados activos del tenant autenticado.
+    const { results: employees } = await db.prepare(
+      'SELECT id, name, email FROM employees WHERE company_id = ? AND is_active = 1'
+    ).bind(company_id).all();
+
+    // 2. Última fecha con registro de horas por empleado. Matcheamos por id y por nombre
+    //    porque los distintos orígenes (Clockify/Zendesk/manual) guardan uno u otro.
+    const { results: lastRecords } = await db.prepare(
+      'SELECT employee_id, employee_name, MAX(date) as last_date FROM time_records WHERE company_id = ? GROUP BY employee_id, employee_name'
+    ).bind(company_id).all();
+
+    const lastByKey: Record<string, string> = {};
+    for (const r of (lastRecords || []) as any[]) {
+      const d = r.last_date as string;
+      if (!d) continue;
+      for (const raw of [r.employee_id, r.employee_name]) {
+        if (!raw) continue;
+        const k = String(raw).toLowerCase();
+        if (!lastByKey[k] || d > lastByKey[k]) lastByKey[k] = d;
+      }
+    }
+
+    // 3. Determinar los inactivos REALES (sin registros o con último registro anterior al corte).
+    const inactive: Array<{ employee_id: string; name: string; email: string | null; last_record_date: string | null }> = [];
+    for (const emp of (employees || []) as any[]) {
+      const idKey = String(emp.id || '').toLowerCase();
+      const nameKey = String(emp.name || '').toLowerCase();
+      const lastDate = lastByKey[idKey] || lastByKey[nameKey] || null;
+      if (!lastDate || lastDate < cutoffStr) {
+        inactive.push({
+          employee_id: emp.id,
+          name: emp.name,
+          email: emp.email || null,
+          last_record_date: lastDate,
+        });
+      }
+    }
+
+    // Nadie inactivo: no hay nada que enviar. No inventamos conteos.
+    if (inactive.length === 0) {
+      return {
+        success: true,
+        sent: false,
+        alerts_sent: 0,
+        inactive_count: 0,
+        inactive_employees: [],
+        days_threshold: days,
+        cutoff_date: cutoffStr,
+        channel: 'email_reminders',
+        message: `No se detectaron empleados inactivos en los últimos ${days} días. No se enviaron alertas.`,
+        timestamp: new Date().toISOString(),
+      };
+    }
+
+    // 4. Envío REAL reutilizando la infraestructura de email de send_email_reminders
+    //    (Resend / SendGrid / Cloudflare MailChannels). Reportamos exactamente lo que
+    //    el proveedor confirma: nunca un conteo inventado.
+    let sendResult: any = null;
+    let sendError: string | null = null;
+    try {
+      sendResult = await (TOOL_REGISTRY as any).send_email_reminders(
+        {
+          recipients: inactive.map((i) => i.employee_id),
+          month: params.month,
+        },
+        c
+      );
+    } catch (err: any) {
+      sendError = err?.message || 'Error desconocido al enviar alertas de inactividad';
+    }
+
+    const realSent = Number(sendResult?.real_emails_sent) || 0;
+    const failed: string[] = sendError
+      ? [sendError]
+      : (Array.isArray(sendResult?.failed_emails) ? sendResult.failed_emails : []);
+    const sent = !sendError && realSent > 0;
+
     return {
       success: true,
-      alerts_sent: users?.length || 3,
-      channel: 'Cloudflare Email Routing',
-      message: 'Alertas despachadas exitosamente a los usuarios inactivos.'
+      sent,
+      alerts_sent: realSent,
+      inactive_count: inactive.length,
+      inactive_employees: inactive,
+      days_threshold: days,
+      cutoff_date: cutoffStr,
+      channel: sendResult?.provider || 'email_reminders',
+      failed_alerts: failed,
+      message: sent
+        ? `Se enviaron ${realSent} alertas de inactividad reales (de ${inactive.length} empleados inactivos detectados en los últimos ${days} días).`
+        : `No se pudo enviar ninguna alerta real. Inactivos detectados: ${inactive.length}. Detalle: ${failed.join(' — ') || 'sin proveedor de email disponible'}.`,
+      timestamp: new Date().toISOString(),
     };
   },
 
   write_time_records: async (params: any, c: HonoContext) => {
     // Inserta datos en Cloudflare D1 clasificando el origen
-    const { company_id, records, source } = params;
+    const { records, source } = params;
     const db = c.env.DB;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     
     if (!records || !Array.isArray(records)) {
       throw new Error('No records provided');
@@ -774,7 +947,7 @@ export const TOOL_REGISTRY = {
             date, work_type, description, source
           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          id, company_id || 'mooving-default', record.employee_id, record.employee_name,
+          id, company_id, record.employee_id, record.employee_name,
           record.client_id, record.client_name, record.project_id, record.project_name,
           record.duration_decimal, Math.floor(record.duration_decimal), Math.round((record.duration_decimal % 1) * 60),
           record.date, record.work_type, record.description || '', source || 'senda_ai'
@@ -793,7 +966,7 @@ export const TOOL_REGISTRY = {
   parse_natural_language_hours: async (params: any, c: HonoContext) => {
     const { text } = params;
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
 
     if (!text) {
       throw new Error('El texto es requerido para procesar.');
@@ -921,7 +1094,7 @@ export const TOOL_REGISTRY = {
    */
   senda_widget_action: async (params: any, c: HonoContext) => {
     const { message, space } = params;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const sendaApiKey = c.env.SENDA_API_KEY;
     const sendaBaseUrl = c.env.SENDA_BASE_URL || 'https://sendaqa.telar.ai/api';
 
@@ -993,7 +1166,7 @@ export const TOOL_REGISTRY = {
       days_of_week,
     } = params;
 
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const hours_per_day = Number(params.hours_per_day) || 4;
 
     if (!employee_id || !client_id || !project_id || !start_date || !end_date) {
@@ -1022,7 +1195,7 @@ export const TOOL_REGISTRY = {
 
   get_email_reminder_drafts: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const targetMonth = params.month || new Date().toISOString().substring(0, 7); // e.g. "2026-07"
     const includeInactive = !!params.include_inactive;
 
@@ -1120,7 +1293,7 @@ export const TOOL_REGISTRY = {
 
   send_email_reminders: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const { recipients, custom_cc, month, sync_clockify_first } = params;
 
     if (!Array.isArray(recipients) || recipients.length === 0) {
@@ -1375,7 +1548,7 @@ export const TOOL_REGISTRY = {
 
   configure_email_reminder_schedule: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = params.company_id || c.get('auth')?.company_id || 'mooving-default';
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
     const { default_cc, is_automated, cron_schedule } = params;
 
     const autoVal = is_automated ? 1 : 0;
