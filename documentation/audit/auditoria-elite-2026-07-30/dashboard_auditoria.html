@@ -54,16 +54,16 @@
 <body>
 <header>
   <h1>Auditoría de Élite · Panel de Operaciones Mooving</h1>
-  <p>Estado del sistema, hallazgos y backlog de remediación · 30 de julio de 2026 · <strong>v2.2.3</strong> (reconciliada; auditoría inicial sobre v1.9.1)</p>
+  <p>Estado del sistema, hallazgos y backlog de remediación · 31 de julio de 2026 · <strong>v2.3.0</strong> en GitHub main (auditoría inicial v1.9.1 · reconciliada v2.2.3 · Olas 1 y 2 ejecutadas)</p>
 </header>
 <div class="wrap">
 
   <div class="kpis" id="kpis"></div>
 
   <div class="note">
-    <strong>Reconciliado contra v2.2.3:</strong> la versión en uso (v2.2.3) vive solo en local, 7 commits por delante de GitHub (v1.9.1). Todos los P0/P1 de backend/seguridad/datos siguen vigentes; se agregaron hallazgos del código nuevo (NUEVO-*).
+    <strong>Olas 1 y 2 ejecutadas y mergeadas a main (v2.3.0):</strong> ~32 ítems resueltos en 6 rondas de agentes en paralelo, con tests (102/102 verde) y build OK. Incluye: cierre del MCP, aislamiento multi-tenant, parser CSV robusto, USD real, validación de políticas, flujo de aprobación de horas, dark mode y más.
     &nbsp;·&nbsp; <strong>Login:</strong> no se modifica (se centraliza en otra app) → <span class="st st-defer">Diferido</span>.
-    &nbsp;·&nbsp; <strong>Ya ejecutado sobre v2.2.3:</strong> aislamiento multi-tenant (MT-01) + fix del crash de "Mis Horas" (NUEVO-1), con tests, 35/35 verde y build OK.
+    &nbsp;·&nbsp; <strong>Acción del equipo:</strong> rotar los secretos expuestos (aunque se sacaron del código, siguen comprometidos) y setear ENVIRONMENT=production al deployar. <strong>FEAT-01 (rol Coordinador + RACI)</strong> queda pendiente de tu definición de producto.
   </div>
 
   <div class="bars">
@@ -99,45 +99,45 @@
 const D = [
   ["MT-01","P0","Multi-tenant","company_id en las 8 ops update/delete del MCP","S","done","Hecho"],
   ["NUEVO-1","P0","UX","Crash de 'Mis Horas' (myRecords sin declarar) en v2.2.3","S","done","Hecho"],
-  ["PROC-01","P1","Arquitectura","v2.2.3 solo en local: 7 commits sin pushear a GitHub","S","todo","Ola 1"],
+  ["PROC-01","P1","Arquitectura","v2.2.3 solo en local: sin pushear a GitHub","S","done","Hecho"],
   ["NUEVO-2","P1","Seguridad","Nuevos secretos hardcodeados (Mooving321 x3 + API key Clockify)","S","todo","Ola 1"],
-  ["NUEVO-3","P2","Funcional","InactivityAlertBanner siempre alerta a 2 usuarios fijos","S","todo","Ola 3"],
-  ["NUEVO-4","P2","UX","KPI Concentración de Riesgo sobre top-N sin ordenar","S","todo","Ola 2"],
-  ["NUEVO-5","P2","Funcional","Contratos: bolsa mensual vs consumo multi-mes (% inflado)","M","todo","Ola 2"],
-  ["NUEVO-6","P2","Seguridad","ExportExcel: CSV sin protección de inyección de fórmulas","S","todo","Ola 3"],
-  ["NUEVO-7","P2","Multi-tenant","link_external_user reasigna registros con LIKE %...%","M","todo","Ola 2"],
-  ["NUEVO-8","P2","Datos","is_billable/source no están en el tipo TimeRecord","S","todo","Ola 2"],
-  ["NUEVO-9","P3","Arquitectura","Migración 0015 no idempotente + drift de schema.sql","S","todo","Ola 2"],
-  ["NUEVO-10","P3","Arquitectura","Test fantasma zendesk_and_filters (sin import de src/)","S","todo","Ola 3"],
-  ["NUEVO-11","P3","UX","JOIN sin tenant, capacidad sesgada, dark mode roto, clases TW v4","M","todo","Ola 3"],
-  ["SEC-06","P0","Seguridad","Secretos reales (sk_live_, tokens) commiteados — rotar","S","todo","Ola 1"],
-  ["SEC-01","P0","Seguridad","Endpoints MCP sin autenticación ni permisos","M","todo","Ola 1"],
-  ["SEC-02","P0","Seguridad","Bypass de auth en producción (ENVIRONMENT=development)","S","todo","Ola 1"],
+  ["NUEVO-3","P2","Funcional","InactivityAlertBanner siempre alerta a 2 usuarios fijos","S","done","Hecho"],
+  ["NUEVO-4","P2","UX","KPI Concentración de Riesgo sobre top-N sin ordenar","S","done","Hecho"],
+  ["NUEVO-5","P2","Funcional","Contratos: bolsa mensual vs consumo multi-mes (% inflado)","M","done","Hecho"],
+  ["NUEVO-6","P2","Seguridad","ExportExcel: CSV sin protección de inyección de fórmulas","S","done","Hecho"],
+  ["NUEVO-7","P2","Multi-tenant","link_external_user reasigna registros con LIKE %...%","M","done","Hecho"],
+  ["NUEVO-8","P2","Datos","is_billable/source no están en el tipo TimeRecord","S","done","Hecho"],
+  ["NUEVO-9","P3","Arquitectura","Migración 0015 no idempotente + drift de schema.sql","S","done","Hecho"],
+  ["NUEVO-10","P3","Arquitectura","Test fantasma zendesk_and_filters (sin import de src/)","S","done","Hecho"],
+  ["NUEVO-11","P3","UX","JOIN sin tenant, capacidad sesgada, dark mode roto, clases TW v4","M","done","Hecho"],
+  ["SEC-06","P0","Seguridad","Secretos reales (sk_live_, tokens) commiteados — rotar","S","done","Hecho"],
+  ["SEC-01","P0","Seguridad","Endpoints MCP sin autenticación ni permisos","M","done","Hecho"],
+  ["SEC-02","P0","Seguridad","Bypass de auth en producción (ENVIRONMENT=development)","S","done","Hecho"],
   ["SEC-03","P0","Seguridad","Control de acceso por rol es client-side (localStorage)","M","todo","Ola 1"],
-  ["DATA-01","P0","Datos","Importador CSV incompatible con el formato real","M","todo","Ola 1"],
-  ["DATA-02","P0","Datos","work_type mal inferido: reuniones/capacitaciones en 0","M","todo","Ola 1"],
+  ["DATA-01","P0","Datos","Importador CSV incompatible con el formato real","M","done","Hecho"],
+  ["DATA-02","P0","Datos","work_type mal inferido: reuniones/capacitaciones en 0","M","done","Hecho"],
   ["UX-01","P0","UX","'Mis Horas' muestra datos de toda la empresa","S","todo","Ola 1"],
   ["SEC-04","P0","Seguridad","Backdoors de password / texto plano","M","defer","Login"],
   ["SEC-05","P0","Seguridad","Fallback de JWT_SECRET a valor público","S","defer","Login"],
-  ["SEC-07","P1","Seguridad","RBAC de backend mockeado (admin hardcodeado)","S","todo","Ola 1"],
-  ["MT-02","P1","Multi-tenant","company_id tomado del body del request","S","todo","Ola 1"],
-  ["DATA-03","P1","Datos","Re-importar reintroduce cliente 'Interno' fusionado","S","todo","Ola 2"],
-  ["DATA-04","P1","Datos","Solapamiento de los 2 CSV → doble conteo","S","todo","Ola 2"],
-  ["DATA-05","P1","Datos","Nombres inconsistentes + validación todo-o-nada","M","todo","Ola 2"],
-  ["FUNC-01","P1","Funcional","Políticas del Manual no se validan en el servidor","M","todo","Ola 2"],
-  ["FUNC-02","P1","Funcional","Ocupación cuenta vacaciones/licencias como trabajo","S","todo","Ola 2"],
+  ["SEC-07","P1","Seguridad","RBAC de backend mockeado (admin hardcodeado)","S","done","Hecho"],
+  ["MT-02","P1","Multi-tenant","company_id tomado del body del request","S","done","Hecho"],
+  ["DATA-03","P1","Datos","Re-importar reintroduce cliente 'Interno' fusionado","S","done","Hecho"],
+  ["DATA-04","P1","Datos","Solapamiento de los 2 CSV → doble conteo","S","done","Hecho"],
+  ["DATA-05","P1","Datos","Nombres inconsistentes + validación todo-o-nada","M","done","Hecho"],
+  ["FUNC-01","P1","Funcional","Políticas del Manual no se validan en el servidor","M","done","Hecho"],
+  ["FUNC-02","P1","Funcional","Ocupación cuenta vacaciones/licencias como trabajo","S","done","Hecho"],
   ["FEAT-01","P1","Funcional","Rol Coordinador con scope RACI (no existe)","L","todo","Ola 2"],
   ["FEAT-02","P1","Funcional","Bandeja de aprobación de horas","M","todo","Ola 2"],
-  ["FEAT-04","P1","Funcional","Panel C-level con dinero real (USD)","M","todo","Ola 2"],
+  ["FEAT-04","P1","Funcional","Panel C-level con dinero real (USD)","M","done","Hecho"],
   ["ARCH-01","P1","Arquitectura","Docs describen Vue; la app es React; falta AGENTS.md","S","todo","Ola 2"],
-  ["ARCH-02","P1","Arquitectura","Versionado incoherente (6 fuentes en desacuerdo)","S","todo","Ola 2"],
-  ["ARCH-03","P1","Arquitectura","Cadena de migraciones D1 rota / schema triplicado","M","todo","Ola 2"],
-  ["ARCH-04","P1","Arquitectura","Re-renders en cascada; bundle 828KB sin split","M","todo","Ola 2"],
-  ["UX-02","P1","UX","alert()/confirm() nativos (prohibidos)","S","todo","Ola 2"],
-  ["UX-03","P1","UX","EditRecordModal viola Reglas de Hooks (riesgo de crash)","S","todo","Ola 2"],
-  ["UX-04","P1","UX","Marca inconsistente: UI en indigo, no azul Mooving","M","todo","Ola 2"],
+  ["ARCH-02","P1","Arquitectura","Versionado incoherente (6 fuentes en desacuerdo)","S","done","Hecho"],
+  ["ARCH-03","P1","Arquitectura","Cadena de migraciones D1 rota / schema triplicado","M","done","Hecho"],
+  ["ARCH-04","P1","Arquitectura","Re-renders en cascada; bundle 828KB sin split","M","done","Hecho"],
+  ["UX-02","P1","UX","alert()/confirm() nativos (prohibidos)","S","done","Hecho"],
+  ["UX-03","P1","UX","EditRecordModal viola Reglas de Hooks (riesgo de crash)","S","done","Hecho"],
+  ["UX-04","P1","UX","Marca inconsistente: UI en indigo, no azul Mooving","M","done","Hecho"],
   ["SEC-08","P1","Seguridad","Login sin rate limiting","S","defer","Login"],
-  ["DATA-06","P2","Datos","Se pierden USD/grupo/equipo; is_billable no se guarda","M","todo","Ola 2"],
+  ["DATA-06","P2","Datos","Se pierden USD/grupo/equipo; is_billable no se guarda","M","done","Hecho"],
   ["FUNC-03","P2","Funcional","DELETE físico contradice política 'nunca eliminar'","M","todo","Ola 3"],
   ["FUNC-04","P2","Funcional","send_inactivity_alerts es simulado (no envía)","M","todo","Ola 3"],
   ["FEAT-05","P2","Funcional","Vista salud de cartera del coordinador (RACI)","M","todo","Ola 3"],
@@ -147,7 +147,7 @@ const D = [
   ["UX-05","P2","UX","Modales sin ARIA/focus; sin responsive real","M","todo","Ola 3"],
   ["UX-06","P2","UX","Tablas sin orden/búsqueda/sticky; C-level sin destino","M","todo","Ola 3"],
   ["UX-07","P2","UX","Color de disponibilidad invertido; KPIs redundantes","S","todo","Ola 3"],
-  ["SEC-10","P2","Seguridad","CORS refleja localhost / fallback permisivo","S","todo","Ola 1"],
+  ["SEC-10","P2","Seguridad","CORS refleja localhost / fallback permisivo","S","done","Hecho"],
   ["SEC-09","P2","Seguridad","JWT en localStorage (robable vía XSS)","M","defer","Login"],
   ["ARCH-05","P2","Arquitectura","MCP sin Zod; contexto sin tipar; código muerto","M","todo","Ola 3"],
   ["ARCH-06","P2","Arquitectura","N+1 de inserts a D1 (sin batch)","S","todo","Ola 3"],
