@@ -64,6 +64,70 @@ const fmtUsd = (n: number, decimals = 0): string =>
     maximumFractionDigits: decimals,
   }).format(Number.isFinite(n) ? n : 0)
 
+const toNum = (v: unknown): number => {
+  const n = typeof v === 'number' ? v : Number(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+// FEAT-04b: métricas ejecutivas REALES calculadas server-side con el valor hora
+// por empleado (employees.hourly_rate_usd, default 45). get_executive_metrics
+// agrega el ingreso ESTIMADO (= horas × tarifa) por cliente/empleado. No son
+// importes facturados reales, por eso la UI lo rotula "Estimado según valor hora".
+type ExecutiveMetrics = {
+  total_revenue_usd?: number
+  billable_hours?: number
+  nonbillable_hours?: number
+  revenue_by_client?: unknown
+  revenue_by_employee?: unknown
+  billable_rate_pct?: number
+}
+
+type RevenueRow = { name: string; usd: number; hours: number; perHour: number }
+
+// Normaliza revenue_by_client / revenue_by_employee de forma defensiva porque el
+// contrato exacto lo define el backend (otra tarea). Acepta un array de objetos
+// ([{ name|client_name|employee_name, usd|revenue|.., hours|total_hours }]) o un
+// mapa ({ "Nombre": 1234 } | { "Nombre": { usd, hours } }) y devuelve filas
+// normalizadas ordenadas por ingreso desc.
+const normalizeRevenue = (input: unknown): RevenueRow[] => {
+  const rows: RevenueRow[] = []
+  const add = (name: string, usd: number, hours: number, perHour?: number) => {
+    const nm = (name || '').trim()
+    if (!nm) return
+    const h = hours > 0 ? hours : 0
+    rows.push({
+      name: nm,
+      usd,
+      hours: h,
+      perHour: perHour !== undefined && Number.isFinite(perHour) ? perHour : h > 0 ? usd / h : 0,
+    })
+  }
+  if (Array.isArray(input)) {
+    for (const item of input) {
+      if (!item || typeof item !== 'object') continue
+      const o = item as Record<string, unknown>
+      const name = String(o.name ?? o.client_name ?? o.employee_name ?? o.client ?? o.employee ?? o.label ?? '')
+      const usd = toNum(o.usd ?? o.revenue_usd ?? o.revenue ?? o.total_usd ?? o.amount_usd ?? o.amount)
+      const hours = toNum(o.hours ?? o.total_hours ?? o.billable_hours)
+      const perHourRaw = o.per_hour ?? o.perHour ?? o.revenue_per_hour ?? o.hourly_rate_usd
+      add(name, usd, hours, perHourRaw !== undefined ? toNum(perHourRaw) : undefined)
+    }
+  } else if (input && typeof input === 'object') {
+    for (const [name, val] of Object.entries(input as Record<string, unknown>)) {
+      if (val && typeof val === 'object') {
+        const o = val as Record<string, unknown>
+        const usd = toNum(o.usd ?? o.revenue_usd ?? o.revenue ?? o.total_usd ?? o.amount)
+        const hours = toNum(o.hours ?? o.total_hours)
+        const perHourRaw = o.per_hour ?? o.perHour ?? o.revenue_per_hour
+        add(name, usd, hours, perHourRaw !== undefined ? toNum(perHourRaw) : undefined)
+      } else {
+        add(name, toNum(val), 0)
+      }
+    }
+  }
+  return rows.sort((a, b) => b.usd - a.usd)
+}
+
 export const Dashboard: React.FC = () => {
   const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
   const [csvFile, setCsvFile] = useState<File | null>(null)
@@ -99,6 +163,11 @@ export const Dashboard: React.FC = () => {
   const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false)
   const [executiveDrilldownType, setExecutiveDrilldownType] = useState<'billable' | 'overhead' | 'risk' | null>(null)
   const [employeeCapacities, setEmployeeCapacities] = useState<Record<string, number>>({})
+  // FEAT-04b: métricas ejecutivas reales (get_executive_metrics), sólo admin.
+  // execMetrics=null => aún sin cargar; execMetricsError => la tool falló.
+  const [execMetrics, setExecMetrics] = useState<ExecutiveMetrics | null>(null)
+  const [execMetricsError, setExecMetricsError] = useState<boolean>(false)
+  const isAdmin = (localStorage.getItem('mooving_user_role') || 'employee') === 'admin'
   const pageSize = 15
 
   // ARCH-04: memoizar el resultado de filtrado. getFilteredRecords lee records
@@ -197,6 +266,37 @@ export const Dashboard: React.FC = () => {
   React.useEffect(() => {
     fetchRecords()
   }, [])
+
+  // FEAT-04b: al montar y SÓLO para admin, traer las métricas ejecutivas reales
+  // (ingreso estimado según el valor hora por empleado). Si la tool falla o no hay
+  // tarifas cargadas (revenue 0), la UI cae a un fallback honesto en vez de vacío.
+  React.useEffect(() => {
+    if (!isAdmin) return
+    let cancelled = false
+    const loadExecutiveMetrics = async () => {
+      try {
+        const res = await api.callMcpTool('get_executive_metrics', {})
+        const json = await res.json()
+        if (cancelled) return
+        if (json?.success && json.result) {
+          setExecMetrics(json.result as ExecutiveMetrics)
+          setExecMetricsError(false)
+        } else {
+          setExecMetrics(null)
+          setExecMetricsError(true)
+        }
+      } catch (err) {
+        if (cancelled) return
+        console.error('Error fetching executive metrics:', err)
+        setExecMetrics(null)
+        setExecMetricsError(true)
+      }
+    }
+    loadExecutiveMetrics()
+    return () => {
+      cancelled = true
+    }
+  }, [isAdmin])
 
   // NUEVO-11: Dark mode funcional con Tailwind darkMode:'class'.
   // Togglea la clase `dark` en el root del documento para que las variantes
@@ -377,6 +477,36 @@ export const Dashboard: React.FC = () => {
       perHour: usdInfo && usdInfo.hours > 0 ? usdInfo.usd / usdInfo.hours : 0,
     }
   }, [clientData, billing, totalHours])
+
+  // FEAT-04b: view-model de las métricas ejecutivas reales. hasRevenue=false
+  // cuando el server devuelve 0 (sin tarifas) o cuando execMetrics no cargó: en
+  // ese caso la UI muestra el fallback honesto. Los % proxies (billing) son
+  // independientes de esto y se muestran SIEMPRE.
+  const executive = useMemo(() => {
+    const m = execMetrics
+    const totalRevenue = toNum(m?.total_revenue_usd)
+    const billableHours = toNum(m?.billable_hours)
+    const nonBillableHours = toNum(m?.nonbillable_hours)
+    const byClient = normalizeRevenue(m?.revenue_by_client)
+    const byEmployee = normalizeRevenue(m?.revenue_by_employee)
+    const byClientMap: Record<string, RevenueRow> = {}
+    for (const r of byClient) byClientMap[r.name] = r
+    const overallPerHour = billableHours > 0 ? totalRevenue / billableHours : 0
+    return {
+      hasRevenue: totalRevenue > 0,
+      totalRevenue,
+      billableHours,
+      nonBillableHours,
+      overallPerHour,
+      byClient,
+      byEmployee,
+      byClientMap,
+    }
+  }, [execMetrics])
+
+  // Ingreso estimado del cliente más concentrado (para enriquecer la tarjeta de
+  // riesgo, que sigue mostrando el % de horas aunque no haya ingreso).
+  const topRiskRevenue = topRiskClient ? executive.byClientMap[topRiskClient.name] : undefined
 
   return (
     <div className="min-h-screen relative transition-colors bg-slate-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100">
@@ -601,16 +731,20 @@ export const Dashboard: React.FC = () => {
         {/* Executive Insights (C-Level) */}
         {filteredRecords.length > 0 && (
           <div className="bg-gradient-to-r from-gray-900 to-slate-800 rounded-xl shadow-xl p-6 mb-8 text-white">
-            <div className="flex items-center justify-between mb-6 border-b border-gray-700 pb-4">
-              <h2 className="text-xl font-bold flex items-center gap-2">
-                <span className="text-yellow-400">👑</span> Métricas Ejecutivas (C-Level)
-              </h2>
+            <div className="flex items-start justify-between mb-6 border-b border-gray-700 pb-4">
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <span className="text-yellow-400">👑</span> Métricas Ejecutivas (C-Level)
+                </h2>
+                <p className="text-xs text-gray-400 mt-1">Estimado según valor hora del equipo</p>
+              </div>
               <div className="flex items-center gap-2">
-                {billing.hasBillingData ? (
-                  <span className="text-xs bg-emerald-900/60 text-emerald-300 border border-emerald-500/40 px-3 py-1 rounded-full uppercase tracking-widest">USD real</span>
-                ) : (
-                  <span className="text-xs bg-amber-900/50 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-full uppercase tracking-widest" title="No hay amount_usd en los registros: se muestran proxies estimados">Estimado</span>
-                )}
+                <span
+                  className="text-xs bg-amber-900/50 text-amber-300 border border-amber-500/40 px-3 py-1 rounded-full uppercase tracking-widest"
+                  title="Facturación estimada a partir del valor hora por empleado (hourly_rate_usd), no de importes facturados reales"
+                >
+                  Estimado · valor hora
+                </span>
                 <span className="text-xs bg-gray-700 px-3 py-1 rounded-full uppercase tracking-widest text-gray-300">Confidencial</span>
               </div>
             </div>
@@ -630,14 +764,14 @@ export const Dashboard: React.FC = () => {
                   <p className="text-3xl font-bold text-green-400">
                     {billing.billableRatio.toFixed(1)}%
                   </p>
-                  {billing.hasBillingData && (
-                    <p className="text-base font-semibold text-green-300 mb-1">{fmtUsd(billing.billableUsd)}</p>
+                  {executive.hasRevenue && (
+                    <p className="text-base font-semibold text-green-300 mb-1">{fmtUsd(executive.totalRevenue)}</p>
                   )}
                 </div>
-                {billing.hasBillingData ? (
-                  <p className="text-xs text-gray-400 mt-2">Facturación real facturable (amount_usd) · {billing.billableHours.toFixed(1)}h</p>
+                {executive.hasRevenue ? (
+                  <p className="text-xs text-gray-400 mt-2">Ingreso estimado {fmtUsd(executive.totalRevenue)} · {executive.billableHours.toFixed(1)}h facturables (valor hora del equipo)</p>
                 ) : (
-                  <p className="text-xs text-gray-400 mt-2">Objetivo saludable: &gt; 75% · sin datos de facturación USD (estimado por is_billable)</p>
+                  <p className="text-xs text-gray-400 mt-2">Objetivo saludable: &gt; 75% · % calculado por tipo de tarea (is_billable)</p>
                 )}
               </div>
 
@@ -655,14 +789,14 @@ export const Dashboard: React.FC = () => {
                   <p className="text-3xl font-bold text-red-400">
                     {billing.overheadRatio.toFixed(1)}%
                   </p>
-                  {billing.hasBillingData && (
-                    <p className="text-base font-semibold text-red-300 mb-1">{fmtUsd(billing.nonBillableUsd)}</p>
+                  {executive.hasRevenue && executive.nonBillableHours > 0 && (
+                    <p className="text-base font-semibold text-red-300 mb-1">{executive.nonBillableHours.toFixed(1)}h</p>
                   )}
                 </div>
-                {billing.hasBillingData ? (
-                  <p className="text-xs text-gray-400 mt-2">Costo no facturable real (amount_usd) en reuniones / tareas internas</p>
+                {executive.hasRevenue ? (
+                  <p className="text-xs text-gray-400 mt-2">{executive.nonBillableHours.toFixed(1)}h no facturables (reuniones / tareas internas) · sin ingreso asociado</p>
                 ) : (
-                  <p className="text-xs text-gray-400 mt-2">Tiempo en reuniones internas / tareas no facturables · sin datos de facturación USD</p>
+                  <p className="text-xs text-gray-400 mt-2">Tiempo en reuniones internas / tareas no facturables · % por tipo de tarea</p>
                 )}
               </div>
 
@@ -680,75 +814,102 @@ export const Dashboard: React.FC = () => {
                   <p className="text-xl font-bold text-yellow-400 truncate">
                     {topRiskClient?.name || 'N/A'}
                   </p>
-                  {billing.hasBillingData && topRiskClient && (
-                    <p className="text-sm font-semibold text-yellow-200 mb-0.5">{fmtUsd(topRiskClient.usd)}</p>
+                  {executive.hasRevenue && topRiskRevenue && (
+                    <p className="text-sm font-semibold text-yellow-200 mb-0.5">{fmtUsd(topRiskRevenue.usd)}</p>
                   )}
                 </div>
                 <p className="text-xs text-gray-400 mt-2">
                   Consume el {topRiskClient ? topRiskClient.ratio.toFixed(1) : '0.0'}% del tiempo total
-                  {billing.hasBillingData && topRiskClient && ` · ${fmtUsd(topRiskClient.perHour, 2)}/h`}
+                  {executive.hasRevenue && topRiskRevenue && topRiskRevenue.perHour > 0 &&
+                    ` · ${fmtUsd(topRiskRevenue.perHour, 2)}/h estimado`}
                 </p>
               </div>
             </div>
 
-            {/* FEAT-04: Facturación en USD real (amount_usd). Fallback honesto a
-                proxy "estimado" cuando no hay datos persistidos. */}
+            {/* FEAT-04b: Facturación ESTIMADA según el valor hora por empleado
+                (get_executive_metrics). Fallback honesto si la tool falla o no hay
+                tarifas cargadas (revenue 0). Los % proxies de arriba se muestran
+                SIEMPRE, sean cuales sean el estado o el resultado de esta sección. */}
             <div className="mt-6 border-t border-gray-700 pt-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-sm font-semibold text-gray-200 flex items-center gap-2">
-                  <span>💵</span> Facturación (USD)
+                  <span>💵</span> Facturación estimada (USD)
                 </h3>
-                {billing.hasBillingData ? (
-                  <span className="text-[10px] text-emerald-300 uppercase tracking-wider font-semibold">Monto real (amount_usd)</span>
-                ) : (
-                  <span className="text-[10px] text-amber-300 uppercase tracking-wider font-semibold">Estimado · sin datos de facturación</span>
-                )}
+                <span className="text-[10px] text-amber-300 uppercase tracking-wider font-semibold">Estimado · valor hora del equipo</span>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="bg-white/5 p-4 rounded-lg border border-white/5">
-                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Facturación Total</p>
-                  {billing.hasBillingData ? (
-                    <p className="text-2xl font-bold text-emerald-300 mt-1">{fmtUsd(billing.totalUsd)}</p>
-                  ) : (
-                    <>
-                      <p className="text-2xl font-bold text-gray-400 mt-1">{billing.billableRatio.toFixed(1)}%</p>
-                      <p className="text-[11px] text-amber-300/80 mt-1">Proxy estimado (facturabilidad) · sin datos de facturación</p>
-                    </>
-                  )}
+              {isAdmin && !execMetrics && !execMetricsError ? (
+                <div className="bg-white/5 p-4 rounded-lg border border-white/5 text-sm text-gray-400 animate-pulse">
+                  Calculando facturación estimada según el valor hora del equipo…
                 </div>
-                <div className="bg-white/5 p-4 rounded-lg border border-white/5">
-                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Facturable</p>
-                  {billing.hasBillingData ? (
-                    <p className="text-2xl font-bold text-green-300 mt-1">{fmtUsd(billing.billableUsd)}</p>
-                  ) : (
-                    <p className="text-sm font-semibold text-gray-500 mt-2">Sin datos de facturación</p>
-                  )}
-                </div>
-                <div className="bg-white/5 p-4 rounded-lg border border-white/5">
-                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">No Facturable</p>
-                  {billing.hasBillingData ? (
-                    <p className="text-2xl font-bold text-red-300 mt-1">{fmtUsd(billing.nonBillableUsd)}</p>
-                  ) : (
-                    <p className="text-sm font-semibold text-gray-500 mt-2">Sin datos de facturación</p>
-                  )}
-                </div>
-              </div>
-
-              {billing.hasBillingData && billing.revenuePerClient.some(c => c.usd > 0) && (
-                <div className="mt-4">
-                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-2">Ingreso por hora por cliente</p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {billing.revenuePerClient.filter(c => c.usd > 0).slice(0, 6).map(c => (
-                      <div key={c.name} className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-lg border border-white/5 text-xs">
-                        <span className="text-gray-300 truncate max-w-[55%]" title={c.name}>{c.name}</span>
-                        <span className="text-right">
-                          <span className="font-bold text-emerald-300">{fmtUsd(c.perHour, 2)}/h</span>
-                          <span className="text-gray-500 block text-[10px]">{fmtUsd(c.usd)} · {c.hours.toFixed(1)}h</span>
-                        </span>
-                      </div>
-                    ))}
+              ) : executive.hasRevenue ? (
+                <>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-white/5 p-4 rounded-lg border border-white/5">
+                      <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Facturación Total Estimada</p>
+                      <p className="text-2xl font-bold text-emerald-300 mt-1">{fmtUsd(executive.totalRevenue)}</p>
+                      <p className="text-[11px] text-gray-500 mt-1">Horas × valor hora por empleado</p>
+                    </div>
+                    <div className="bg-white/5 p-4 rounded-lg border border-white/5">
+                      <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Horas Facturables / No Facturables</p>
+                      <p className="text-2xl font-bold text-green-300 mt-1">
+                        {executive.billableHours.toFixed(1)}h
+                        <span className="text-gray-500 text-lg font-normal"> / </span>
+                        <span className="text-red-300">{executive.nonBillableHours.toFixed(1)}h</span>
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-1">Facturables vs. no facturables</p>
+                    </div>
+                    <div className="bg-white/5 p-4 rounded-lg border border-white/5">
+                      <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Ingreso por Hora</p>
+                      <p className="text-2xl font-bold text-emerald-300 mt-1">{executive.overallPerHour > 0 ? `${fmtUsd(executive.overallPerHour, 2)}/h` : 'N/A'}</p>
+                      <p className="text-[11px] text-gray-500 mt-1">Sobre horas facturables</p>
+                    </div>
                   </div>
+
+                  {executive.byClient.some(c => c.usd > 0) && (
+                    <div className="mt-4">
+                      <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-2">Top clientes por ingreso (estimado)</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {executive.byClient.filter(c => c.usd > 0).slice(0, 6).map(c => (
+                          <div key={c.name} className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-lg border border-white/5 text-xs">
+                            <span className="text-gray-300 truncate max-w-[55%]" title={c.name}>{c.name}</span>
+                            <span className="text-right">
+                              <span className="font-bold text-emerald-300">{fmtUsd(c.usd)}</span>
+                              {c.perHour > 0 && <span className="text-gray-500 block text-[10px]">{fmtUsd(c.perHour, 2)}/h · {c.hours.toFixed(1)}h</span>}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {executive.byEmployee.some(e => e.usd > 0) && (
+                    <div className="mt-4">
+                      <p className="text-xs text-gray-400 font-medium uppercase tracking-wider mb-2">Ingreso por empleado (estimado)</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                        {executive.byEmployee.filter(e => e.usd > 0).slice(0, 6).map(e => (
+                          <div key={e.name} className="flex justify-between items-center bg-white/5 px-3 py-2 rounded-lg border border-white/5 text-xs">
+                            <span className="text-gray-300 truncate max-w-[55%]" title={e.name}>{e.name}</span>
+                            <span className="text-right">
+                              <span className="font-bold text-emerald-300">{fmtUsd(e.usd)}</span>
+                              {e.perHour > 0 && <span className="text-gray-500 block text-[10px]">{fmtUsd(e.perHour, 2)}/h · {e.hours.toFixed(1)}h</span>}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="bg-amber-900/20 border border-amber-500/30 p-4 rounded-lg">
+                  <p className="text-sm text-amber-200 font-medium flex items-center gap-2">
+                    <span>⚠️</span> Cargá el valor hora del equipo para ver la facturación estimada
+                  </p>
+                  <p className="text-xs text-amber-300/70 mt-1">
+                    {execMetricsError
+                      ? 'No se pudieron obtener las métricas ejecutivas. Los indicadores porcentuales de arriba siguen disponibles.'
+                      : 'Aún no hay tarifas (valor hora) cargadas por empleado. Los indicadores porcentuales de arriba se calculan por tipo de tarea y siguen visibles.'}
+                  </p>
                 </div>
               )}
             </div>

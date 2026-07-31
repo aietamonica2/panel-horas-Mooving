@@ -7,6 +7,7 @@ import mcpRouter from './routes/mcp'
 import { HonoContext, ApiResponse, CloudflareEnv } from './types'
 import { handleBulkLoadCron } from './cron/bulk_load'
 import { handleEmailRemindersCron } from './cron/email_reminders'
+import { handleInactivityCron } from './cron/inactivity'
 
 // API_VERSION: única fuente de verdad interna para el campo `version` de las
 // respuestas. Mantener en sync con /VERSION (raíz del repo).
@@ -63,9 +64,11 @@ app.onError((err, c) => {
 
 /**
  * Cloudflare Workers scheduled trigger.
- * Routes to the appropriate handler based on the trigger time:
- *   - Day 28 of month at 12:00 UTC → Email reminders (syncs Clockify first)
- *   - Tuesdays at 08:00 UTC        → Bulk load cron
+ * Routes to the appropriate handler based on the trigger (cron expression /
+ * trigger time). Keep these in sync with `[triggers] crons` in wrangler.toml:
+ *   - Day 28 of month at 12:00 UTC   → Email reminders (syncs Clockify first)
+ *   - Weekdays (Mon–Fri) at 09:00 UTC → Inactivity alerts (auto-send)
+ *   - Tuesdays at 08:00 UTC           → Bulk load cron (default fallback)
  */
 export async function scheduled(
   event: ScheduledEvent,
@@ -82,6 +85,19 @@ export async function scheduled(
     ctx.waitUntil(
       handleEmailRemindersCron(env).catch((err) =>
         console.error('[Scheduled] Email reminders cron error:', err)
+      )
+    );
+    return;
+  }
+
+  // Route: Weekdays (Mon–Fri) at 09:00 UTC → Inactivity alerts.
+  // Matched by the exact cron expression (precise) with an hour-based fallback,
+  // so this NEVER falls through to the default bulk-load branch below.
+  if (event.cron === '0 9 * * 1-5' || hour === 9) {
+    console.log('[Scheduled] Triggering inactivity-alerts cron (weekdays 09:00 UTC)');
+    ctx.waitUntil(
+      handleInactivityCron(env).catch((err) =>
+        console.error('[Scheduled] Inactivity-alerts cron error:', err)
       )
     );
     return;

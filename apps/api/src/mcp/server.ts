@@ -31,6 +31,132 @@ async function resolveScopeClientIds(c: HonoContext): Promise<string[] | null> {
   return (results || []).map((r: any) => r.client_id as string);
 }
 
+// Tarifa por defecto (USD/hora) cuando el empleado no tiene hourly_rate_usd
+// (columna employees.hourly_rate_usd, migración 0019, DEFAULT 45). Se usa para
+// estimar ingresos reales y así resolver el problema histórico de amount_usd = 0.
+const DEFAULT_HOURLY_RATE = 45;
+
+// Umbral por defecto (días) para considerar inactivo a un empleado.
+const DEFAULT_INACTIVITY_DAYS = 3;
+
+// Remitente por defecto de las alertas de inactividad si no hay ALERT_FROM_EMAIL.
+const ALERT_FROM_FALLBACK = 'alertas@moovingtech.com';
+
+/** Deriva un primer nombre "lindo" (capitalizado) desde "nombre.apellido" o "Nombre Apellido". */
+function firstNameFrom(name: string): string {
+  const clean = String(name || '').replace(/[._]/g, ' ').trim();
+  const parts = clean.split(/\s+/).filter(Boolean);
+  const first = parts[0] || clean || 'equipo';
+  return first.charAt(0).toUpperCase() + first.slice(1).toLowerCase();
+}
+
+/**
+ * Contenido (asunto + cuerpo) del email de alerta de inactividad para un empleado.
+ * Compartido por send_inactivity_alerts (envío real) y get_inactivity_preview
+ * (vista previa) para que lo que se previsualiza sea EXACTAMENTE lo que se envía.
+ */
+function buildInactivityEmail(
+  emp: { name: string; last_record_date: string | null; days_inactive: number | null },
+  days: number
+): { subject: string; body: string } {
+  const firstName = firstNameFrom(emp.name);
+  const subject = 'Recordatorio: registrá tus horas — Mooving Tech';
+  const sinceInfo = emp.last_record_date
+    ? `Tu último registro de horas es del ${emp.last_record_date}` +
+      (emp.days_inactive != null ? ` (hace ${emp.days_inactive} días).` : '.')
+    : 'No encontramos ningún registro de horas reciente a tu nombre.';
+  const body =
+    `Hola ${firstName},\n\n` +
+    `${sinceInfo} No registrás horas en los últimos ${days} días. ` +
+    `Por favor cargá tus horas en Clockify a la brevedad para mantener tu planilla al día.\n\n` +
+    `Si ya las cargaste, ignorá este mensaje.\n\n` +
+    `Saludos,\nEquipo Mooving Tech`;
+  return { subject, body };
+}
+
+/**
+ * Calcula los empleados INACTIVOS reales del tenant autenticado: empleados ACTIVOS
+ * (is_active = 1) sin ningún registro de horas, o cuyo último registro es anterior
+ * al corte de N días. Matchea horas por employee_id Y por employee_name porque los
+ * distintos orígenes (Clockify/Zendesk/manual) guardan uno u otro. Siempre scopeado
+ * por company_id del principal (MT-02: tenant-from-principal).
+ *
+ * Reutilizado por send_inactivity_alerts y get_inactivity_preview para garantizar
+ * que la vista previa y el envío usen exactamente la misma lista.
+ */
+async function computeInactiveEmployees(
+  c: HonoContext,
+  days: number
+): Promise<{
+  inactive: Array<{
+    employee_id: string;
+    name: string;
+    email: string | null;
+    last_record_date: string | null;
+    days_inactive: number | null;
+  }>;
+  cutoffStr: string;
+  company_id: string;
+}> {
+  const db = c.env.DB;
+  const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+  // Fecha de corte: quien no cargó horas en/después de esta fecha se considera inactivo.
+  const cutoff = new Date();
+  cutoff.setUTCDate(cutoff.getUTCDate() - days);
+  const cutoffStr = cutoff.toISOString().split('T')[0];
+  const todayMs = Date.now();
+
+  // 1. Empleados activos del tenant.
+  const { results: employees } = await db.prepare(
+    'SELECT id, name, email FROM employees WHERE company_id = ? AND is_active = 1'
+  ).bind(company_id).all();
+
+  // 2. Última fecha con registro por empleado (por id y por nombre).
+  const { results: lastRecords } = await db.prepare(
+    'SELECT employee_id, employee_name, MAX(date) as last_date FROM time_records WHERE company_id = ? GROUP BY employee_id, employee_name'
+  ).bind(company_id).all();
+
+  const lastByKey: Record<string, string> = {};
+  for (const r of (lastRecords || []) as any[]) {
+    const d = r.last_date as string;
+    if (!d) continue;
+    for (const raw of [r.employee_id, r.employee_name]) {
+      if (!raw) continue;
+      const k = String(raw).toLowerCase();
+      if (!lastByKey[k] || d > lastByKey[k]) lastByKey[k] = d;
+    }
+  }
+
+  const inactive: Array<{
+    employee_id: string;
+    name: string;
+    email: string | null;
+    last_record_date: string | null;
+    days_inactive: number | null;
+  }> = [];
+
+  for (const emp of (employees || []) as any[]) {
+    const idKey = String(emp.id || '').toLowerCase();
+    const nameKey = String(emp.name || '').toLowerCase();
+    const lastDate = lastByKey[idKey] || lastByKey[nameKey] || null;
+    if (!lastDate || lastDate < cutoffStr) {
+      const daysInactive = lastDate
+        ? Math.max(0, Math.floor((todayMs - new Date(lastDate + 'T00:00:00Z').getTime()) / 86400000))
+        : null;
+      inactive.push({
+        employee_id: emp.id,
+        name: emp.name,
+        email: emp.email || null,
+        last_record_date: lastDate,
+        days_inactive: daysInactive,
+      });
+    }
+  }
+
+  return { inactive, cutoffStr, company_id };
+}
+
 export const TOOL_REGISTRY = {
   get_clients: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
@@ -120,9 +246,23 @@ export const TOOL_REGISTRY = {
 
   get_employees: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
-    const company_id = c.get('auth')?.company_id || 'mooving-default';
+    const auth = c.get('auth');
+    const company_id = auth?.company_id || 'mooving-default';
+    // SELECT * ya trae la columna hourly_rate_usd (valor hora por empleado, migración 0019).
     const { results } = await db.prepare('SELECT * FROM employees WHERE company_id = ?').bind(company_id).all();
-    return { employees: results };
+
+    // hourly_rate_usd es DATO SENSIBLE: sólo admin / C-level (o principal de servicio)
+    // puede verlo. Para cualquier otro rol se elimina el campo de cada empleado ANTES
+    // de retornar, de modo que la tarifa nunca viaje al cliente.
+    const role = auth?.role || '';
+    const canSeeRate = role === 'admin' || role === 'service';
+    const employees = (results || []).map((e: any) => {
+      if (canSeeRate) return e;
+      const { hourly_rate_usd, ...rest } = e;
+      return rest;
+    });
+
+    return { employees };
   },
   create_employee: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
@@ -157,6 +297,33 @@ export const TOOL_REGISTRY = {
     const company_id = c.get('auth')?.company_id || 'mooving-default';
     await db.prepare('DELETE FROM employees WHERE id = ? AND company_id = ?').bind(id, company_id).run();
     return { success: true };
+  },
+
+  // set_employee_rate — Actualiza el valor hora (hourly_rate_usd) de un empleado.
+  // Dato SENSIBLE: SÓLO admin puede modificarlo. Si role !== 'admin' se devuelve
+  // { success:false, error:'No autorizado' } sin tocar la DB. La tarifa se sanitiza
+  // (número finito y >= 0). Siempre scopeado por company_id del principal
+  // (MT-02: tenant-from-principal): WHERE id = ? AND company_id = ?.
+  set_employee_rate: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const auth = c.get('auth');
+    const role = auth?.role || '';
+    if (role !== 'admin') {
+      return { success: false, error: 'No autorizado' };
+    }
+
+    const company_id = auth?.company_id || 'mooving-default';
+    const { employee_id } = params;
+
+    // Sanitizar la tarifa: número válido y >= 0 (un valor inválido/negativo cae a 0).
+    let rate = Number(params.hourly_rate_usd);
+    if (!isFinite(rate) || rate < 0) rate = 0;
+
+    await db.prepare(
+      'UPDATE employees SET hourly_rate_usd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?'
+    ).bind(rate, employee_id, company_id).run();
+
+    return { success: true, employee_id, hourly_rate_usd: rate };
   },
 
   get_categories: async (params: any, c: HonoContext) => {
@@ -587,6 +754,128 @@ export const TOOL_REGISTRY = {
     };
   },
 
+  // ---------------------------------------------------------------------------
+  // get_executive_metrics — Métricas ejecutivas REALES para el C-level.
+  //
+  // Ingreso estimado = Σ (duration_decimal × valor hora del empleado del registro).
+  // La tarifa sale de employees.hourly_rate_usd vía LEFT JOIN (time_records → employees
+  // por employee_id O employee_name). Si el empleado no matchea o su tarifa es NULL, se
+  // usa la TARIFA POR DEFECTO de 45 USD/h (DEFAULT_HOURLY_RATE). Esto resuelve el
+  // problema histórico de amount_usd = 0 en todos los registros: el ingreso se DERIVA
+  // de horas × tarifa por empleado, no del campo amount_usd persistido.
+  //
+  // Horas facturables = work_type = 'project' OR is_billable = 1; el resto es overhead.
+  // Respeta filtros opcionales: month ('YYYY-MM') y/o rango start_date/end_date
+  // ('YYYY-MM-DD'). Siempre scopeado por company_id del principal (MT-02).
+  //
+  // Retorno: { total_revenue_usd, billable_hours, nonbillable_hours,
+  //            revenue_by_client:[...], revenue_by_employee:[...], billable_rate_pct, ... }
+  // ---------------------------------------------------------------------------
+  get_executive_metrics: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+    const { month, start_date, end_date } = params || {};
+
+    // JOIN por employee_id O employee_name (los orígenes guardan uno u otro),
+    // scopeado al mismo tenant. COALESCE aplica la tarifa por defecto cuando el
+    // empleado no matchea o hourly_rate_usd es NULL.
+    let query = `
+      SELECT
+        tr.employee_id       AS employee_id,
+        tr.employee_name     AS employee_name,
+        tr.client_name       AS client_name,
+        tr.work_type         AS work_type,
+        tr.is_billable       AS is_billable,
+        tr.duration_decimal  AS duration_decimal,
+        COALESCE(e.hourly_rate_usd, ?) AS hourly_rate_usd
+      FROM time_records tr
+      LEFT JOIN employees e
+        ON (tr.employee_id = e.id OR tr.employee_name = e.name)
+       AND e.company_id = tr.company_id
+      WHERE tr.company_id = ?`;
+    const queryParams: any[] = [DEFAULT_HOURLY_RATE, company_id];
+
+    if (month) {
+      query += ' AND strftime("%Y-%m", tr.date) = ?';
+      queryParams.push(month);
+    }
+    if (start_date) {
+      query += ' AND tr.date >= ?';
+      queryParams.push(start_date);
+    }
+    if (end_date) {
+      query += ' AND tr.date <= ?';
+      queryParams.push(end_date);
+    }
+
+    const { results } = await db.prepare(query).bind(...queryParams).all();
+
+    let total_revenue_usd = 0;
+    let billable_hours = 0;
+    let nonbillable_hours = 0;
+    const byClient: Record<string, number> = {};
+    const byEmployee: Record<string, number> = {};
+
+    for (const r of (results || []) as any[]) {
+      const hours = Number(r.duration_decimal) || 0;
+
+      // Tarifa por empleado; NULL/indefinida → default 45. Un 0 explícito se respeta.
+      const rawRate = r.hourly_rate_usd;
+      let rate = (rawRate === null || rawRate === undefined || rawRate === '')
+        ? DEFAULT_HOURLY_RATE
+        : Number(rawRate);
+      if (!isFinite(rate) || rate < 0) rate = DEFAULT_HOURLY_RATE;
+
+      const revenue = hours * rate;
+      total_revenue_usd += revenue;
+
+      // Facturable si el tipo es 'project' o el flag is_billable está en 1.
+      const isBillable = r.work_type === 'project' || Number(r.is_billable) === 1;
+      if (isBillable) billable_hours += hours;
+      else nonbillable_hours += hours;
+
+      const clientKey = r.client_name || 'Sin Cliente';
+      byClient[clientKey] = (byClient[clientKey] || 0) + revenue;
+
+      const empKey = r.employee_name || r.employee_id || 'Desconocido';
+      byEmployee[empKey] = (byEmployee[empKey] || 0) + revenue;
+    }
+
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const total_hours = billable_hours + nonbillable_hours;
+
+    // Ingreso por cliente y por empleado, ordenado de mayor a menor (top primero).
+    const revenue_by_client = Object.entries(byClient)
+      .map(([client_name, revenue]) => ({ client_name, revenue_usd: round2(revenue) }))
+      .sort((a, b) => b.revenue_usd - a.revenue_usd);
+
+    const revenue_by_employee = Object.entries(byEmployee)
+      .map(([employee_name, revenue]) => ({ employee_name, revenue_usd: round2(revenue) }))
+      .sort((a, b) => b.revenue_usd - a.revenue_usd);
+
+    // Proxies %: facturabilidad (horas facturables / total) y overhead (complemento).
+    const billable_rate_pct = total_hours > 0 ? round2((billable_hours / total_hours) * 100) : 0;
+    const overhead_pct = total_hours > 0 ? round2((nonbillable_hours / total_hours) * 100) : 0;
+
+    return {
+      success: true,
+      currency: 'USD',
+      default_hourly_rate_usd: DEFAULT_HOURLY_RATE,
+      total_revenue_usd: round2(total_revenue_usd),
+      total_hours: round2(total_hours),
+      billable_hours: round2(billable_hours),
+      nonbillable_hours: round2(nonbillable_hours),
+      billable_rate_pct,
+      overhead_pct,
+      revenue_by_client,
+      revenue_by_employee,
+      filters: { month: month || null, start_date: start_date || null, end_date: end_date || null },
+      // Documentación: el ingreso usa la tarifa POR EMPLEADO (employees.hourly_rate_usd);
+      // si falta o es NULL, se aplica 45 USD/h por defecto.
+      note: 'Ingreso estimado = horas × tarifa por empleado (employees.hourly_rate_usd; default 45 USD/h si no está seteada).',
+    };
+  },
+
   sync_clockify_hours: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const company_id = c.get('auth')?.company_id || 'mooving-default';
@@ -944,54 +1233,11 @@ export const TOOL_REGISTRY = {
   },
 
   send_inactivity_alerts: async (params: any, c: HonoContext) => {
-    const db = c.env.DB;
-    const company_id = c.get('auth')?.company_id || 'mooving-default';
-
     // Umbral de inactividad en días (default 3, o el parámetro recibido).
-    const days = Number(params.days ?? params.inactive_days ?? params.days_threshold) || 3;
+    const days = Number(params.days ?? params.inactive_days ?? params.days_threshold) || DEFAULT_INACTIVITY_DAYS;
 
-    // Fecha de corte: quien no cargó horas en/después de esta fecha se considera inactivo.
-    const cutoff = new Date();
-    cutoff.setUTCDate(cutoff.getUTCDate() - days);
-    const cutoffStr = cutoff.toISOString().split('T')[0];
-
-    // 1. Empleados activos del tenant autenticado.
-    const { results: employees } = await db.prepare(
-      'SELECT id, name, email FROM employees WHERE company_id = ? AND is_active = 1'
-    ).bind(company_id).all();
-
-    // 2. Última fecha con registro de horas por empleado. Matcheamos por id y por nombre
-    //    porque los distintos orígenes (Clockify/Zendesk/manual) guardan uno u otro.
-    const { results: lastRecords } = await db.prepare(
-      'SELECT employee_id, employee_name, MAX(date) as last_date FROM time_records WHERE company_id = ? GROUP BY employee_id, employee_name'
-    ).bind(company_id).all();
-
-    const lastByKey: Record<string, string> = {};
-    for (const r of (lastRecords || []) as any[]) {
-      const d = r.last_date as string;
-      if (!d) continue;
-      for (const raw of [r.employee_id, r.employee_name]) {
-        if (!raw) continue;
-        const k = String(raw).toLowerCase();
-        if (!lastByKey[k] || d > lastByKey[k]) lastByKey[k] = d;
-      }
-    }
-
-    // 3. Determinar los inactivos REALES (sin registros o con último registro anterior al corte).
-    const inactive: Array<{ employee_id: string; name: string; email: string | null; last_record_date: string | null }> = [];
-    for (const emp of (employees || []) as any[]) {
-      const idKey = String(emp.id || '').toLowerCase();
-      const nameKey = String(emp.name || '').toLowerCase();
-      const lastDate = lastByKey[idKey] || lastByKey[nameKey] || null;
-      if (!lastDate || lastDate < cutoffStr) {
-        inactive.push({
-          employee_id: emp.id,
-          name: emp.name,
-          email: emp.email || null,
-          last_record_date: lastDate,
-        });
-      }
-    }
+    // Cálculo REAL de inactivos (compartido con get_inactivity_preview).
+    const { inactive, cutoffStr } = await computeInactiveEmployees(c, days);
 
     // Nadie inactivo: no hay nada que enviar. No inventamos conteos.
     if (inactive.length === 0) {
@@ -1003,48 +1249,122 @@ export const TOOL_REGISTRY = {
         inactive_employees: [],
         days_threshold: days,
         cutoff_date: cutoffStr,
-        channel: 'email_reminders',
+        provider: 'resend',
         message: `No se detectaron empleados inactivos en los últimos ${days} días. No se enviaron alertas.`,
         timestamp: new Date().toISOString(),
       };
     }
 
-    // 4. Envío REAL reutilizando la infraestructura de email de send_email_reminders
-    //    (Resend / SendGrid / Cloudflare MailChannels). Reportamos exactamente lo que
-    //    el proveedor confirma: nunca un conteo inventado.
-    let sendResult: any = null;
-    let sendError: string | null = null;
-    try {
-      sendResult = await (TOOL_REGISTRY as any).send_email_reminders(
-        {
-          recipients: inactive.map((i) => i.employee_id),
-          month: params.month,
-        },
-        c
-      );
-    } catch (err: any) {
-      sendError = err?.message || 'Error desconocido al enviar alertas de inactividad';
+    // Proveedor PRIORITARIO: Resend. Si no hay RESEND_API_KEY, NO mentimos: devolvemos
+    // la lista real de inactivos con sent:false y el motivo, sin inventar ningún envío.
+    const resendKey = (c.env.RESEND_API_KEY || '').trim();
+    if (!resendKey) {
+      return {
+        success: true,
+        sent: false,
+        reason: 'RESEND_API_KEY no configurada',
+        alerts_sent: 0,
+        inactive_count: inactive.length,
+        inactive_employees: inactive,
+        days_threshold: days,
+        cutoff_date: cutoffStr,
+        provider: 'resend',
+        message: `RESEND_API_KEY no configurada: no se envió ninguna alerta. Inactivos detectados en los últimos ${days} días: ${inactive.length}.`,
+        timestamp: new Date().toISOString(),
+      };
     }
 
-    const realSent = Number(sendResult?.real_emails_sent) || 0;
-    const failed: string[] = sendError
-      ? [sendError]
-      : (Array.isArray(sendResult?.failed_emails) ? sendResult.failed_emails : []);
-    const sent = !sendError && realSent > 0;
+    // Remitente configurable; fallback a alertas@moovingtech.com.
+    const fromEmail = (c.env.ALERT_FROM_EMAIL || ALERT_FROM_FALLBACK).trim();
+    const fromHeader = `Mooving Tech <${fromEmail}>`;
 
+    let alertsSent = 0;
+    const failed: string[] = [];
+
+    // Envío REAL por Resend, un email por empleado inactivo. Contamos SÓLO lo que Resend confirma.
+    for (const emp of inactive) {
+      const to = emp.email
+        || (emp.name ? `${String(emp.name).toLowerCase().replace(/\s+/g, '.')}@moovingtech.com` : '');
+      if (!to) {
+        failed.push(`${emp.name || emp.employee_id}: sin email`);
+        continue;
+      }
+
+      const { subject, body } = buildInactivityEmail(emp, days);
+      try {
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${resendKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ from: fromHeader, to: [to], subject, text: body }),
+        });
+
+        if (res.ok || res.status === 200 || res.status === 201 || res.status === 202) {
+          alertsSent++;
+        } else {
+          const errText = await res.text().catch(() => '');
+          failed.push(`${emp.name} (${to}): HTTP ${res.status}${errText ? ` — ${errText}` : ''}`);
+        }
+      } catch (err: any) {
+        failed.push(`${emp.name} (${to}): ${err?.message || 'Error de envío'}`);
+      }
+    }
+
+    const sent = alertsSent > 0;
     return {
       success: true,
       sent,
-      alerts_sent: realSent,
+      alerts_sent: alertsSent,
       inactive_count: inactive.length,
       inactive_employees: inactive,
       days_threshold: days,
       cutoff_date: cutoffStr,
-      channel: sendResult?.provider || 'email_reminders',
+      provider: 'resend',
+      from: fromEmail,
       failed_alerts: failed,
       message: sent
-        ? `Se enviaron ${realSent} alertas de inactividad reales (de ${inactive.length} empleados inactivos detectados en los últimos ${days} días).`
-        : `No se pudo enviar ninguna alerta real. Inactivos detectados: ${inactive.length}. Detalle: ${failed.join(' — ') || 'sin proveedor de email disponible'}.`,
+        ? `Se enviaron ${alertsSent} alertas de inactividad reales vía Resend (de ${inactive.length} inactivos detectados en los últimos ${days} días).`
+        : `No se pudo enviar ninguna alerta vía Resend. Inactivos detectados: ${inactive.length}. Detalle: ${failed.join(' — ') || 'sin destinatarios válidos'}.`,
+      timestamp: new Date().toISOString(),
+    };
+  },
+
+  // get_inactivity_preview — Vista PREVIA (no envía nada) de las alertas de inactividad.
+  // Devuelve la lista real de empleados inactivos (id, name, email, last_record_date,
+  // days_inactive) y el CONTENIDO exacto del email que recibiría cada uno (asunto +
+  // cuerpo), para que el C-level revise qué se mandaría antes de disparar
+  // send_inactivity_alerts. Usa la MISMA lógica de cálculo y el MISMO cuerpo de email.
+  get_inactivity_preview: async (params: any, c: HonoContext) => {
+    const days = Number(params.days ?? params.inactive_days ?? params.days_threshold) || DEFAULT_INACTIVITY_DAYS;
+    const { inactive, cutoffStr } = await computeInactiveEmployees(c, days);
+
+    const inactive_employees = inactive.map((emp) => {
+      const to = emp.email
+        || (emp.name ? `${String(emp.name).toLowerCase().replace(/\s+/g, '.')}@moovingtech.com` : '');
+      const { subject, body } = buildInactivityEmail(emp, days);
+      return {
+        employee_id: emp.employee_id,
+        name: emp.name,
+        email: emp.email,
+        last_record_date: emp.last_record_date,
+        days_inactive: emp.days_inactive,
+        to,
+        email_subject: subject,
+        email_body: body,
+      };
+    });
+
+    return {
+      success: true,
+      sent: false,
+      preview: true,
+      days_threshold: days,
+      cutoff_date: cutoffStr,
+      inactive_count: inactive_employees.length,
+      inactive_employees,
+      message: `Vista previa: ${inactive_employees.length} empleado(s) inactivo(s) en los últimos ${days} días. No se envió ninguna alerta.`,
       timestamp: new Date().toISOString(),
     };
   },

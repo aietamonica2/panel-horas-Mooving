@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
-import { Users, Briefcase, FolderGit2, Tags, Plus, Trash2, Loader2, Edit2, Clock, Mail, Link } from 'lucide-react';
+import { Users, Briefcase, FolderGit2, Tags, Plus, Trash2, Loader2, Edit2, Clock, Mail, Link, Check, Lock } from 'lucide-react';
 import { EmailRemindersModal } from './EmailRemindersModal';
 import { ConfirmModal } from './ConfirmModal';
 
@@ -15,7 +15,11 @@ export function AdminPanel() {
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [unlinkedUsers, setUnlinkedUsers] = useState<any[]>([]);
   const [selectedTargetEmps, setSelectedTargetEmps] = useState<Record<string, string>>({});
-  
+
+  // Edición inline del valor hora (USD) — dato CONFIDENCIAL, solo admin/C-level.
+  const [rateEdits, setRateEdits] = useState<Record<string, string>>({});
+  const [savingRateId, setSavingRateId] = useState<string | null>(null);
+
   const [data, setData] = useState({
     employees: [] as any[],
     clients: [] as any[],
@@ -142,6 +146,54 @@ export function AdminPanel() {
       setError(err.message || 'Error al sincronizar con Clockify.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const DEFAULT_RATE = 45;
+
+  // Valor mostrado en el input: la edición en curso si existe, sino el guardado (default 45).
+  const getRateValue = (emp: any): string =>
+    rateEdits[emp.id] !== undefined
+      ? rateEdits[emp.id]
+      : String(emp.hourly_rate_usd ?? DEFAULT_RATE);
+
+  const handleSaveRate = async (emp: any) => {
+    const parsed = parseFloat(getRateValue(emp));
+    if (isNaN(parsed) || parsed < 0) {
+      setSuccessMsg('');
+      setError(`Valor hora inválido para "${emp.name}". Ingresá un número mayor o igual a 0.`);
+      return;
+    }
+
+    setSavingRateId(emp.id);
+    setError('');
+    setSuccessMsg('');
+    try {
+      const res = await api.callMcpTool('set_employee_rate', {
+        employee_id: emp.id,
+        hourly_rate_usd: parsed,
+      });
+      const json = await res.json();
+      if (!res.ok || json.success === false) throw new Error(json.error || 'Error al guardar el valor hora.');
+
+      // Actualizamos el registro en memoria y limpiamos la edición en curso.
+      setData(prev => ({
+        ...prev,
+        employees: prev.employees.map((e: any) =>
+          e.id === emp.id ? { ...e, hourly_rate_usd: parsed } : e
+        ),
+      }));
+      setRateEdits(prev => {
+        const next = { ...prev };
+        delete next[emp.id];
+        return next;
+      });
+      setSuccessMsg(`Valor hora de "${emp.name}" actualizado a US$ ${parsed}/h.`);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || 'No se pudo actualizar el valor hora.');
+    } finally {
+      setSavingRateId(null);
     }
   };
 
@@ -360,6 +412,18 @@ export function AdminPanel() {
                   </button>
                 </div>
 
+                {activeTab === 'employees' && (
+                  <div
+                    className="mb-4 flex items-start gap-2 text-xs px-3 py-2 rounded-lg border"
+                    style={{ borderColor: 'rgba(26,95,122,0.25)', backgroundColor: 'rgba(26,95,122,0.06)', color: '#1a5f7a' }}
+                  >
+                    <Lock className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                    <span>
+                      El <strong>Valor hora (USD)</strong> es información <strong>confidencial</strong>: solo la ven y editan C-level / administradores.
+                    </span>
+                  </div>
+                )}
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
@@ -369,6 +433,14 @@ export function AdminPanel() {
                     {activeTab === 'employees' && <th className="py-3 px-4 font-medium">Email</th>}
                     {activeTab === 'employees' && <th className="py-3 px-4 font-medium">Estado</th>}
                     {activeTab === 'employees' && <th className="py-3 px-4 font-medium">Capacidad Diaria</th>}
+                    {activeTab === 'employees' && (
+                      <th className="py-3 px-4 font-medium whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1">
+                          Valor hora (USD)
+                          <Lock className="w-3 h-3 text-slate-400" />
+                        </span>
+                      </th>
+                    )}
                     {activeTab === 'projects' && <th className="py-3 px-4 font-medium">Client ID</th>}
                     <th className="py-3 px-4 font-medium text-right">Acciones</th>
                   </tr>
@@ -393,6 +465,35 @@ export function AdminPanel() {
                           {item.daily_hours_expected ?? 8}h / día
                         </td>
                       )}
+                      {activeTab === 'employees' && (
+                        <td className="py-3 px-4">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-slate-400 text-xs font-medium">US$</span>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              value={getRateValue(item)}
+                              onChange={e => setRateEdits(prev => ({ ...prev, [item.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') handleSaveRate(item); }}
+                              className="w-20 px-2 py-1 border border-slate-300 rounded-md text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#1a5f7a] focus:border-[#1a5f7a]"
+                              title="Valor hora confidencial (solo C-level / admin)"
+                            />
+                            <span className="text-slate-400 text-xs">/h</span>
+                            <button
+                              onClick={() => handleSaveRate(item)}
+                              disabled={savingRateId === item.id}
+                              className="p-1.5 rounded-md text-white transition-colors disabled:opacity-50 hover:opacity-90"
+                              style={{ backgroundColor: '#1a5f7a' }}
+                              title="Guardar valor hora"
+                            >
+                              {savingRateId === item.id
+                                ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                                : <Check className="w-3.5 h-3.5" />}
+                            </button>
+                          </div>
+                        </td>
+                      )}
                       {activeTab === 'projects' && <td className="py-3 px-4 text-slate-500 font-mono text-xs">{item.client_id}</td>}
                       <td className="py-3 px-4 text-right">
                         <button
@@ -414,7 +515,7 @@ export function AdminPanel() {
                   ))}
                   {data[activeTab].length === 0 && (
                     <tr>
-                      <td colSpan={6} className="py-8 text-center text-slate-500 italic">
+                      <td colSpan={7} className="py-8 text-center text-slate-500 italic">
                         No hay registros disponibles.
                       </td>
                     </tr>

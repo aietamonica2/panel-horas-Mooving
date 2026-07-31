@@ -4,12 +4,12 @@
 --
 -- This file is the SINGLE SOURCE OF TRUTH for a fresh D1 bootstrap. It reflects
 -- the EXACT accumulated structure after applying every migration in
--- apps/api/migrations/0002..0018 on top of the original base tables.
+-- apps/api/migrations/0002..0019 on top of the original base tables.
 --
 -- production database that was bootstrapped from the original schema.sql and then
 -- migrated. See db/MIGRATIONS_NOTES.md for the drift history and bootstrap steps.
 --
--- Reflects migrations 0002..0018.
+-- Reflects migrations 0002..0019.
 --
 -- Conventions:
 --   * All tables use CREATE TABLE IF NOT EXISTS and all indexes CREATE INDEX
@@ -20,6 +20,7 @@
 --   * time_records.source            (0003 / 0004)  + idx_time_records_project (0004)
 --   * time_records.rate_usd/amount_usd/status (0017)
 --   * employees.daily_hours_expected (0015)
+--   * employees.hourly_rate_usd      (0019)
 --   * bulk_load_schedules table      (0012)
 --   * email_reminder_settings table  (0013)
 --   * employee_aliases table         (0014)
@@ -82,7 +83,12 @@ CREATE TABLE IF NOT EXISTS employees (
   -- Expected daily capacity in hours (0..8). Added by 0015_add_daily_hours_expected.
   daily_hours_expected REAL DEFAULT 8.0,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Per-employee hourly cost/bill rate in USD. Added by
+  -- 0019_add_employee_hourly_rate; appended after updated_at to mirror the
+  -- ALTER TABLE ADD COLUMN ordering of a migrated database. Existing rows
+  -- default to 45.
+  hourly_rate_usd REAL DEFAULT 45
 );
 
 CREATE INDEX IF NOT EXISTS idx_employees_company ON employees(company_id);
