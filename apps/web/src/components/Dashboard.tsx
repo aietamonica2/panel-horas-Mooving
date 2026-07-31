@@ -25,6 +25,7 @@ import { InactivityAlertBanner } from './InactivityAlertBanner'
 import { EmployeeComparisonModal } from './EmployeeComparisonModal'
 import { ExecutiveDrilldownModal } from './ExecutiveDrilldownModal'
 import { api } from '../api'
+import { parseCsv, mapTogglRows } from '../utils/csvImport'
 
 const MOOVING_COLORS = {
   primary: '#1a5f7a',    // Mooving dark blue
@@ -191,65 +192,31 @@ export const Dashboard: React.FC = () => {
 
     try {
       const text = await file.text()
-      const lines = text.split('\n')
-      
-      // Fetch dynamic entities for mapping
-      const [empRes, cliRes, projRes] = await Promise.all([
-        api.callMcpTool('get_employees', {}).then(res => res.json()),
-        api.callMcpTool('get_clients', {}).then(res => res.json()),
-        api.callMcpTool('get_projects', {}).then(res => res.json())
-      ])
-      
-      const dbEmployees = empRes.success ? empRes.result.employees : []
-      const dbClients = cliRes.success ? cliRes.result.clients : []
-      const dbProjects = projRes.success ? projRes.result.projects : []
 
-      const recordsToUpload = lines.slice(1)
-        .filter(line => line.trim())
-        .map(line => {
-          const values = line.split(',').map(v => v.trim())
-          const dur = parseFloat(values[6])
-          
-          // Validate and normalize work_type to fit enum with Spanish fallback mapping
-          const rawWt = (values[8] || '').toLowerCase()
-          let wt = 'project'
-          if (rawWt.includes('reun') || rawWt.includes('meet') || rawWt.includes('call')) wt = 'meeting'
-          else if (rawWt.includes('intern')) wt = 'internal'
-          else if (rawWt.includes('capacit') || rawWt.includes('train')) wt = 'training'
-          else if (rawWt.includes('otro') || rawWt.includes('other')) wt = 'other'
-          else if (['project', 'internal', 'meeting', 'training', 'other'].includes(rawWt)) wt = rawWt
-
-          const empName = values[1] || 'Unknown Employee';
-          const cliName = values[3] || 'Unknown Client';
-          const projName = values[5] || 'Unknown Project';
-
-          const matchedEmp = dbEmployees.find((e: any) => e.name.toLowerCase() === empName.toLowerCase())
-          const matchedCli = dbClients.find((c: any) => c.name.toLowerCase() === cliName.toLowerCase())
-          const matchedProj = dbProjects.find((p: any) => p.name.toLowerCase() === projName.toLowerCase())
-
-          return {
-            employee_id: matchedEmp ? matchedEmp.id : (values[0] || 'unknown-emp'),
-            employee_name: matchedEmp ? matchedEmp.name : empName,
-            client_id: matchedCli ? matchedCli.id : (values[2] || 'unknown-client'),
-            client_name: matchedCli ? matchedCli.name : cliName,
-            project_id: matchedProj ? matchedProj.id : (values[4] || 'unknown-project'),
-            project_name: matchedProj ? matchedProj.name : projName,
-            duration_decimal: isNaN(dur) ? 1.0 : dur,
-            date: values[7] || new Date().toISOString().split('T')[0],
-            work_type: wt as any,
-            description: values[9] || ''
-          }
-        })
+      // Robust RFC-4180 parse + header-name based mapping (Toggl/Clockify export).
+      // Invalid rows are rejected (never fabricated with 1.0 / hoy()).
+      const rows = parseCsv(text)
+      const { records: recordsToUpload, rejected } = mapTogglRows(rows)
 
       if (recordsToUpload.length === 0) {
-        setAiMessage('❌ Error: El archivo CSV está vacío.')
+        setAiMessage(
+          rejected.length > 0
+            ? `❌ No se importó ninguna fila: ${rejected.length} fila(s) rechazada(s) por fecha/duración inválida.`
+            : '❌ Error: El archivo CSV no contiene filas válidas para importar.'
+        )
         return
       }
 
       const res = await api.uploadCSV({ records: recordsToUpload })
       const json = await res.json()
       if (res.ok && json.success) {
-        setAiMessage(`✅ Senda QA Agent: Se subieron y guardaron ${json.data.uploaded} registros.`)
+        const uploaded = json.data?.uploaded ?? recordsToUpload.length
+        const base = `✅ Senda QA Agent: Se subieron y guardaron ${uploaded} registros.`
+        setAiMessage(
+          rejected.length > 0
+            ? `${base} ⚠️ ${rejected.length} fila(s) se rechazaron por fecha o duración inválida.`
+            : base
+        )
         await fetchRecords()
       } else {
         setAiMessage(`❌ Error al subir: ${json.error || 'Error de validación'}`)
@@ -257,7 +224,9 @@ export const Dashboard: React.FC = () => {
     } catch (err) {
       setAiMessage(`❌ Error de conexión: ${err instanceof Error ? err.message : 'Error'}`)
     } finally {
-      setTimeout(() => setAiMessage(null), 5000)
+      // Allow re-uploading the same file by clearing the input value.
+      e.target.value = ''
+      setTimeout(() => setAiMessage(null), 6000)
     }
   }
 

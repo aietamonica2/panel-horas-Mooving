@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { Users, Briefcase, FolderGit2, Tags, Plus, Trash2, Loader2, Edit2, Clock, Mail, Link } from 'lucide-react';
 import { EmailRemindersModal } from './EmailRemindersModal';
+import { ConfirmModal } from './ConfirmModal';
 
 type TabType = 'employees' | 'clients' | 'projects' | 'categories' | 'aliases';
 
@@ -9,6 +10,8 @@ export function AdminPanel() {
   const [activeTab, setActiveTab] = useState<TabType>('employees');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMsg, setSuccessMsg] = useState('');
+  const [confirmState, setConfirmState] = useState<{ id: string; type: TabType; name: string } | null>(null);
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false);
   const [unlinkedUsers, setUnlinkedUsers] = useState<any[]>([]);
   const [selectedTargetEmps, setSelectedTargetEmps] = useState<Record<string, string>>({});
@@ -39,11 +42,14 @@ export function AdminPanel() {
   const handleLinkUser = async (identifier: string) => {
     const targetId = selectedTargetEmps[identifier];
     if (!targetId) {
-      alert('Por favor selecciona un empleado para vincular.');
+      setSuccessMsg('');
+      setError('Por favor selecciona un empleado para vincular.');
       return;
     }
 
     setLoading(true);
+    setError('');
+    setSuccessMsg('');
     try {
       const res = await api.callMcpTool('link_external_user', {
         alias_identifier: identifier,
@@ -51,8 +57,8 @@ export function AdminPanel() {
       });
       const json = await res.json();
       if (!res.ok || !json.success) throw new Error(json.error || 'Error al vincular');
-      
-      alert(json.result?.message || 'Empleado vinculado exitosamente');
+
+      setSuccessMsg(json.result?.message || 'Empleado vinculado exitosamente');
       await fetchUnlinkedUsers();
       await fetchData();
     } catch (err: any) {
@@ -93,10 +99,14 @@ export function AdminPanel() {
     fetchUnlinkedUsers();
   }, []);
 
-  const handleDelete = async (id: string, type: TabType) => {
-    if (!window.confirm('¿Estás seguro de eliminar este registro?')) return;
-    
+  const handleDelete = async () => {
+    if (!confirmState) return;
+    const { id, type, name } = confirmState;
+    setConfirmState(null);
+
     setLoading(true);
+    setError('');
+    setSuccessMsg('');
     try {
       let toolName = '';
       if (type === 'employees') toolName = 'delete_employee';
@@ -106,8 +116,9 @@ export function AdminPanel() {
 
       const res = await api.callMcpTool(toolName, { id });
       if (!res.ok) throw new Error('Error al eliminar');
-      
+
       await fetchData();
+      setSuccessMsg(`"${name}" se eliminó correctamente.`);
     } catch (err) {
       setError('No se pudo eliminar el registro.');
     } finally {
@@ -118,13 +129,14 @@ export function AdminPanel() {
   const handleSyncClockify = async () => {
     setLoading(true);
     setError('');
+    setSuccessMsg('');
     try {
       const res = await api.callMcpTool('sync_clockify_hours', {});
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Error al sincronizar Clockify');
-      
-      alert(data.result?.message || 'Sincronización de Clockify exitosa');
+
       await fetchData();
+      setSuccessMsg(data.result?.message || 'Sincronización de Clockify exitosa');
     } catch (err: any) {
       console.error(err);
       setError(err.message || 'Error al sincronizar con Clockify.');
@@ -136,7 +148,9 @@ export function AdminPanel() {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
-    
+    setError('');
+    setSuccessMsg('');
+
     try {
       const isEdit = !!editingItem;
       let toolName = '';
@@ -221,6 +235,19 @@ export function AdminPanel() {
         {error && (
           <div className="bg-red-50 text-red-600 p-4 rounded-lg border border-red-200">
             {error}
+          </div>
+        )}
+
+        {successMsg && (
+          <div className="bg-emerald-50 text-emerald-700 p-4 rounded-lg border border-emerald-200 flex justify-between items-start gap-4">
+            <span>{successMsg}</span>
+            <button
+              onClick={() => setSuccessMsg('')}
+              className="text-emerald-500 hover:text-emerald-700 font-bold leading-none"
+              title="Cerrar"
+            >
+              ×
+            </button>
           </div>
         )}
 
@@ -376,7 +403,7 @@ export function AdminPanel() {
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(item.id, activeTab)}
+                          onClick={() => setConfirmState({ id: item.id, type: activeTab, name: item.name })}
                           className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-md transition-colors"
                           title="Eliminar"
                         >
@@ -519,6 +546,22 @@ export function AdminPanel() {
       <EmailRemindersModal
         isOpen={isEmailModalOpen}
         onClose={() => setIsEmailModalOpen(false)}
+      />
+
+      {/* Confirmación de borrado */}
+      <ConfirmModal
+        isOpen={!!confirmState}
+        title="Eliminar registro"
+        message={
+          confirmState
+            ? `¿Seguro que querés eliminar "${confirmState.name}"? Esta acción no se puede deshacer.`
+            : ''
+        }
+        confirmLabel="Eliminar"
+        cancelLabel="Cancelar"
+        variant="danger"
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmState(null)}
       />
     </div>
   );

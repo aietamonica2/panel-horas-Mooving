@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import { api } from '../api'
+import { ConfirmModal } from './ConfirmModal'
 
 interface EditRecordModalProps {
   isOpen: boolean
@@ -9,8 +10,6 @@ interface EditRecordModalProps {
 }
 
 export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClose, record, onSuccess }) => {
-  if (!isOpen || !record) return null
-
   const [formData, setFormData] = useState({
     employee_id: '',
     employee_name: '',
@@ -24,6 +23,7 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
   
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
 
   useEffect(() => {
     if (record) {
@@ -39,6 +39,9 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
       })
     }
   }, [record])
+
+  // Return condicional DESPUÉS de declarar todos los hooks (Reglas de Hooks).
+  if (!isOpen || !record) return null
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -66,7 +69,7 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
   }
 
   const handleDelete = async () => {
-    if (!window.confirm('¿Estás seguro de eliminar este registro?')) return
+    setShowDeleteConfirm(false)
     setIsSubmitting(true)
     setError('')
     try {
@@ -86,6 +89,7 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
   }
 
   return (
+    <>
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up">
         <div className="bg-indigo-900 p-4 flex justify-between items-center text-white">
@@ -187,10 +191,10 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
           {error && <p className="text-red-500 text-sm">{error}</p>}
 
           <div className="pt-4 mt-6 border-t flex justify-between items-center">
-            <button 
-              type="button" 
+            <button
+              type="button"
               disabled={isSubmitting}
-              onClick={handleDelete}
+              onClick={() => setShowDeleteConfirm(true)}
               className="px-4 py-2 text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-lg font-medium transition disabled:opacity-50"
             >
               🗑️ Eliminar
@@ -215,5 +219,17 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
         </form>
       </div>
     </div>
+
+    <ConfirmModal
+      isOpen={showDeleteConfirm}
+      title="Eliminar registro"
+      message={`¿Seguro que querés eliminar el registro de ${record.employee_name} del ${record.date}? Esta acción no se puede deshacer.`}
+      confirmLabel="Eliminar"
+      cancelLabel="Cancelar"
+      variant="danger"
+      onConfirm={handleDelete}
+      onCancel={() => setShowDeleteConfirm(false)}
+    />
+    </>
   )
 }
