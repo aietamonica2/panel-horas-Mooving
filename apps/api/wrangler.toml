@@ -18,6 +18,9 @@ SENDA_BASE_URL = "https://sendaqa.telar.ai/api"
 # employee with no logged hours in the last N days gets an alert. The handler
 # falls back to 3 if this is unset; set it here to override.
 INACTIVITY_DAYS = "3"
+# ALERT_FROM_EMAIL: verified Resend sender for inactivity/reminder emails.
+# (RESEND_API_KEY is stored as a Worker secret, not here.)
+ALERT_FROM_EMAIL = "notificaciones@mooving.cloud"
 
 # Scheduled triggers — keep in sync with the `scheduled` dispatcher in src/index.ts.
 # Cron 1 ("0 8 * * 2"):    Bulk load — every Tuesday at 08:00 UTC.
