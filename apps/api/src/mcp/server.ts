@@ -1677,16 +1677,55 @@ export const TOOL_REGISTRY = {
     }
     const { results: employees } = await db.prepare(empQuery).bind(company_id).all();
 
-    // 2. Fetch sum of hours per employee for the target month
+    // 2. Horas del mes por identificador de origen + alias, con match ROBUSTO.
+    // Los registros de Clockify/Zendesk suelen quedar bajo un identificador con
+    // otro formato que el de la ficha del empleado ("juan.cruz" vs "Juan Cruz"
+    // vs "juan-cruz"), por lo que normalizamos (minúsculas, sin acentos, sin
+    // separadores) y además resolvemos vía employee_aliases. Sin esto varias
+    // personas mostraban 0h en el borrador aunque tuvieran horas cargadas.
     const { results: records } = await db.prepare(
-      'SELECT employee_id, employee_name, SUM(duration_decimal) as total_hours FROM time_records WHERE company_id = ? AND date LIKE ? GROUP BY employee_name'
+      'SELECT employee_id, employee_name, SUM(duration_decimal) as total_hours FROM time_records WHERE company_id = ? AND date LIKE ? GROUP BY employee_id, employee_name'
     ).bind(company_id, `${targetMonth}-%`).all();
 
-    const hoursMap: Record<string, number> = {};
-    for (const r of (records || []) as any[]) {
-      if (r.employee_name) hoursMap[r.employee_name.toLowerCase()] = r.total_hours || 0;
-      if (r.employee_id) hoursMap[r.employee_id] = r.total_hours || 0;
+    let aliasRows: any[] = [];
+    try {
+      const aliasRes = await db.prepare(
+        'SELECT alias_email, alias_name, employee_id FROM employee_aliases WHERE company_id = ?'
+      ).bind(company_id).all();
+      aliasRows = (aliasRes.results || []) as any[];
+    } catch { /* tabla de alias opcional */ }
+
+    const normKey = (s: string) => (s || '')
+      .toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[.\s_@-]+/g, '');
+
+    // identificador normalizado (nombre o local-part del email del alias) -> employee_id canónico
+    const aliasToEmp: Record<string, string> = {};
+    for (const a of aliasRows) {
+      if (a.alias_name) aliasToEmp[normKey(a.alias_name)] = a.employee_id;
+      if (a.alias_email) aliasToEmp[normKey(String(a.alias_email).split('@')[0])] = a.employee_id;
     }
+
+    const monthRecords = (records || []) as any[];
+    // Suma robusta de horas del mes para un empleado dado (id exacto, nombre/id
+    // normalizado, local-part del email, o resolución por alias).
+    const resolveHours = (emp: any): number => {
+      const empNorm = normKey(emp.name);
+      const emailLocal = normKey(String(emp.email || '').split('@')[0]);
+      let total = 0;
+      for (const r of monthRecords) {
+        const rIdNorm = normKey(r.employee_id);
+        const rNameNorm = normKey(r.employee_name);
+        const canonical = aliasToEmp[rIdNorm] || aliasToEmp[rNameNorm];
+        const matches =
+          r.employee_id === emp.id ||
+          rNameNorm === empNorm || rIdNorm === empNorm ||
+          (!!emailLocal && (rNameNorm === emailLocal || rIdNorm === emailLocal)) ||
+          canonical === emp.id;
+        if (matches) total += (r.total_hours || 0);
+      }
+      return total;
+    };
 
     const monthIdx = parseInt(targetMonth.split('-')[1], 10) - 1;
     const yearStr = targetMonth.split('-')[0];
@@ -1708,7 +1747,7 @@ export const TOOL_REGISTRY = {
 
     (employees || []).forEach((emp: any, index: number) => {
       const email = emp.email || `${emp.name.toLowerCase().replace(/\s+/g, '.')}@moovingtech.com`;
-      const hours = hoursMap[emp.id] || hoursMap[emp.name.toLowerCase()] || 0;
+      const hours = resolveHours(emp);
       
       const cleanName = emp.name.replace(/\./g, ' ').trim();
       const nameParts = cleanName.split(/\s+/).map((p: string) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase());
