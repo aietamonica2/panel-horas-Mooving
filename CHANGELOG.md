@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.0] - 2026-07-31
+
+### Added
+- **Approval workflow (FEAT-02):** `time_records.status` + MCP tools (get_pending/approve/reject/approve_all) and an admin **Approval Queue** view.
+- **Real USD billing (DATA-06/FEAT-04):** persist `rate_usd`/`amount_usd`; C-level panel shows real billing (honest fallback when absent).
+- **Server-side policy engine (FUNC-01):** `lib/policyValidation.ts` enforces the hours Manual on `/upload` (rejects invalid rows).
+- **Robust CSV import (DATA-01/02/03/04/05):** RFC-4180 parser for the real Toggl format, work_type inference, Interno→Mooving consolidation, natural-key dedup, name normalization.
+- Functional dark mode + Mooving brand tokens; fade-in animations defined.
+
+### Security
+- **MCP closed (SEC-01):** `/api/mcp` requires a valid JWT or the Senda API key; anonymous → 401.
+- **Tenant from principal (MT-02):** all MCP tools derive `company_id` from the authenticated caller, never the request body.
+
+### Fixed
+- Availability net of absences (FUNC-02); month-aware client contracts (NUEVO-5); CSV-injection-safe export (NUEVO-6); capacity by real weekdays (NUEVO-11); real inactivity alerts (NUEVO-3); dashboard memoization (ARCH-04); consolidated versioning (ARCH-02); `db/schema.sql` synced to migrations (ARCH-03); phantom test replaced with real coverage (NUEVO-10).
+
+### Notes
+- Login/password hashing intentionally untouched (centralized user-management app).
+- Coordinator role + RACI scoping (FEAT-01) pending product input. Full suite green (102 tests); build OK.
+
 ## [2.2.4] - 2026-07-31
 
 ### Security
