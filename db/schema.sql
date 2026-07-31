@@ -4,12 +4,12 @@
 --
 -- This file is the SINGLE SOURCE OF TRUTH for a fresh D1 bootstrap. It reflects
 -- the EXACT accumulated structure after applying every migration in
--- apps/api/migrations/0002..0017 on top of the original base tables.
+-- apps/api/migrations/0002..0018 on top of the original base tables.
 --
 -- production database that was bootstrapped from the original schema.sql and then
 -- migrated. See db/MIGRATIONS_NOTES.md for the drift history and bootstrap steps.
 --
--- Reflects migrations 0002..0017.
+-- Reflects migrations 0002..0018.
 --
 -- Conventions:
 --   * All tables use CREATE TABLE IF NOT EXISTS and all indexes CREATE INDEX
@@ -24,6 +24,7 @@
 --   * email_reminder_settings table  (0013)
 --   * employee_aliases table         (0014)
 --   * client_contracts table         (0016)
+--   * coordinator_assignments table  (0018)
 
 -- ============================================================================
 -- Time Records Table
@@ -119,6 +120,24 @@ CREATE TABLE IF NOT EXISTS role_permissions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_role_permissions_role ON role_permissions(role_id);
+
+-- ============================================================================
+-- Coordinator Assignments Table (rol `coordinator` → cartera de clientes)
+--   Source: 0018_coordinator_assignments
+--   Scoping por cartera (matriz RACI). Una fila por (coordinador, client_id).
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS coordinator_assignments (
+  id TEXT PRIMARY KEY,
+  company_id TEXT NOT NULL,
+  coordinator_email TEXT NOT NULL,
+  client_id TEXT NOT NULL,
+  created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(company_id, coordinator_email, client_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_coordinator_assignments_coordinator
+  ON coordinator_assignments(company_id, coordinator_email);
 
 -- ============================================================================
 -- Clients Table

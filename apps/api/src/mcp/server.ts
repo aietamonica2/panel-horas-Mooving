@@ -1,5 +1,36 @@
 import { HonoContext } from '../types';
 
+/**
+ * FEAT-01 — Visibilidad por cartera para Coordinadores.
+ *
+ * resolveScopeClientIds(c): resuelve el "scope" de clientes que puede ver el
+ * principal autenticado.
+ *   - role === 'admin'   → devuelve null  = SIN restricción (ve TODOS los clientes).
+ *   - cualquier otro rol → consulta coordinator_assignments (mapa
+ *     coordinator_email → client_id) del MISMO tenant y devuelve el array de
+ *     client_ids de su cartera. El array puede ser vacío (principal sin cartera
+ *     asignada), que el llamador interpreta como "no ve ninguna cartera".
+ *
+ * El company_id se toma SIEMPRE del principal (c.get('auth')), nunca del body,
+ * para preservar el aislamiento multi-tenant (MT-02: tenant-from-principal).
+ */
+async function resolveScopeClientIds(c: HonoContext): Promise<string[] | null> {
+  const auth = c.get('auth');
+  // Admin ve todo: null = sin restricción de cartera. No consulta la DB.
+  if (auth?.role === 'admin') return null;
+
+  const db = c.env.DB;
+  const company_id = auth?.company_id || 'mooving-default';
+  const email = auth?.email || '';
+
+  const { results } = await db
+    .prepare('SELECT client_id FROM coordinator_assignments WHERE company_id = ? AND coordinator_email = ?')
+    .bind(company_id, email)
+    .all();
+
+  return (results || []).map((r: any) => r.client_id as string);
+}
+
 export const TOOL_REGISTRY = {
   get_clients: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
@@ -329,6 +360,76 @@ export const TOOL_REGISTRY = {
   },
   
   // ---------------------------------------------------------------------------
+  // FEAT-01 — Visibilidad por cartera para Coordinadores.
+  // get_my_scope / get_coordinator_overview usan resolveScopeClientIds() para
+  // limitar lo que ve un coordinador a los client_id de su cartera. El admin no
+  // tiene restricción (ve todos los clientes del tenant). Siempre se filtra por
+  // company_id del principal (MT-02: tenant-from-principal).
+  // ---------------------------------------------------------------------------
+
+  get_my_scope: async (params: any, c: HonoContext) => {
+    const auth = c.get('auth');
+    const role = auth?.role || '';
+
+    // scope === null → admin (ve todo). array → cartera del coordinador (puede ser vacía).
+    const scope = await resolveScopeClientIds(c);
+    const client_ids = scope || [];
+    // is_coordinator = tiene asignaciones de cartera (no admin y al menos 1 cliente).
+    const is_coordinator = scope !== null && client_ids.length > 0;
+
+    // Para un admin: is_coordinator=false y client_ids=[] (vacío = sin restricción, "ve todo").
+    return { role, is_coordinator, client_ids };
+  },
+
+  get_coordinator_overview: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const company_id = c.get('auth')?.company_id || 'mooving-default';
+
+    // scope === null → admin: incluir TODOS los clientes del tenant.
+    // scope vacío     → coordinador sin cartera: no hay clientes que mostrar.
+    // scope con ids   → sólo los clientes de su cartera.
+    const scope = await resolveScopeClientIds(c);
+    if (scope !== null && scope.length === 0) {
+      return { clients: [] };
+    }
+
+    // Agregación SQL por cliente. LEFT JOIN para incluir clientes de la cartera
+    // aunque todavía no tengan registros de horas (total_hours/records/pending = 0).
+    let query = `
+      SELECT
+        c.id   AS client_id,
+        c.name AS client_name,
+        COALESCE(SUM(tr.duration_decimal), 0) AS total_hours,
+        COUNT(tr.id) AS records,
+        COALESCE(SUM(CASE WHEN tr.status = 'pending' THEN 1 ELSE 0 END), 0) AS pending
+      FROM clients c
+      LEFT JOIN time_records tr
+        ON tr.client_id = c.id AND tr.company_id = c.company_id
+      WHERE c.company_id = ?`;
+    const queryParams: any[] = [company_id];
+
+    if (scope !== null) {
+      const placeholders = scope.map(() => '?').join(', ');
+      query += ` AND c.id IN (${placeholders})`;
+      queryParams.push(...scope);
+    }
+
+    query += ' GROUP BY c.id, c.name ORDER BY c.name';
+
+    const { results } = await db.prepare(query).bind(...queryParams).all();
+
+    const clients = (results || []).map((r: any) => ({
+      client_id: r.client_id,
+      client_name: r.client_name,
+      total_hours: Number(r.total_hours) || 0,
+      records: Number(r.records) || 0,
+      pending: Number(r.pending) || 0,
+    }));
+
+    return { clients };
+  },
+
+  // ---------------------------------------------------------------------------
   // FEAT-02 — Flujo de aprobación de horas (approval workflow).
   // Todas derivan `company_id` del principal autenticado (nunca del body) para
   // preservar el aislamiento multi-tenant (MT-02: tenant-from-principal).
@@ -341,6 +442,27 @@ export const TOOL_REGISTRY = {
 
     let query = "SELECT * FROM time_records WHERE company_id = ? AND status = 'pending'";
     const queryParams: any[] = [company_id];
+
+    // FEAT-01 — Visibilidad por cartera. get_pending_time_records es una tool de
+    // APROBACIÓN, así que sólo los aprobadores deben ver registros pendientes:
+    //   - admin       → scope === null: SIN restricción de cliente (ve todo, como estaba).
+    //   - coordinador → scope = client_ids de su cartera: se agrega AND client_id IN (...).
+    //   - sin cartera → (empleado común o principal de servicio, scope vacío): la opción
+    //                   MÁS SEGURA es NO exponer registros pendientes ajenos, así que se
+    //                   fuerza un resultado vacío (AND 1 = 0). Preferimos "vacío" antes que
+    //                   intentar un match frágil auth→employee: el email del principal no
+    //                   coincide de forma fiable con employee_id/employee_name (distintos
+    //                   orígenes guardan "nombre.apellido", "Nombre Apellido" o un email).
+    const scopeClientIds = await resolveScopeClientIds(c);
+    if (scopeClientIds !== null) {
+      if (scopeClientIds.length > 0) {
+        const placeholders = scopeClientIds.map(() => '?').join(', ');
+        query += ` AND client_id IN (${placeholders})`;
+        queryParams.push(...scopeClientIds);
+      } else {
+        query += ' AND 1 = 0';
+      }
+    }
 
     if (employee_id) {
       query += ' AND employee_id = ?';

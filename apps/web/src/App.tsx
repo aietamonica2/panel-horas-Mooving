@@ -11,6 +11,7 @@ import { Sidebar } from './components/Sidebar'
 import { Documentation } from './components/Documentation'
 import { AdminPanel } from './components/AdminPanel'
 import { ApprovalQueue } from './components/ApprovalQueue'
+import { CoordinatorView } from './components/CoordinatorView'
 
 declare global {
   namespace JSX {
@@ -28,8 +29,9 @@ export function App() {
   const userRole = localStorage.getItem('mooving_user_role') || 'employee'
   const userName = localStorage.getItem('mooving_user_name') || 'Usuario'
   const isAdmin = userRole === 'admin'
-  
-  const [currentView, setCurrentView] = useState<'dashboard' | 'mytime' | 'documentation' | 'admin' | 'approvals'>(isAdmin ? 'dashboard' : 'mytime')
+  const isCoordinator = userRole === 'coordinator'
+
+  const [currentView, setCurrentView] = useState<'dashboard' | 'mytime' | 'documentation' | 'admin' | 'approvals' | 'cartera'>(isAdmin ? 'dashboard' : isCoordinator ? 'cartera' : 'mytime')
 
   const handleLogout = () => {
     localStorage.removeItem('mooving_auth')
@@ -46,10 +48,11 @@ export function App() {
   return (
     <div className="App flex h-screen bg-slate-50 overflow-hidden">
       {/* Left Sidebar Navigation */}
-      <Sidebar 
+      <Sidebar
         currentView={currentView}
         setCurrentView={setCurrentView as any}
         isAdmin={isAdmin}
+        isCoordinator={isCoordinator}
         userName={userName}
         userRole={userRole}
         onLogout={handleLogout}
@@ -61,7 +64,8 @@ export function App() {
         {currentView === 'mytime' && <MyTime />}
         {currentView === 'documentation' && <Documentation />}
         {currentView === 'admin' && isAdmin && <AdminPanel />}
-        {currentView === 'approvals' && isAdmin && <ApprovalQueue />}
+        {currentView === 'approvals' && (isAdmin || isCoordinator) && <ApprovalQueue />}
+        {currentView === 'cartera' && isCoordinator && <CoordinatorView />}
       </div>
 
       {/* Senda Chat Widget Integration */}

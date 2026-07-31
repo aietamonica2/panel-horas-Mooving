@@ -6,25 +6,28 @@ import {
   LogOut,
   UserCircle,
   Settings,
-  ClipboardCheck
+  ClipboardCheck,
+  Briefcase
 } from 'lucide-react';
 
 interface SidebarProps {
   currentView: string;
-  setCurrentView: (view: 'dashboard' | 'mytime' | 'documentation' | 'admin' | 'approvals') => void;
+  setCurrentView: (view: 'dashboard' | 'mytime' | 'documentation' | 'admin' | 'approvals' | 'cartera') => void;
   isAdmin: boolean;
+  isCoordinator: boolean;
   userName: string;
   userRole: string;
   onLogout: () => void;
 }
 
-export const Sidebar: React.FC<SidebarProps> = ({ 
-  currentView, 
-  setCurrentView, 
-  isAdmin, 
-  userName, 
+export const Sidebar: React.FC<SidebarProps> = ({
+  currentView,
+  setCurrentView,
+  isAdmin,
+  isCoordinator,
+  userName,
   userRole,
-  onLogout 
+  onLogout
 }) => {
   return (
     <div className="w-64 bg-slate-900 text-slate-300 flex flex-col h-screen border-r border-slate-800 shrink-0">
@@ -68,18 +71,37 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <Settings className="w-5 h-5" />
               <span>Administración</span>
             </button>
-            <button
-              onClick={() => setCurrentView('approvals')}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
-                currentView === 'approvals'
-                  ? 'bg-indigo-600/10 text-indigo-400 font-medium'
-                  : 'hover:bg-slate-800 hover:text-white'
-              }`}
-            >
-              <ClipboardCheck className="w-5 h-5" />
-              <span>Aprobaciones</span>
-            </button>
           </>
+        )}
+
+        {/* Mi Cartera: vista principal del coordinador (su equipo/clientes) */}
+        {isCoordinator && (
+          <button
+            onClick={() => setCurrentView('cartera')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+              currentView === 'cartera'
+                ? 'bg-indigo-600/10 text-indigo-400 font-medium'
+                : 'hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <Briefcase className="w-5 h-5" />
+            <span>Mi Cartera</span>
+          </button>
+        )}
+
+        {/* Aprobaciones: visible para admin y coordinador (el backend acota la cola por rol) */}
+        {(isAdmin || isCoordinator) && (
+          <button
+            onClick={() => setCurrentView('approvals')}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all ${
+              currentView === 'approvals'
+                ? 'bg-indigo-600/10 text-indigo-400 font-medium'
+                : 'hover:bg-slate-800 hover:text-white'
+            }`}
+          >
+            <ClipboardCheck className="w-5 h-5" />
+            <span>Aprobaciones</span>
+          </button>
         )}
 
         <button

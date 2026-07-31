@@ -22,15 +22,21 @@ export const cors = async (c: HonoContext, next: Next) => {
     'https://panel-horas-web.pages.dev',
     'https://panel-horas-mooving.pages.dev'
   ]
+  // Also allow Cloudflare Pages preview subdomains of OUR projects only
+  // (e.g. https://5b826dcd.panel-horas-mooving.pages.dev). Still restricted to
+  // these two project names — no wildcard for arbitrary origins.
+  const allowedOriginPattern =
+    /^https:\/\/([a-z0-9-]+\.)?(panel-horas-mooving|panel-horas-web)\.pages\.dev$/
 
   const isDevelopment = c.env?.ENVIRONMENT === 'development'
 
   // Reflect the request Origin ONLY when it is explicitly allowed: a known
-  // production origin (always), or any http://localhost:* origin but ONLY in
-  // development. Unknown origins get NO Access-Control-Allow-Origin header —
-  // there is no permissive `allowedOrigins[0]` fallback.
+  // production origin or a preview subdomain of our Pages projects (always), or
+  // any http://localhost:* origin but ONLY in development. Unknown origins get NO
+  // Access-Control-Allow-Origin header — there is no permissive fallback.
   if (
     allowedOrigins.includes(origin) ||
+    allowedOriginPattern.test(origin) ||
     (isDevelopment && origin.startsWith('http://localhost:'))
   ) {
     c.header('Access-Control-Allow-Origin', origin)
