@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.5.0] - 2026-07-31
+
+### Fixed
+- **Compare employees:** normalized id/name matching (was returning 0 data) + a period selector.
+- **Team capacity:** utilization now uses the active-employee master (12) as denominator, not only those who logged (10); new "with-data / active" adoption card.
+- **Executive metrics:** were empty (all `amount_usd`=0). Now use a per-employee hourly rate (`hourly_rate_usd`, default 45, admin-only editable) → `get_executive_metrics` computes estimated billing; proxy % always visible.
+- **Inactivity alerts:** real send via Resend + `get_inactivity_preview` + weekday auto-send cron (INACTIVITY_DAYS).
+
+### Changed
+- "Bolsa de Horas" → **"Distribución de Horas Internas"** with internal-task subcategories (training, absences, meetings, HR, commercial, research, ops…).
+
+### Notes
+- Migration 0019 adds `employees.hourly_rate_usd` (default 45). Real email sending requires `RESEND_API_KEY` + verified sender. Full suite green (116 tests); build OK.
+
 ## [2.4.0] - 2026-07-31
 
 ### Added
