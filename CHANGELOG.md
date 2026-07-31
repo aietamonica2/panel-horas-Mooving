@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.4] - 2026-07-31
+
+### Security
+- **Multi-tenant isolation (P0):** `company_id` enforced on all MCP `update_*`/`delete_*` tools (clients, projects, employees, categories) — prevents cross-tenant IDOR.
+- **Auth fail-closed (SEC-02):** tokenless requests only get the dev context when `ENVIRONMENT` is explicitly `development`; production/unknown env returns 401. `/api/health` is now public. Deployed `ENVIRONMENT=production`.
+- **RBAC real (SEC-07):** `/records` POST/PUT/DELETE use the JWT role/user instead of a hardcoded `admin` mock; DELETE validates ownership.
+- **CORS hardening (SEC-10):** strict allowlist; localhost reflected only in development; removed permissive fallback.
+- **Secret hygiene (SEC-06):** removed hardcoded secrets from utility scripts (now read from env). NOTE: keys still must be rotated and purged from history.
+
+### Fixed
+- **MyTime crash (P0):** `MyTime.tsx` referenced an undeclared `myRecords` that crashed the employee view; personal views now filter by the logged-in user.
+- **MCP data integrity:** `link_external_user` uses exact matching (no `LIKE %..%` mass reassignment) with idempotent alias dedup; `get_unlinked_external_users` JOIN is tenant-scoped.
+- **Executive KPI:** "Concentración de Riesgo" and top-employee/client charts sort before truncating (true top-N).
+- **Types:** `TimeRecord` declares `is_billable`/`source`.
+
+### Notes
+- Login/password hashing intentionally untouched (centralized user-management app).
+- Full test suite green (52 tests); production build OK.
+
 ## [2.2.3] - 2026-07-30
 
 ### Fixed
