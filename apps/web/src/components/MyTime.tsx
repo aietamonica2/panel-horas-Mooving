@@ -113,9 +113,22 @@ export const MyTime: React.FC = () => {
     loadUserCapacity();
   }, []);
 
-  // --- Analíticas Computadas ---
+  // --- Identidad del usuario logueado: "Mis Horas" debe mostrar SOLO sus registros ---
+  // (fix P0: `myRecords` se usaba sin declararse -> crasheaba la vista del empleado)
+  const currentUserEmail = (typeof localStorage !== 'undefined' && localStorage.getItem('mooving_user_email')) || '';
+  const currentUserName = currentUserEmail.split('@')[0];
+  const currentUserId = 'emp_' + currentUserName.split('.').join('_');
+  const myRecords = currentUserName
+    ? records.filter(r =>
+        (r.employee_name && String(r.employee_name).toLowerCase() === currentUserName.toLowerCase()) ||
+        (r.employee_id && (r.employee_id === currentUserId ||
+          String(r.employee_id).toLowerCase() === currentUserName.toLowerCase().replace(/\./g, '-')))
+      )
+    : records;
+
+  // --- Analíticas Computadas (sobre los registros del propio usuario) ---
   const currentMonth = new Date().toISOString().slice(0, 7); // YYYY-MM
-  const thisMonthRecords = records.filter(r => r.date.startsWith(currentMonth));
+  const thisMonthRecords = myRecords.filter(r => r.date.startsWith(currentMonth));
   
   const totalHoursThisMonth = thisMonthRecords.reduce((acc, r) => acc + (r.duration_decimal || 0), 0);
   
@@ -252,7 +265,7 @@ export const MyTime: React.FC = () => {
               </h2>
               {loadingRecords ? (
                 <div className="text-center py-8 text-gray-500">Cargando registros...</div>
-              ) : records.length === 0 ? (
+              ) : myRecords.length === 0 ? (
                 <div className="text-center py-8 text-gray-500">No has registrado horas todavía.</div>
               ) : (
                 <div className="overflow-x-auto">
@@ -267,7 +280,7 @@ export const MyTime: React.FC = () => {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100 text-sm">
-                      {records.slice(0, 10).map((r, i) => (
+                      {myRecords.slice(0, 10).map((r, i) => (
                         <tr key={i} className="hover:bg-gray-50">
                           <td className="py-3 px-4 font-medium text-gray-900">{r.date}</td>
                           <td className="py-3 px-4">{r.client_name}</td>

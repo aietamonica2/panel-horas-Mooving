@@ -1,9 +1,10 @@
+// Requiere variables de entorno (ver .dev.vars). NO hardcodear secretos.
 const API_URL = "https://sendaqa.telar.ai/api";
 
 async function login() {
   const payload = {
     email: "monica@mooving.ai",
-    password: "Mooving321"
+    password: process.env.SENDA_ADMIN_PASSWORD || ""
   };
 
   const res = await fetch(`${API_URL}/v1/auth/login`, {

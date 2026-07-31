@@ -23,8 +23,12 @@ declare global {
 export const auth = async (c: HonoContext, next: Next) => {
   const token = c.req.header('Authorization')?.replace('Bearer ', '')
   
-  // For development, allow requests without token
-  if (!token && (!c.env || c.env.ENVIRONMENT === 'development')) {
+  // Dev-only convenience: allow tokenless requests ONLY when ENVIRONMENT is
+  // EXPLICITLY 'development'. Fail closed otherwise — a missing/unknown env must
+  // NEVER grant admin by default (SEC-02). In production, tokenless requests fall
+  // through to the 401 below. For local dev without a token, set
+  // ENVIRONMENT=development in apps/api/.dev.vars.
+  if (!token && c.env?.ENVIRONMENT === 'development') {
     c.set('auth', {
       company_id: 'mooving-default',
       user_id: 'default-user',
@@ -34,8 +38,8 @@ export const auth = async (c: HonoContext, next: Next) => {
     return
   }
   
-  // Allow auth/login to bypass JWT check
-  if (c.req.path === '/api/auth/login') {
+  // Public endpoints (no auth required): login and health check
+  if (c.req.path === '/api/auth/login' || c.req.path === '/api/health') {
     await next()
     return
   }

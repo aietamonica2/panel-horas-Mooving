@@ -67,9 +67,10 @@ dataRouter.post(
       }
       return c.json(response)
     } catch (error) {
+      console.error(error)
       return c.json({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: 'Error interno',
         timestamp: new Date().toISOString(),
         version: 'v1.0.0',
       }, 400)
@@ -84,9 +85,13 @@ dataRouter.post(
   async (c: HonoContext): Promise<Response> => {
     try {
       const data = c.req.valid('json')
-      const company_id = c.get('auth')?.company_id || 'mooving-default'
-      const currentUserRole = 'admin' // MOCK: Esto vendría del JWT en un entorno real
-      const currentUserId = 'mock-user-123'
+      const authCtx = c.get('auth')
+      if (!authCtx) {
+        return c.json({ success: false, error: 'No autenticado' }, 401)
+      }
+      const company_id = authCtx?.company_id || 'mooving-default'
+      const currentUserRole = authCtx?.role
+      const currentUserId = authCtx?.user_id
       
       // Validación RBAC: Solo administradores pueden cargar horas para otros empleados
       if (currentUserRole !== 'admin' && data.employee_id !== currentUserId) {
@@ -112,7 +117,8 @@ dataRouter.post(
         version: 'v1.0.0'
       })
     } catch (error) {
-      return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+      console.error(error)
+      return c.json({ success: false, error: 'Error interno' }, 500)
     }
   }
 )
@@ -152,9 +158,10 @@ dataRouter.get('/records', async (c: HonoContext): Promise<Response> => {
     }
     return c.json(response)
   } catch (error) {
+    console.error(error)
     return c.json({
       success: false,
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: 'Error interno',
       timestamp: new Date().toISOString(),
       version: 'v1.0.0',
     }, 500)
@@ -169,9 +176,13 @@ dataRouter.put(
     try {
       const data = c.req.valid('json')
       const id = c.req.param('id')
-      const company_id = c.get('auth')?.company_id || 'mooving-default'
-      const currentUserRole = 'admin' // MOCK: Esto vendría del JWT
-      const currentUserId = 'mock-user-123'
+      const authCtx = c.get('auth')
+      if (!authCtx) {
+        return c.json({ success: false, error: 'No autenticado' }, 401)
+      }
+      const company_id = authCtx?.company_id || 'mooving-default'
+      const currentUserRole = authCtx?.role
+      const currentUserId = authCtx?.user_id
       
       if (currentUserRole !== 'admin' && data.employee_id !== currentUserId) {
         return c.json({ success: false, error: 'No tienes permisos para editar' }, 403)
@@ -190,7 +201,8 @@ dataRouter.put(
 
       return c.json({ success: true, timestamp: new Date().toISOString(), version: 'v1.0.0' })
     } catch (error) {
-      return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+      console.error(error)
+      return c.json({ success: false, error: 'Error interno' }, 500)
     }
   }
 )
@@ -198,12 +210,31 @@ dataRouter.put(
 // DELETE /api/data/records/:id
 dataRouter.delete('/records/:id', async (c: HonoContext): Promise<Response> => {
   try {
+    const authCtx = c.get('auth')
+    if (!authCtx) {
+      return c.json({ success: false, error: 'No autenticado' }, 401)
+    }
+    const currentUserRole = authCtx?.role
+    const currentUserId = authCtx?.user_id
     const id = c.req.param('id')
-    const company_id = c.get('auth')?.company_id || 'mooving-default'
+    const company_id = authCtx?.company_id || 'mooving-default'
+
+    // Validación RBAC: un no-admin solo puede borrar registros propios
+    if (currentUserRole !== 'admin') {
+      const existing = await c.env.DB
+        .prepare('SELECT employee_id FROM time_records WHERE id = ? AND company_id = ?')
+        .bind(id, company_id)
+        .first<{ employee_id: string }>()
+      if (existing && existing.employee_id !== currentUserId) {
+        return c.json({ success: false, error: 'No tienes permisos para borrar este registro' }, 403)
+      }
+    }
+
     await c.env.DB.prepare('DELETE FROM time_records WHERE id = ? AND company_id = ?').bind(id, company_id).run()
     return c.json({ success: true, timestamp: new Date().toISOString(), version: 'v1.0.0' })
   } catch (error) {
-    return c.json({ success: false, error: error instanceof Error ? error.message : 'Unknown error' }, 500)
+    console.error(error)
+    return c.json({ success: false, error: 'Error interno' }, 500)
   }
 })
 
