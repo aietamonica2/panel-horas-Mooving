@@ -257,8 +257,11 @@ export const TOOL_REGISTRY = {
     const role = auth?.role || '';
     const canSeeRate = role === 'admin' || role === 'service';
     const employees = (results || []).map((e: any) => {
-      if (canSeeRate) return e;
-      const { hourly_rate_usd, ...rest } = e;
+      // password_hash NUNCA debe salir del servidor por esta tool (fuga P0).
+      const { password_hash, ...safe } = e;
+      if (canSeeRate) return safe;
+      // hourly_rate_usd es sensible: sólo admin/servicio lo ve.
+      const { hourly_rate_usd, ...rest } = safe;
       return rest;
     });
 

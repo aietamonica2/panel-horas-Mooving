@@ -70,8 +70,17 @@ afterEach(() => {
 
 describe('get_employees — valor hora sólo para admin/C-level', () => {
   const employees = [
-    { id: 'emp_1', name: 'Ana', email: 'ana@moovingtech.com', is_active: 1, hourly_rate_usd: 50 },
+    { id: 'emp_1', name: 'Ana', email: 'ana@moovingtech.com', is_active: 1, hourly_rate_usd: 50, password_hash: 'secret-hash' },
   ]
+
+  it('NUNCA devuelve password_hash (ni admin ni empleado) — fuga P0', async () => {
+    const admin = makeCtx({ role: 'admin', employees })
+    const emp = makeCtx({ role: 'employee', employees })
+    const rAdmin = await (TOOL_REGISTRY as any).get_employees({}, admin.c)
+    const rEmp = await (TOOL_REGISTRY as any).get_employees({}, emp.c)
+    expect(rAdmin.employees[0]).not.toHaveProperty('password_hash')
+    expect(rEmp.employees[0]).not.toHaveProperty('password_hash')
+  })
 
   it('admin incluye hourly_rate_usd', async () => {
     const { c } = makeCtx({ role: 'admin', employees })
