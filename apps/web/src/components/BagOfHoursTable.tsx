@@ -8,7 +8,6 @@ import { TimeRecord } from '../types'
 
 interface BagOfHoursTableProps {
   records: TimeRecord[]
-  selectedMonth?: string
 }
 
 const MOOVING_COLORS = {
@@ -85,7 +84,7 @@ function summarizeInternalSubcategories(
     .map(cat => ({ cat, hours: hoursByCat.get(cat) || 0, count: countByCat.get(cat) || 0 }))
 }
 
-export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records, selectedMonth }) => {
+export const BagOfHoursTable: React.FC<BagOfHoursTableProps> = ({ records }) => {
   // Filter for internal tasks, meetings, and training (overhead)
   const bagRecords = records.filter(r => r.work_type === 'internal' || r.work_type === 'meeting' || r.work_type === 'training')
 

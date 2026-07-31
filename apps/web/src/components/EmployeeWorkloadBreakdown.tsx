@@ -68,6 +68,13 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
     records.map(r => r.employee_name)
   )).sort()
 
+  // B8-FIX: el "Promedio/Empleado" de horas de proyecto debe dividirse solo
+  // entre quienes efectivamente registraron horas de proyecto. Incluir a los
+  // empleados con 0h de proyecto en el denominador distorsiona el promedio.
+  const projectEmployeeCount = new Set(
+    records.filter(r => r.work_type === 'project').map(r => r.employee_name)
+  ).size
+
   // Build breakdown for each employee
   const getEmployeeBreakdown = (empName: string) => {
     const empRecords = records.filter(r => r.employee_name === empName)
@@ -225,7 +232,7 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
         <div className="bg-green-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.success }}>
           <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Promedio/Empleado</div>
           <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.success }}>
-            {(records.filter(r => r.work_type === 'project').reduce((sum, r) => sum + r.duration_decimal, 0) / uniqueEmployees.length).toFixed(1)}h
+            {(records.filter(r => r.work_type === 'project').reduce((sum, r) => sum + r.duration_decimal, 0) / (projectEmployeeCount || 1)).toFixed(1)}h
           </div>
         </div>
 

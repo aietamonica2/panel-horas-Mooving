@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { TimeRecord } from '../types'
+import { formatMonth } from '../utils/formatMonth'
 
 interface InternalTasksTableProps {
   records: TimeRecord[]  // Pre-filtered by work_type='internal'
@@ -242,25 +243,3 @@ export const InternalTasksTable: React.FC<InternalTasksTableProps> = ({ records 
   )
 }
 
-/**
- * Format month from YYYY-MM to Spanish month name and year
- */
-function formatMonth(dateStr: string): string {
-  const [year, month] = dateStr.split('-')
-  const monthNames = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre',
-  ]
-  const monthName = monthNames[parseInt(month) - 1] || month
-  return `${monthName}`
-}

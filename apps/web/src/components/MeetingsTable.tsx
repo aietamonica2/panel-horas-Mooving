@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { TimeRecord } from '../types'
+import { formatMonth } from '../utils/formatMonth'
 
 interface MeetingsTableProps {
   records: TimeRecord[]  // Pre-filtered by work_type='meeting'
@@ -148,25 +149,3 @@ export const MeetingsTable: React.FC<MeetingsTableProps> = ({ records }) => {
   )
 }
 
-/**
- * Format month from YYYY-MM to Spanish month name and year
- */
-function formatMonth(dateStr: string): string {
-  const [year, month] = dateStr.split('-')
-  const monthNames = [
-    'Enero',
-    'Febrero',
-    'Marzo',
-    'Abril',
-    'Mayo',
-    'Junio',
-    'Julio',
-    'Agosto',
-    'Septiembre',
-    'Octubre',
-    'Noviembre',
-    'Diciembre',
-  ]
-  const monthName = monthNames[parseInt(month) - 1] || month
-  return `${monthName}`
-}
