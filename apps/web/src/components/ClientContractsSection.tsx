@@ -22,13 +22,43 @@ const MOOVING_COLORS = {
   border: '#e2e8f0',
 }
 
-export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ records }) => {
+// Composite key so contracted hours are tracked per (client, month). Without the
+// month in the key, several monthly rows for the same client would overwrite one
+// another in the lookup map.
+const contractKey = (clientId: string, month: string) => `${clientId}__${month}`
+
+export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ records, selectedMonth }) => {
+  // Map keyed by `${client_id}__${month}` -> contracted hours for that month
   const [contractsMap, setContractsMap] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(false)
   const [editingClient, setEditingClient] = useState<{ id: string; name: string; hours: number } | null>(null)
   const [inputHours, setInputHours] = useState<string>('')
   const [showOnlyConfigured, setShowOnlyConfigured] = useState<boolean>(true)
   const [isExpanded, setIsExpanded] = useState<boolean>(true)
+
+  // --- Month-aware working period -------------------------------------------
+  // The "bolsa de horas" (contracted_hours) is a MONTHLY quota, so consumption
+  // must be measured over a single month too. We resolve the working month as:
+  //   1) the explicit `selectedMonth` prop when provided (expected 'YYYY-MM'),
+  //   2) otherwise the most recent month present in the filtered records (i.e.
+  //      the month the user is effectively looking at within the range),
+  //   3) falling back to the current calendar month when there are no records.
+  // This keeps the contracted quota and the consumed hours anchored to the SAME
+  // month, instead of comparing a monthly bag against a multi-month consumption
+  // total (which previously inflated the execution %).
+  const workingMonth = React.useMemo(() => {
+    if (selectedMonth && /^\d{4}-\d{2}$/.test(selectedMonth)) {
+      return selectedMonth
+    }
+    const monthsInRange = records
+      .map(r => (r.date || '').slice(0, 7))
+      .filter(m => /^\d{4}-\d{2}$/.test(m))
+      .sort()
+    if (monthsInRange.length > 0) {
+      return monthsInRange[monthsInRange.length - 1]
+    }
+    return new Date().toISOString().slice(0, 7)
+  }, [selectedMonth, records])
 
   const fetchContracts = async () => {
     setLoading(true)
@@ -38,7 +68,11 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
       if (data.success && data.result?.contracts) {
         const map: Record<string, number> = {}
         data.result.contracts.forEach((c: any) => {
-          map[c.client_id] = Number(c.contracted_hours || 0)
+          // Month-aware: key by (client_id, month) so several monthly rows for
+          // the same client no longer overwrite one another.
+          if (c.client_id && c.month) {
+            map[contractKey(c.client_id, c.month)] = Number(c.contracted_hours || 0)
+          }
         })
         setContractsMap(map)
       }
@@ -58,7 +92,14 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
     const map = new Map<string, { id: string; name: string; consumed: number }>()
 
     records.forEach(r => {
-      if (r.client_id && r.work_type === 'project') {
+      // Only count project hours that belong to the working month, so the
+      // consumed total lines up with the monthly contracted bag (and does not
+      // aggregate the whole multi-month filtered range).
+      if (
+        r.client_id &&
+        r.work_type === 'project' &&
+        (r.date || '').slice(0, 7) === workingMonth
+      ) {
         const existing = map.get(r.client_id) || {
           id: r.client_id,
           name: r.client_name || r.client_id,
@@ -70,7 +111,7 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
     })
 
     return Array.from(map.values()).sort((a, b) => b.consumed - a.consumed)
-  }, [records])
+  }, [records, workingMonth])
 
   const handleSaveContract = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -80,15 +121,16 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
     if (isNaN(hours) || hours < 0) return
 
     try {
-      const currentMonth = new Date().toISOString().slice(0, 7)
+      // Persist and cache the contract under the SAME working month used to read
+      // it, so the saved bag and the displayed consumption stay in sync.
       const res = await api.callMcpTool('set_client_contract', {
         client_id: editingClient.id,
-        month: currentMonth,
+        month: workingMonth,
         contracted_hours: hours
       })
       const data = await res.json()
       if (data.success) {
-        setContractsMap(prev => ({ ...prev, [editingClient.id]: hours }))
+        setContractsMap(prev => ({ ...prev, [contractKey(editingClient.id, workingMonth)]: hours }))
         setEditingClient(null)
       }
     } catch (err) {
@@ -100,14 +142,14 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
     return null
   }
 
-  const configuredClientsCount = clientData.filter(c => (contractsMap[c.id] || 0) > 0).length
+  const configuredClientsCount = clientData.filter(c => (contractsMap[contractKey(c.id, workingMonth)] || 0) > 0).length
 
   const displayClients = showOnlyConfigured && configuredClientsCount > 0
-    ? clientData.filter(c => (contractsMap[c.id] || 0) > 0)
+    ? clientData.filter(c => (contractsMap[contractKey(c.id, workingMonth)] || 0) > 0)
     : clientData
 
   const highRiskClients = clientData.filter(c => {
-    const contracted = contractsMap[c.id] || 0
+    const contracted = contractsMap[contractKey(c.id, workingMonth)] || 0
     return contracted > 0 && (c.consumed / contracted) >= 0.8
   })
 
@@ -168,7 +210,8 @@ export const ClientContractsSection: React.FC<ClientContractsSectionProps> = ({ 
           </thead>
           <tbody className="divide-y divide-slate-100">
             {displayClients.map(client => {
-              const contracted = contractsMap[client.id] || 0
+              // Bag of the working month vs consumption of the same month.
+              const contracted = contractsMap[contractKey(client.id, workingMonth)] || 0
               const percentage = contracted > 0 ? (client.consumed / contracted) * 100 : 0
 
               let badgeBg = 'bg-slate-100 text-slate-600 border-slate-200'

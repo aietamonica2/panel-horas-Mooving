@@ -80,10 +80,10 @@ export const Dashboard: React.FC = () => {
   const filteredRecords = getFilteredRecords()
 
   // Senda AI action handler via MCP
-  const handleSendaAction = async (action: string) => {
+  const handleSendaAction = async (action: string, recipients?: string[]) => {
     let toolName = ''
     let params: any = {}
-    
+
     if (action === 'Sincronización Clockify') {
       toolName = 'sync_clockify_hours'
     } else if (action === 'Sincronización Zendesk Support') {
@@ -92,7 +92,9 @@ export const Dashboard: React.FC = () => {
       toolName = 'audit_timesheet'
     } else if (action === 'Envío de Alertas Inactividad') {
       toolName = 'send_inactivity_alerts'
-      params = { users: ['monica.aieta', 'federico.gomez'] }
+      // NUEVO-3: enviar los destinatarios REALES que reporta el banner
+      // (empleado puntual o lista completa de inactivos), no una lista fija.
+      params = recipients && recipients.length > 0 ? { recipients } : {}
     } else {
       return
     }
@@ -165,6 +167,18 @@ export const Dashboard: React.FC = () => {
   React.useEffect(() => {
     fetchRecords()
   }, [])
+
+  // NUEVO-11: Dark mode funcional con Tailwind darkMode:'class'.
+  // Togglea la clase `dark` en el root del documento para que las variantes
+  // `dark:` apliquen globalmente. Limpia al desmontar para no filtrar el modo
+  // oscuro a otras vistas (p.ej. el login).
+  React.useEffect(() => {
+    if (typeof document === 'undefined') return
+    document.documentElement.classList.toggle('dark', isDarkMode)
+    return () => {
+      document.documentElement.classList.remove('dark')
+    }
+  }, [isDarkMode])
 
   // Sync state filters to Zustand store (consolidated to prevent cascading re-renders)
   React.useEffect(() => {
@@ -253,7 +267,7 @@ export const Dashboard: React.FC = () => {
   ).sort((a, b) => b.value - a.value).slice(0, 6)
 
   return (
-    <div style={{ backgroundColor: isDarkMode ? '#0f172a' : MOOVING_COLORS.lightBg }} className={`min-h-screen relative transition-colors ${isDarkMode ? 'dark bg-slate-900 text-slate-100' : ''}`}>
+    <div className="min-h-screen relative transition-colors bg-slate-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100">
       {/* Toast Notification para Senda AI */}
       {aiMessage && (
         <div className="fixed top-6 right-6 z-50 bg-indigo-900 text-white px-6 py-4 rounded-lg shadow-2xl flex items-center gap-3 transition-all animate-fade-in-down border border-indigo-400">
@@ -262,7 +276,7 @@ export const Dashboard: React.FC = () => {
       )}
 
       {/* Header */}
-      <div style={{ backgroundColor: MOOVING_COLORS.primary }} className="text-white shadow-lg">
+      <div className="bg-[#1a5f7a] dark:bg-slate-800 text-white shadow-lg">
         <div className="max-w-7xl mx-auto px-6 py-8">
           <div className="flex items-center justify-between">
             <div>
@@ -272,13 +286,13 @@ export const Dashboard: React.FC = () => {
             <div className="flex items-center gap-3">
               <button
                 onClick={() => setIsCompareModalOpen(true)}
-                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-xs border border-white/20 transition flex items-center gap-1.5"
+                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-sm border border-white/20 transition flex items-center gap-1.5"
               >
                 <span>🔄</span> Comparar Empleados
               </button>
               <button
                 onClick={() => setIsDarkMode(!isDarkMode)}
-                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-xs border border-white/20 transition flex items-center gap-1.5"
+                className="px-3.5 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-xs font-semibold backdrop-blur-sm border border-white/20 transition flex items-center gap-1.5"
               >
                 <span>{isDarkMode ? '☀️ Modo Claro' : '🌙 Modo Oscuro'}</span>
               </button>
@@ -410,16 +424,16 @@ export const Dashboard: React.FC = () => {
         <InactivityAlertBanner
           records={filteredRecords}
           allEmployees={allEmployeesList}
-          onSendReminder={(name) => handleSendaAction('Envío de Alertas Inactividad')}
+          onSendReminder={(recipientIds) => handleSendaAction('Envío de Alertas Inactividad', recipientIds)}
         />
 
         {/* KPIs Section */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Hours */}
-          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 hover:shadow-lg transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Total Horas</p>
+                <p className="text-gray-500 dark:text-gray-300 text-sm font-medium">Total Horas</p>
                 <p className="text-4xl font-bold mt-2" style={{ color: MOOVING_COLORS.primary }}>
                   {totalHours.toFixed(1)}
                 </p>
@@ -430,10 +444,10 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Daily Average */}
-          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 hover:shadow-lg transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Promedio Diario</p>
+                <p className="text-gray-500 dark:text-gray-300 text-sm font-medium">Promedio Diario</p>
                 <p className="text-4xl font-bold mt-2" style={{ color: MOOVING_COLORS.secondary }}>
                   {avgHours}h
                 </p>
@@ -444,10 +458,10 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Employees */}
-          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 hover:shadow-lg transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Empleados</p>
+                <p className="text-gray-500 dark:text-gray-300 text-sm font-medium">Empleados</p>
                 <p className="text-4xl font-bold mt-2" style={{ color: MOOVING_COLORS.success }}>
                   {uniqueEmployees}
                 </p>
@@ -458,10 +472,10 @@ export const Dashboard: React.FC = () => {
           </div>
 
           {/* Clients */}
-          <div className="bg-white rounded-xl shadow-md p-6 hover:shadow-lg transition">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 hover:shadow-lg transition">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-gray-500 text-sm font-medium">Clientes</p>
+                <p className="text-gray-500 dark:text-gray-300 text-sm font-medium">Clientes</p>
                 <p className="text-4xl font-bold mt-2" style={{ color: MOOVING_COLORS.info }}>
                   {uniqueClients}
                 </p>
