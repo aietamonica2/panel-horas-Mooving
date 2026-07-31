@@ -18,11 +18,15 @@ import { TimeRecord } from '../types'
 
 type WorkType = TimeRecord['work_type']
 
-/** A mapped record. rate_usd / amount_usd are extra fields the backend ignores
- *  if it doesn't know them, so we keep them optional and off the base type. */
+/** A mapped record. rate_usd / amount_usd / start_time are extra fields the
+ *  backend ignores if it doesn't know them, so we keep them optional and off the
+ *  base type. */
 export interface TogglTimeRecord extends TimeRecord {
   rate_usd?: number
   amount_usd?: number
+  /** Start-of-entry clock time ("Hora inicio", e.g. "09:00"). Part of the DATA-04
+   *  natural key so two entries at different times aren't treated as duplicates. */
+  start_time?: string
 }
 
 export interface RejectedRow {
@@ -34,6 +38,14 @@ export interface RejectedRow {
 export interface MapResult {
   records: TogglTimeRecord[]
   rejected: RejectedRow[]
+  /** DATA-04 — number of exact-duplicate rows removed during import. */
+  duplicatesRemoved: number
+}
+
+/** DATA-04 — result of dedupeRecords: the deduped list plus how many were dropped. */
+export interface DedupeResult {
+  records: TogglTimeRecord[]
+  duplicatesRemoved: number
 }
 
 /**
@@ -218,6 +230,104 @@ export function deriveWorkType(proyecto: string, descripcion: string): WorkType 
 }
 
 /**
+ * DATA-03 — Client consolidation (Interno -> Mooving).
+ *
+ * In the business the clients "Interno" and "Mooving" are the SAME corporate
+ * client, so every entry logged under "Interno" must be consolidated into the
+ * canonical corporate client "Mooving" (client_id 'mooving'). Entries logged
+ * under a clearly-internal project ("Tareas Internas", "SENDA", "MKT") that
+ * lives under Interno roll up the same way.
+ *
+ * The mapping is configurable here: key = normalized (lowercase, accent-stripped)
+ * source client name, value = canonical { id, name }. Add aliases as the business
+ * grows without touching mapTogglRows.
+ */
+export const CLIENT_ALIASES: Record<string, { id: string; name: string }> = {
+  interno: { id: 'mooving', name: 'Mooving' },
+  mooving: { id: 'mooving', name: 'Mooving' },
+}
+
+/** Normalized project names that live under "Interno" and also roll up to Mooving. */
+const INTERNAL_PROJECT_ALIASES = ['tareas internas', 'senda', 'mkt']
+
+/**
+ * Resolve the canonical client for a row (DATA-03). Returns the consolidated
+ * { id, name } when an alias applies, or null when the raw client should be kept.
+ */
+export function consolidateClient(
+  cliente: string,
+  proyecto: string
+): { id: string; name: string } | null {
+  const c = normalize(cliente)
+  if (CLIENT_ALIASES[c]) return CLIENT_ALIASES[c]
+
+  // A blank client on a clearly-internal project also rolls up to Mooving, but we
+  // never reassign an explicit external client whose project merely sounds internal.
+  const p = normalize(proyecto)
+  const isInternalProject =
+    INTERNAL_PROJECT_ALIASES.includes(p) || p.includes('interna') || p.includes('interno')
+  if (isInternalProject && c === '') return CLIENT_ALIASES.interno
+
+  return null
+}
+
+/**
+ * DATA-05 — Normalize an employee display name.
+ *
+ * Toggl exports names inconsistently: some are proper "Nombre Apellido"
+ * ("Augusto Morelli"), others are the raw login handle ("monica.aieta" /
+ * "monica_aieta"). A handle (no spaces) is split on . or _ and each part is
+ * capitalized -> "Monica Aieta"; an already-proper name (contains a space) is
+ * returned untouched so accents and casing are preserved.
+ */
+export function normalizeEmployeeName(raw: string): string {
+  const s = (raw || '').trim()
+  if (!s) return ''
+  // Already a "Nombre Apellido" (has whitespace) -> keep as-is.
+  if (/\s/.test(s)) return s
+  const parts = s.split(/[._]+/).filter(Boolean)
+  if (parts.length === 0) return s
+  return parts.map((p) => p.charAt(0).toUpperCase() + p.slice(1).toLowerCase()).join(' ')
+}
+
+/**
+ * Natural key for DATA-04 dedup: identifies a single logged time entry by
+ * employee + date + start time (if present) + project + duration + description.
+ * Uses the stable derived ids/slugs and tolerant normalization for text.
+ */
+function naturalKey(r: TogglTimeRecord): string {
+  return [
+    r.employee_id || normalize(r.employee_name),
+    r.date,
+    r.start_time || '',
+    r.project_id || normalize(r.project_name),
+    r.duration_decimal,
+    normalize(r.description),
+  ].join('|')
+}
+
+/**
+ * DATA-04 — Remove exact-duplicate records by their natural key, keeping the
+ * first occurrence and dropping later exact repeats. Returns the deduped list
+ * plus how many rows were removed.
+ */
+export function dedupeRecords(records: TogglTimeRecord[]): DedupeResult {
+  const seen = new Set<string>()
+  const out: TogglTimeRecord[] = []
+  let duplicatesRemoved = 0
+  for (const r of records) {
+    const key = naturalKey(r)
+    if (seen.has(key)) {
+      duplicatesRemoved++
+      continue
+    }
+    seen.add(key)
+    out.push(r)
+  }
+  return { records: out, duplicatesRemoved }
+}
+
+/**
  * Map parsed Toggl/Clockify rows into TimeRecords, detecting columns by header
  * NAME (tolerant to accents/variants) rather than fixed position, and validating
  * each row. Rows missing a valid duration or a valid date are pushed to `rejected`
@@ -227,7 +337,7 @@ export function mapTogglRows(rows: string[][]): MapResult {
   const records: TogglTimeRecord[] = []
   const rejected: RejectedRow[] = []
 
-  if (!rows || rows.length === 0) return { records, rejected }
+  if (!rows || rows.length === 0) return { records, rejected, duplicatesRemoved: 0 }
 
   // Locate the header row: first row that carries a recognizable column title.
   let headerIdx = rows.findIndex((r) =>
@@ -258,6 +368,10 @@ export function mapTogglRows(rows: string[][]): MapResult {
       headers,
       (h) => (h.includes('fecha') && h.includes('inicio')) || (h.includes('start') && h.includes('date'))
     ),
+    horaInicio: findCol(
+      headers,
+      (h) => (h.includes('hora') && h.includes('inicio')) || (h.includes('start') && h.includes('time'))
+    ),
     // Only the decimal duration column carries the word "decimal", so that alone
     // uniquely distinguishes it from "Duración (h HH:MM:SS)".
     duracionDecimal: findCol(headers, (h) => h.includes('decimal')),
@@ -279,6 +393,7 @@ export function mapTogglRows(rows: string[][]): MapResult {
     const correo = cell(row, idx.correo)
     const facturableRaw = cell(row, idx.facturable)
     const fechaRaw = cell(row, idx.fechaInicio)
+    const horaRaw = cell(row, idx.horaInicio)
     const durRaw = cell(row, idx.duracionDecimal)
 
     // --- Validation: never fabricate a duration or a date ---
@@ -304,13 +419,18 @@ export function mapTogglRows(rows: string[][]): MapResult {
       minutes = 0
     }
 
+    // DATA-03: consolidate "Interno" (and internal projects under it) into the
+    // canonical corporate client "Mooving". null -> keep the raw client's slug.
+    const canonicalClient = consolidateClient(cliente, proyecto)
+
     const record: TogglTimeRecord = {
       id: '',
       tenant_id: '',
       employee_id: deriveEmployeeId(correo, usuario),
-      employee_name: usuario,
-      client_id: slug(cliente),
-      client_name: cliente,
+      // DATA-05: normalize "monica.aieta" -> "Monica Aieta"; keep proper names as-is.
+      employee_name: normalizeEmployeeName(usuario),
+      client_id: canonicalClient ? canonicalClient.id : slug(cliente),
+      client_name: canonicalClient ? canonicalClient.name : cliente,
       project_id: slug(proyecto),
       project_name: proyecto,
       duration_decimal: dur,
@@ -325,6 +445,9 @@ export function mapTogglRows(rows: string[][]): MapResult {
       source: 'toggl',
     }
 
+    // DATA-04: keep the start time when present so it participates in the dedup key.
+    if (horaRaw) record.start_time = horaRaw
+
     if (idx.tarifa >= 0) {
       const rate = parseNumber(cell(row, idx.tarifa))
       if (rate !== undefined) record.rate_usd = rate
@@ -337,5 +460,7 @@ export function mapTogglRows(rows: string[][]): MapResult {
     records.push(record)
   }
 
-  return { records, rejected }
+  // DATA-04: return the deduplicated records plus how many duplicates were removed.
+  const deduped = dedupeRecords(records)
+  return { records: deduped.records, rejected, duplicatesRemoved: deduped.duplicatesRemoved }
 }

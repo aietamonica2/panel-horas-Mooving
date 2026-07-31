@@ -19,12 +19,36 @@ const MOOVING_COLORS = {
   danger: '#ef4444',
 }
 
+// ── FUNC-02: detección de registros de AUSENCIA ────────────────────────────
+// Vacaciones y licencias se cargan como tareas internas (work_type 'internal')
+// y se identifican por una mención de ausencia en el proyecto, la descripción
+// o el cliente/equipo. TimeRecord no tiene un campo "equipo" dedicado, por lo
+// que usamos client_name como su equivalente. La comparación es insensible a
+// mayúsculas y acentos. Estos registros NO son trabajo real: se excluyen del
+// numerador de ocupación y se descuentan de la capacidad disponible.
+const ABSENCE_KEYWORDS = ['vacacion', 'licencia', 'ausencia', 'franco']
+
+const normalizeText = (value: string): string =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // quita acentos/diacríticos
+
+const isAbsenceRecord = (r: TimeRecord): boolean => {
+  if (r.work_type !== 'internal') return false
+  const haystack = normalizeText(
+    [r.project_name, r.description, r.client_name].filter(Boolean).join(' ')
+  )
+  return ABSENCE_KEYWORDS.some(kw => haystack.includes(kw))
+}
+
 export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ records, employeeCapacities = {} }) => {
   // Calculate metrics
   const calculateMetrics = () => {
     if (records.length === 0) {
       return {
-        totalHours: 0,
+        workedHours: 0,
+        absenceHours: 0,
         workdays: 0,
         avgHoursPerDay: 0,
         occupancyPercentage: 0,
@@ -32,6 +56,8 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
         teamUtilization: 0,
         employees: 0,
         totalAvailableHours: 0,
+        effectiveAvailableHours: 0,
+        freeHours: 0,
       }
     }
 
@@ -39,11 +65,19 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
     const uniqueDates = new Set(records.map(r => r.date))
     const uniqueEmployees = Array.from(new Set(records.map(r => r.employee_id)))
 
-    const totalHours = records.reduce((sum, r) => sum + r.duration_decimal, 0)
+    // FUNC-02: separar el trabajo real de las horas de ausencia. Las ausencias
+    // (vacaciones/licencias/francos) NO se cuentan como horas trabajadas.
+    const workedHours = records
+      .filter(r => !isAbsenceRecord(r))
+      .reduce((sum, r) => sum + r.duration_decimal, 0)
+    const absenceHours = records
+      .filter(r => isAbsenceRecord(r))
+      .reduce((sum, r) => sum + r.duration_decimal, 0)
+
     const workdays = uniqueDates.size
     const employeesCount = uniqueEmployees.length
 
-    // Dynamic available hours calculation based on each employee's expected daily hours
+    // Capacidad bruta esperada según las horas diarias de cada empleado.
     let totalAvailableHours = 0
     uniqueEmployees.forEach(empId => {
       const expectedDaily = employeeCapacities[empId] !== undefined ? employeeCapacities[empId] : 8
@@ -52,16 +86,28 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
 
     if (totalAvailableHours === 0) totalAvailableHours = workdays * employeesCount * 8 || 1
 
-    // Occupancy: hours booked / total available hours
-    const occupancyPercentage = (totalHours / totalAvailableHours) * 100
+    // FUNC-02: una persona de vacaciones/licencia no está ni "ocupada" ni
+    // "disponible", así que descontamos las horas de ausencia de la capacidad
+    // esperada. De este modo las ausencias salen del numerador y del
+    // denominador y no inflan la ocupación.
+    const effectiveAvailableHours = Math.max(0, totalAvailableHours - absenceHours)
+
+    // Ocupación: trabajo real / capacidad neta de ausencias (guarda /0).
+    const occupancyPercentage = effectiveAvailableHours > 0
+      ? (workedHours / effectiveAvailableHours) * 100
+      : 0
     const availabilityPercentage = Math.max(0, 100 - occupancyPercentage)
 
-    // Team utilization: % of team capacity utilized
-    const avgHoursPerDay = totalHours / (workdays || 1)
-    const teamUtilization = (totalHours / totalAvailableHours) * 100
+    // Horas libres reales: capacidad presente que todavía no se ocupó.
+    const freeHours = Math.max(0, effectiveAvailableHours - workedHours)
+
+    // Team utilization: % of team capacity utilized (== ocupación real).
+    const avgHoursPerDay = workedHours / (workdays || 1)
+    const teamUtilization = occupancyPercentage
 
     return {
-      totalHours,
+      workedHours,
+      absenceHours,
       workdays,
       avgHoursPerDay,
       occupancyPercentage,
@@ -69,6 +115,8 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
       teamUtilization,
       employees: employeesCount,
       totalAvailableHours,
+      effectiveAvailableHours,
+      freeHours,
     }
   }
 
@@ -124,7 +172,7 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
           unit="%"
           icon="📅"
           color={MOOVING_COLORS.success}
-          trend={`${(metrics.workdays * metrics.employees * 8 - metrics.totalHours).toFixed(1)}h libres`}
+          trend={`${metrics.freeHours.toFixed(1)}h libres`}
         />
 
         <MetricCard
@@ -137,12 +185,22 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
         />
 
         <MetricCard
-          label="Total de Horas"
-          value={metrics.totalHours.toFixed(1)}
+          label="Horas Trabajadas"
+          value={metrics.workedHours.toFixed(1)}
           unit="h"
           icon="⏱️"
           color={MOOVING_COLORS.info}
-          trend={`En ${metrics.workdays} días laborales`}
+          trend={`Trabajo real, excl. ausencias · ${metrics.workdays} días`}
+        />
+
+        {/* FUNC-02: ausencias mostradas por separado; excluidas de la ocupación */}
+        <MetricCard
+          label="Ausencias (Vac./Lic.)"
+          value={metrics.absenceHours.toFixed(1)}
+          unit="h"
+          icon="🌴"
+          color={MOOVING_COLORS.secondary}
+          trend="No cuentan como ocupación"
         />
 
         <MetricCard
@@ -156,7 +214,7 @@ export const AvailabilityMetrics: React.FC<AvailabilityMetricsProps> = ({ record
 
         <MetricCard
           label="Carga Máxima Permitida"
-          value={((metrics.workdays * metrics.employees * 8) - metrics.totalHours).toFixed(1)}
+          value={metrics.freeHours.toFixed(1)}
           unit="h"
           icon="💪"
           color={MOOVING_COLORS.success}

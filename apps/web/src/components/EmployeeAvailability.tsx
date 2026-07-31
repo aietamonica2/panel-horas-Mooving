@@ -18,6 +18,29 @@ const MOOVING_COLORS = {
   danger: '#ef4444',
 }
 
+// ── FUNC-02: detección de registros de AUSENCIA ────────────────────────────
+// Vacaciones y licencias se cargan como tareas internas (work_type 'internal')
+// y se identifican por una mención de ausencia en el proyecto, la descripción
+// o el cliente/equipo. TimeRecord no tiene un campo "equipo" dedicado, por lo
+// que usamos client_name como su equivalente. La comparación es insensible a
+// mayúsculas y acentos. Estos registros NO son trabajo real: se excluyen del
+// trabajo registrado y se descuentan de la capacidad esperada.
+const ABSENCE_KEYWORDS = ['vacacion', 'licencia', 'ausencia', 'franco']
+
+const normalizeText = (value: string): string =>
+  value
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // quita acentos/diacríticos
+
+const isAbsenceRecord = (r: TimeRecord): boolean => {
+  if (r.work_type !== 'internal') return false
+  const haystack = normalizeText(
+    [r.project_name, r.description, r.client_name].filter(Boolean).join(' ')
+  )
+  return ABSENCE_KEYWORDS.some(kw => haystack.includes(kw))
+}
+
 export const EmployeeAvailability: React.FC<EmployeeAvailabilityProps> = ({ records }) => {
   if (records.length === 0) {
     return (
@@ -57,23 +80,37 @@ export const EmployeeAvailability: React.FC<EmployeeAvailabilityProps> = ({ reco
 
   // Build availability matrix
   const buildMatrix = () => {
-    const matrix: { [emp: string]: { [month: string]: { registered: number; available: number; percentage: number } } } = {}
+    const matrix: { [emp: string]: { [month: string]: { worked: number; absence: number; available: number; percentage: number } } } = {}
 
     uniqueEmployees.forEach(emp => {
       matrix[emp] = {}
       uniqueMonths.forEach(month => {
         const businessDays = getBusinessDaysInMonth(month)
-        const expectedHours = businessDays * 8 // 8 hours per business day
+        const expectedHours = businessDays * 8 // capacidad bruta: 8h × días hábiles
 
-        const registeredHours = records
+        const monthRecords = records
           .filter(r => r.employee_name === emp && r.date.substring(0, 7) === month)
+
+        // FUNC-02: separar trabajo real de ausencias (vacaciones/licencias/francos).
+        // Las ausencias NO son horas trabajadas, así que no cuentan en la ocupación.
+        const workedHours = monthRecords
+          .filter(r => !isAbsenceRecord(r))
+          .reduce((sum, r) => sum + r.duration_decimal, 0)
+        const absenceHours = monthRecords
+          .filter(r => isAbsenceRecord(r))
           .reduce((sum, r) => sum + r.duration_decimal, 0)
 
-        const availableHours = Math.max(0, expectedHours - registeredHours)
-        const percentage = (registeredHours / expectedHours) * 100
+        // Descontamos las ausencias de la capacidad esperada: esos días la
+        // persona no está ni ocupada ni disponible. Así la ocupación refleja
+        // trabajo real sobre el tiempo en que efectivamente estuvo presente.
+        const effectiveExpected = Math.max(0, expectedHours - absenceHours)
+        const availableHours = Math.max(0, effectiveExpected - workedHours)
+        // Ocupación sobre capacidad presente (guarda división por cero).
+        const percentage = effectiveExpected > 0 ? (workedHours / effectiveExpected) * 100 : 0
 
         matrix[emp][month] = {
-          registered: registeredHours,
+          worked: workedHours,
+          absence: absenceHours,
           available: availableHours,
           percentage: Math.min(percentage, 100)
         }
@@ -108,7 +145,8 @@ export const EmployeeAvailability: React.FC<EmployeeAvailabilityProps> = ({ reco
         📅 Disponibilidad Mensual por Empleado
       </h2>
       <p className="text-gray-600 text-sm mb-6">
-        Cálculo: 8h/día × días hábiles del mes = horas esperadas. Tiempo libre = esperadas - registradas
+        Cálculo: 8h/día × días hábiles del mes = horas esperadas. Las ausencias (vacaciones/licencias)
+        se excluyen del trabajo y se descuentan de la capacidad. Tiempo libre = esperadas − ausencias − trabajadas
       </p>
 
       <div style={{ overflowX: 'auto' }}>
@@ -137,16 +175,22 @@ export const EmployeeAvailability: React.FC<EmployeeAvailabilityProps> = ({ reco
                   return (
                     <td key={m} className="px-3 py-3 text-center">
                       <div className="font-semibold" style={{ color }}>
-                        {data ? `${data.available}h` : '-'}
+                        {data ? `${data.available.toFixed(1)}h` : '-'}
                       </div>
                       <div className="text-xs text-gray-500">
                         {data ? `(${data.percentage.toFixed(0)}%)` : ''}
                       </div>
+                      {/* FUNC-02: ausencias mostradas aparte, excluidas de la ocupación */}
+                      {data && data.absence > 0 && (
+                        <div className="text-xs" style={{ color: MOOVING_COLORS.warning }}>
+                          🌴 {data.absence.toFixed(1)}h aus.
+                        </div>
+                      )}
                     </td>
                   )
                 })}
                 <td className="px-3 py-3 text-center font-bold" style={{ color: MOOVING_COLORS.success }}>
-                  {getTotalAvailable(emp)}h
+                  {getTotalAvailable(emp).toFixed(1)}h
                 </td>
               </tr>
             ))}
@@ -162,7 +206,8 @@ export const EmployeeAvailability: React.FC<EmployeeAvailabilityProps> = ({ reco
         <ul className="space-y-2 text-sm text-gray-700">
           <li><span style={{ color: MOOVING_COLORS.success }} className="font-semibold">Verde:</span> Empleado con disponibilidad (ocupación &lt; 80%)</li>
           <li><span style={{ color: MOOVING_COLORS.danger }} className="font-semibold">Rojo:</span> Empleado sin disponibilidad (ocupación ≥ 80%)</li>
-          <li>El porcentaje en paréntesis es el % de ocupación del mes</li>
+          <li>El porcentaje en paréntesis es el % de ocupación del mes (sobre trabajo real)</li>
+          <li><span style={{ color: MOOVING_COLORS.warning }} className="font-semibold">🌴 Ausencias:</span> vacaciones/licencias; no cuentan como trabajo ni como capacidad disponible</li>
           <li>Total Libre = suma de horas disponibles durante todo el período</li>
         </ul>
       </div>

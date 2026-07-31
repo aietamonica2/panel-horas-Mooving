@@ -65,7 +65,7 @@ export const EmployeeComparisonModal: React.FC<EmployeeComparisonModalProps> = (
   const stats2 = getEmpStats(empId2)
 
   return (
-    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in">
+    <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl overflow-hidden border border-slate-200">
         <div className="px-6 py-4 bg-slate-900 text-white flex justify-between items-center">
           <div className="flex items-center gap-2">
@@ -123,19 +123,19 @@ export const EmployeeComparisonModal: React.FC<EmployeeComparisonModalProps> = (
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-center text-xs">
-                  <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+                  <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
                     <span className="text-slate-400 font-medium block">Horas Totales</span>
                     <span className="text-xl font-bold text-indigo-700">{stats1.totalHours.toFixed(1)}h</span>
                   </div>
-                  <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+                  <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
                     <span className="text-slate-400 font-medium block">% Facturable</span>
                     <span className="text-xl font-bold text-emerald-600">{stats1.billableRate}%</span>
                   </div>
-                  <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+                  <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
                     <span className="text-slate-400 font-medium block">Promedio Diario</span>
                     <span className="text-lg font-bold text-slate-800">{stats1.avgDaily}h/día</span>
                   </div>
-                  <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-2xs">
+                  <div className="bg-white p-3 rounded-lg border border-indigo-100 shadow-sm">
                     <span className="text-slate-400 font-medium block">Cliente Principal</span>
                     <span className="text-xs font-bold text-slate-800 truncate block" title={stats1.topClient}>{stats1.topClient}</span>
                   </div>
@@ -166,19 +166,19 @@ export const EmployeeComparisonModal: React.FC<EmployeeComparisonModalProps> = (
                 </div>
 
                 <div className="grid grid-cols-2 gap-3 text-center text-xs">
-                  <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-2xs">
+                  <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-sm">
                     <span className="text-slate-400 font-medium block">Horas Totales</span>
                     <span className="text-xl font-bold text-purple-700">{stats2.totalHours.toFixed(1)}h</span>
                   </div>
-                  <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-2xs">
+                  <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-sm">
                     <span className="text-slate-400 font-medium block">% Facturable</span>
                     <span className="text-xl font-bold text-emerald-600">{stats2.billableRate}%</span>
                   </div>
-                  <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-2xs">
+                  <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-sm">
                     <span className="text-slate-400 font-medium block">Promedio Diario</span>
                     <span className="text-lg font-bold text-slate-800">{stats2.avgDaily}h/día</span>
                   </div>
-                  <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-2xs">
+                  <div className="bg-white p-3 rounded-lg border border-purple-100 shadow-sm">
                     <span className="text-slate-400 font-medium block">Cliente Principal</span>
                     <span className="text-xs font-bold text-slate-800 truncate block" title={stats2.topClient}>{stats2.topClient}</span>
                   </div>

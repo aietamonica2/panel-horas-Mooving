@@ -40,6 +40,13 @@ export interface TimeRecordPayload {
   date: string
   work_type: 'project' | 'internal' | 'meeting' | 'training' | 'other'
   description?: string
+  // DATA-06: optional billing / status / provenance fields. All optional so
+  // existing callers and CSV rows that omit them keep working unchanged.
+  is_billable?: boolean | number
+  rate_usd?: number
+  amount_usd?: number
+  status?: string
+  source?: string
 }
 
 export interface ApiResponse<T = any> {
