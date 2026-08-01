@@ -1,10 +1,11 @@
 /**
  * Filter Panel Component
- * Provides month, client, employee, and project filtering controls with nested/reactive selections
+ * Provides month, client, employee, project and source filtering controls with nested/reactive selections
  */
 
 import React, { useMemo } from 'react'
 import { TimeRecord } from '../types'
+import { getRecordSource } from '../stores/dataStore'
 import { MultiSelectDropdown } from './MultiSelectDropdown'
 
 interface FilterPanelProps {
@@ -14,6 +15,7 @@ interface FilterPanelProps {
   selectedClients: string[]
   selectedProjects: string[]
   selectedCategories: string[]
+  selectedSources: string[]
   startDate?: string
   endDate?: string
   onMonthsChange: (months: string[]) => void
@@ -21,6 +23,7 @@ interface FilterPanelProps {
   onClientsChange: (clients: string[]) => void
   onProjectsChange: (projects: string[]) => void
   onCategoriesChange: (categories: string[]) => void
+  onSourcesChange: (sources: string[]) => void
   onStartDateChange?: (date: string) => void
   onEndDateChange?: (date: string) => void
   onReset: () => void
@@ -41,6 +44,20 @@ const MONTHS_ES = {
   '12': 'Diciembre',
 }
 
+// Etiquetas amigables para las fuentes conocidas de time_records.
+// El valor filtrado sigue siendo el raw `source`; cualquier fuente no listada
+// se muestra capitalizada.
+const SOURCE_LABELS_ES: Record<string, string> = {
+  clockify: 'Clockify',
+  zendesk: 'Zendesk',
+  manual: 'Manual',
+  csv: 'CSV',
+  senda_ai: 'Senda AI (IA)',
+}
+
+const getSourceLabel = (source: string): string =>
+  SOURCE_LABELS_ES[source] || (source ? source.charAt(0).toUpperCase() + source.slice(1) : 'Manual')
+
 export const FilterPanel: React.FC<FilterPanelProps> = ({
   records,
   selectedMonths,
@@ -48,6 +65,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   selectedClients,
   selectedProjects,
   selectedCategories,
+  selectedSources,
   startDate = '',
   endDate = '',
   onMonthsChange,
@@ -55,6 +73,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   onClientsChange,
   onProjectsChange,
   onCategoriesChange,
+  onSourcesChange,
   onStartDateChange,
   onEndDateChange,
   onReset,
@@ -102,7 +121,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
 
   // Reactive selection logic for nested selections:
   
-  // 1. Available Months: filtered by selected employees, selected clients, and selected projects
+  // 1. Available Months: filtered by selected employees, selected clients, selected projects and selected sources
   const availableMonthsOptions = useMemo(() => {
     let filtered = records
     if (selectedEmployees.length > 0) {
@@ -114,6 +133,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     if (selectedProjects.length > 0) {
       filtered = filtered.filter(r => selectedProjects.includes(r.project_id))
     }
+    if (selectedSources.length > 0) {
+      filtered = filtered.filter(r => selectedSources.includes(getRecordSource(r)))
+    }
 
     const uniqueMonths = Array.from(new Set(filtered.map(r => r.date.substring(0, 7)))).sort()
     return uniqueMonths.map(ym => {
@@ -124,9 +146,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         name: `${monthName} ${year}`
       }
     })
-  }, [records, selectedEmployees, selectedClients, selectedProjects])
+  }, [records, selectedEmployees, selectedClients, selectedProjects, selectedSources])
 
-  // 2. Available Clients: filtered by selected months, selected employees, and selected projects
+  // 2. Available Clients: filtered by selected months, selected employees, selected projects and selected sources
   const availableClientsOptions = useMemo(() => {
     let filtered = records
     if (selectedMonths.length > 0) {
@@ -138,6 +160,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     if (selectedProjects.length > 0) {
       filtered = filtered.filter(r => selectedProjects.includes(r.project_id))
     }
+    if (selectedSources.length > 0) {
+      filtered = filtered.filter(r => selectedSources.includes(getRecordSource(r)))
+    }
 
     const clientMap = new Map<string, string>()
     filtered.forEach(r => {
@@ -148,9 +173,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     return Array.from(clientMap.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [records, selectedMonths, selectedEmployees, selectedProjects])
+  }, [records, selectedMonths, selectedEmployees, selectedProjects, selectedSources])
 
-  // 3. Available Employees: filtered by selected months, selected clients, and selected projects
+  // 3. Available Employees: filtered by selected months, selected clients, selected projects and selected sources
   const availableEmployeesOptions = useMemo(() => {
     let filtered = records
     if (selectedMonths.length > 0) {
@@ -162,6 +187,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     if (selectedProjects.length > 0) {
       filtered = filtered.filter(r => selectedProjects.includes(r.project_id))
     }
+    if (selectedSources.length > 0) {
+      filtered = filtered.filter(r => selectedSources.includes(getRecordSource(r)))
+    }
 
     const employeeMap = new Map<string, string>()
     filtered.forEach(r => {
@@ -172,9 +200,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     return Array.from(employeeMap.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [records, selectedMonths, selectedClients, selectedProjects])
+  }, [records, selectedMonths, selectedClients, selectedProjects, selectedSources])
 
-  // 4. Available Projects: filtered by selected months, selected employees, and selected clients
+  // 4. Available Projects: filtered by selected months, selected employees, selected clients and selected sources
   const availableProjectsOptions = useMemo(() => {
     let filtered = records
     if (selectedMonths.length > 0) {
@@ -186,6 +214,9 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     if (selectedClients.length > 0) {
       filtered = filtered.filter(r => selectedClients.includes(r.client_id))
     }
+    if (selectedSources.length > 0) {
+      filtered = filtered.filter(r => selectedSources.includes(getRecordSource(r)))
+    }
 
     const projectMap = new Map<string, string>()
     filtered.forEach(r => {
@@ -196,7 +227,30 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     return Array.from(projectMap.entries())
       .map(([id, name]) => ({ id, name }))
       .sort((a, b) => a.name.localeCompare(b.name))
-  }, [records, selectedMonths, selectedEmployees, selectedClients])
+  }, [records, selectedMonths, selectedEmployees, selectedClients, selectedSources])
+
+  // 5. Available Sources: filtered by selected months, selected employees, selected clients and selected projects
+  // (cross-filtering coherente: se filtra por las demás dimensiones, nunca por sí misma)
+  const availableSourcesOptions = useMemo(() => {
+    let filtered = records
+    if (selectedMonths.length > 0) {
+      filtered = filtered.filter(r => selectedMonths.includes(r.date.substring(0, 7)) || selectedMonths.includes(r.date.substring(5, 7)))
+    }
+    if (selectedEmployees.length > 0) {
+      filtered = filtered.filter(r => selectedEmployees.includes(r.employee_id))
+    }
+    if (selectedClients.length > 0) {
+      filtered = filtered.filter(r => selectedClients.includes(r.client_id))
+    }
+    if (selectedProjects.length > 0) {
+      filtered = filtered.filter(r => selectedProjects.includes(r.project_id))
+    }
+
+    const uniqueSources = Array.from(new Set(filtered.map(r => getRecordSource(r))))
+    return uniqueSources
+      .map(source => ({ id: source, name: getSourceLabel(source) }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }, [records, selectedMonths, selectedEmployees, selectedClients, selectedProjects])
 
   // Unique categories helper (always extracted from full records)
   const categoriesList = useMemo(() => {
@@ -306,6 +360,15 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           showSearch
         />
 
+        {/* Source Filter */}
+        <MultiSelectDropdown
+          label="🔌 Fuente"
+          options={availableSourcesOptions}
+          selectedValues={selectedSources}
+          onChange={onSourcesChange}
+          placeholder="Todas las fuentes"
+        />
+
         {/* Category Filter */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2 font-semibold">
@@ -335,7 +398,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
       </div>
 
       {/* Reset Controls footer */}
-      {(selectedMonths.length > 0 || selectedEmployees.length > 0 || selectedClients.length > 0 || selectedProjects.length > 0) && (
+      {(selectedMonths.length > 0 || selectedEmployees.length > 0 || selectedClients.length > 0 || selectedProjects.length > 0 || selectedSources.length > 0) && (
         <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
           <button
             type="button"

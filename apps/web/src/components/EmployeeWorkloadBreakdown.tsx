@@ -1,6 +1,7 @@
 /**
  * Employee Workload Breakdown Component
- * Shows how each employee's hours are distributed across clients/projects
+ * Shows how each employee's hours are distributed across clients/projects,
+ * plus the overhead share (non-project hours) per employee and for the team
  */
 
 import React from 'react'
@@ -44,6 +45,13 @@ const countWeekdays = (startISO: string, endISO: string): number => {
   return count
 }
 
+/**
+ * A6: un registro cuenta como "overhead" cuando no es trabajo de proyecto:
+ * tareas internas, reuniones o capacitación.
+ */
+const isOverheadRecord = (r: TimeRecord): boolean =>
+  r.work_type === 'internal' || r.work_type === 'meeting' || r.work_type === 'training'
+
 export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps> = ({ records, employeeCapacities = {} }) => {
   if (records.length === 0) {
     return (
@@ -74,6 +82,12 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
   const projectEmployeeCount = new Set(
     records.filter(r => r.work_type === 'project').map(r => r.employee_name)
   ).size
+
+  // A6: overhead agregado del subconjunto visible = horas no-proyecto
+  // (internal + meeting + training) / total de horas registradas.
+  const teamTotalHours = records.reduce((sum, r) => sum + r.duration_decimal, 0)
+  const teamOverheadHours = records.filter(isOverheadRecord).reduce((sum, r) => sum + r.duration_decimal, 0)
+  const teamOverheadRate = teamTotalHours > 0 ? (teamOverheadHours / teamTotalHours) * 100 : 0
 
   // Build breakdown for each employee
   const getEmployeeBreakdown = (empName: string) => {
@@ -107,6 +121,22 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
       statusLabel = 'Moderado (70-89%)'
     }
 
+    // A6: % de overhead del empleado = horas no-proyecto (internas + reuniones
+    // + capacitación) / total de horas registradas. Sin horas → null (sin chip).
+    const totalOverhead = empRecords.filter(isOverheadRecord).reduce((sum, r) => sum + r.duration_decimal, 0)
+    const overheadRate = totalLoggedAll > 0 ? (totalOverhead / totalLoggedAll) * 100 : null
+
+    let overheadColor = 'bg-emerald-100 text-emerald-800 border-emerald-300'
+    let overheadLabel = overheadRate === null ? '' : `Overhead ${overheadRate.toFixed(0)}%`
+    let overheadTitle = 'Horas no-proyecto (internas + reuniones + capacitación) sobre el total registrado'
+    if (overheadRate !== null && overheadRate > 20) {
+      overheadColor = 'bg-red-100 text-red-800 border-red-300'
+      overheadLabel = `⚠ Overhead ${overheadRate.toFixed(0)}%`
+      overheadTitle = 'Más del 20% de sus horas son reuniones/tareas internas/capacitación'
+    } else if (overheadRate !== null && overheadRate >= 10) {
+      overheadColor = 'bg-amber-100 text-amber-800 border-amber-300'
+    }
+
     return {
       empId,
       dailyExpected,
@@ -117,6 +147,10 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
       statusColor,
       statusIcon,
       statusLabel,
+      overheadRate,
+      overheadColor,
+      overheadLabel,
+      overheadTitle,
       items: Object.entries(breakdown)
         .sort((a, b) => b[1] - a[1])
         .map(([client, hours]) => ({
@@ -159,9 +193,19 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
                     <h3 className="font-bold text-slate-800 text-base">{emp}</h3>
                     <span className="text-xs text-slate-500 font-medium">Meta diaria: {b.dailyExpected}h/día</span>
                   </div>
-                  <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${b.statusColor}`}>
-                    {b.statusIcon} ({b.expectedPeriodHours > 0 ? `${b.complianceRate.toFixed(0)}%` : '—'})
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className={`px-2.5 py-1 rounded-full text-xs font-bold border ${b.statusColor}`}>
+                      {b.statusIcon} ({b.expectedPeriodHours > 0 ? `${b.complianceRate.toFixed(0)}%` : '—'})
+                    </span>
+                    {b.overheadRate !== null && (
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-xs font-bold border ${b.overheadColor}`}
+                        title={b.overheadTitle}
+                      >
+                        {b.overheadLabel}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Sub-breakdown per client */}
@@ -214,7 +258,7 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
       </div>
 
       {/* Summary Statistics */}
-      <div className="mt-8 grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="mt-8 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="bg-blue-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.primary }}>
           <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Total Empleados</div>
           <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.primary }}>
@@ -240,6 +284,13 @@ export const EmployeeWorkloadBreakdown: React.FC<EmployeeWorkloadBreakdownProps>
           <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Clientes Únicos</div>
           <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.info }}>
             {Array.from(new Set(records.filter(r => r.work_type === 'project').map(r => r.client_name))).length}
+          </div>
+        </div>
+
+        <div className="bg-indigo-50 rounded-lg p-4 border-l-4" style={{ borderColor: MOOVING_COLORS.indigo }}>
+          <div className="text-xs text-gray-600 uppercase font-semibold mb-1">Overhead del Equipo</div>
+          <div className="text-2xl font-bold" style={{ color: MOOVING_COLORS.indigo }}>
+            {teamOverheadRate.toFixed(1)}%
           </div>
         </div>
       </div>

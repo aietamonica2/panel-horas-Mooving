@@ -7,9 +7,17 @@ interface EditRecordModalProps {
   onClose: () => void
   record: any | null
   onSuccess: () => void
+  /**
+   * A4: 'edit' (default) actualiza el registro vía PUT; 'duplicate' abre el form
+   * prefillado con el registro origen (fecha default: hoy) y al guardar CREA un
+   * registro NUEVO por el mismo camino POST que usa la Carga Rápida.
+   */
+  mode?: 'edit' | 'duplicate'
 }
 
-export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClose, record, onSuccess }) => {
+const todayStr = () => new Date().toISOString().split('T')[0]
+
+export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClose, record, onSuccess, mode = 'edit' }) => {
   const [formData, setFormData] = useState({
     employee_id: '',
     employee_name: '',
@@ -33,12 +41,14 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
         client_name: record.client_name,
         project_name: record.project_name,
         duration_decimal: record.duration_decimal,
-        date: record.date,
+        // En modo duplicate el form abre con la fecha de HOY (editable);
+        // el resto de los campos se prefillan desde el registro origen.
+        date: mode === 'duplicate' ? todayStr() : record.date,
         work_type: record.work_type,
         description: record.description || ''
       })
     }
-  }, [record])
+  }, [record, mode])
 
   // Return condicional DESPUÉS de declarar todos los hooks (Reglas de Hooks).
   if (!isOpen || !record) return null
@@ -53,13 +63,18 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
         client_id: 'cli_' + formData.client_name.toLowerCase().replace(/\s/g, ''),
         project_id: 'proj_' + formData.project_name.toLowerCase().replace(/\s/g, ''),
       }
-      const res = await api.updateRecord(record.id, payload)
+      // A4: en modo duplicate se CREA un registro nuevo reutilizando el mismo
+      // POST /api/data/records que la Carga Rápida (QuickLogModal.saveRecord);
+      // la copia nace con source 'manual' porque es una carga manual del usuario.
+      const res = mode === 'duplicate'
+        ? await api.createRecord({ ...payload, source: 'manual' })
+        : await api.updateRecord(record.id, payload)
       const data = await res.json()
       if (data.success) {
         onSuccess()
         onClose()
       } else {
-        setError(data.error || 'Error al actualizar el registro')
+        setError(data.error || (mode === 'duplicate' ? 'Error al crear el registro' : 'Error al actualizar el registro'))
       }
     } catch (err) {
       setError('Error de conexión con el servidor')
@@ -94,7 +109,8 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in-up">
         <div className="bg-indigo-900 p-4 flex justify-between items-center text-white">
           <h2 className="text-xl font-bold flex items-center gap-2">
-            <span className="text-2xl">✏️</span> Editar Registro de Horas
+            <span className="text-2xl">{mode === 'duplicate' ? '📄' : '✏️'}</span>{' '}
+            {mode === 'duplicate' ? 'Duplicar Registro' : 'Editar Registro de Horas'}
           </h2>
           <button onClick={onClose} className="text-indigo-200 hover:text-white transition text-xl font-bold">
             ×
@@ -190,29 +206,32 @@ export const EditRecordModal: React.FC<EditRecordModalProps> = ({ isOpen, onClos
 
           {error && <p className="text-red-500 text-sm">{error}</p>}
 
-          <div className="pt-4 mt-6 border-t flex justify-between items-center">
-            <button
-              type="button"
-              disabled={isSubmitting}
-              onClick={() => setShowDeleteConfirm(true)}
-              className="px-4 py-2 text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-lg font-medium transition disabled:opacity-50"
-            >
-              🗑️ Eliminar
-            </button>
+          <div className={`pt-4 mt-6 border-t flex items-center ${mode === 'duplicate' ? 'justify-end' : 'justify-between'}`}>
+            {/* Eliminar aplica al registro origen: no tiene sentido al duplicar */}
+            {mode !== 'duplicate' && (
+              <button
+                type="button"
+                disabled={isSubmitting}
+                onClick={() => setShowDeleteConfirm(true)}
+                className="px-4 py-2 text-red-600 hover:bg-red-50 border border-transparent hover:border-red-200 rounded-lg font-medium transition disabled:opacity-50"
+              >
+                🗑️ Eliminar
+              </button>
+            )}
             <div className="flex gap-3">
-              <button 
-                type="button" 
+              <button
+                type="button"
                 onClick={onClose}
                 className="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition"
               >
                 Cancelar
               </button>
-              <button 
-                type="submit" 
+              <button
+                type="submit"
                 disabled={isSubmitting}
                 className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg shadow-sm font-medium transition disabled:opacity-50"
               >
-                {isSubmitting ? 'Guardando...' : 'Guardar Cambios'}
+                {isSubmitting ? 'Guardando...' : mode === 'duplicate' ? 'Crear Copia' : 'Guardar Cambios'}
               </button>
             </div>
           </div>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api';
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
-import { Clock, CheckCircle, ListTodo, Zap } from 'lucide-react';
+import { Clock, CheckCircle, ListTodo, Zap, CalendarClock } from 'lucide-react';
 import { QuickLogModal } from './QuickLogModal';
 
 const MOOVING_COLORS = {
@@ -19,7 +19,21 @@ export const MyTime: React.FC = () => {
   const [records, setRecords] = useState<any[]>([]);
   const [loadingRecords, setLoadingRecords] = useState(true);
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false);
-  
+
+  // --- A2: edición inline de "Mis registros del mes" ---
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState({
+    client_name: '',
+    project_name: '',
+    duration_decimal: 1.0,
+    date: '',
+    work_type: 'project',
+    description: ''
+  });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [editSuccess, setEditSuccess] = useState('');
+
   const [formData, setFormData] = useState({
     client_name: '',
     project_name: '',
@@ -85,6 +99,70 @@ export const MyTime: React.FC = () => {
     } finally {
       setIsSubmitting(false);
       setTimeout(() => setMessage(''), 3000);
+    }
+  };
+
+  // --- A2: handlers de edición. Usa el MISMO endpoint que la edición existente de la app
+  // (PUT /api/data/records/:id vía api.updateRecord, que adjunta el Bearer token con getHeaders()).
+  const startEdit = (r: any) => {
+    setEditingId(r.id);
+    setEditError('');
+    setEditSuccess('');
+    setEditForm({
+      client_name: r.client_name || '',
+      project_name: r.project_name || '',
+      duration_decimal: Number(r.duration_decimal) || 1.0,
+      date: r.date ? String(r.date).slice(0, 10) : '',
+      work_type: r.work_type || 'project',
+      description: r.description || ''
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditError('');
+  };
+
+  const handleEditSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingId) return;
+    const original = records.find((r: any) => r.id === editingId);
+    if (!original) return;
+    setEditSaving(true);
+    setEditError('');
+    try {
+      // Se preserva la identidad original del registro (employee_id/name); solo se editan los campos del form.
+      const payload = {
+        employee_id: original.employee_id,
+        employee_name: original.employee_name,
+        client_id: 'cli_' + editForm.client_name.toLowerCase().replace(/\s/g, ''),
+        client_name: editForm.client_name,
+        project_id: 'proj_' + editForm.project_name.toLowerCase().replace(/\s/g, ''),
+        project_name: editForm.project_name,
+        duration_decimal: Number(editForm.duration_decimal),
+        date: editForm.date,
+        work_type: editForm.work_type,
+        description: editForm.description
+      };
+
+      const res = await api.updateRecord(editingId, payload);
+      if (res.status === 403) {
+        setEditError('No podés editar este registro');
+        return;
+      }
+      const data = await res.json();
+      if (data.success) {
+        setEditingId(null);
+        setEditSuccess('✅ Registro actualizado con éxito');
+        setTimeout(() => setEditSuccess(''), 3000);
+        fetchRecords(); // Refresca los datos igual que el alta de horas
+      } else {
+        setEditError(data.error || 'Error al actualizar el registro.');
+      }
+    } catch (err) {
+      setEditError('Error de red al guardar los cambios.');
+    } finally {
+      setEditSaving(false);
     }
   };
 
@@ -188,10 +266,48 @@ export const MyTime: React.FC = () => {
       .map(([m, val]) => ({ month: m.slice(5), hours: Math.round(val * 10) / 10 }))
   }, [myRecords])
 
+  // --- A2: registros del mes ordenados (más recientes primero) para la lista editable ---
+  const monthRecordsSorted = [...thisMonthRecords].sort((a: any, b: any) =>
+    String(b.date || '').localeCompare(String(a.date || ''))
+  );
+
+  // --- A3: días corridos sin cargar horas (sobre TODOS mis registros matcheados, no solo el mes) ---
+  const lastRecordDate = React.useMemo(() => {
+    let last = '';
+    myRecords.forEach((r: any) => {
+      const d = r && r.date ? String(r.date).slice(0, 10) : '';
+      if (d && d > last) last = d;
+    });
+    return last; // '' => nunca cargó horas
+  }, [myRecords]);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const daysWithoutLogging = lastRecordDate
+    ? Math.max(0, Math.round((Date.parse(todayStr) - Date.parse(lastRecordDate)) / 86400000))
+    : null;
+
   return (
     <div className="flex-1 bg-slate-50 overflow-auto p-8">
       <div className="max-w-6xl mx-auto space-y-8">
-        
+
+        {/* A3: Aviso de días sin cargar horas */}
+        {!loadingRecords && daysWithoutLogging !== null && daysWithoutLogging >= 3 && (
+          <div className="bg-amber-50 border-l-4 border-amber-500 rounded-xl shadow-sm p-4 flex items-center gap-3">
+            <span className="text-2xl" aria-hidden="true">⏰</span>
+            <p className="text-sm font-medium text-amber-800">
+              Llevás <strong>{daysWithoutLogging} días</strong> sin cargar horas. Mantené tu registro al día.
+            </p>
+          </div>
+        )}
+        {!loadingRecords && daysWithoutLogging === null && (
+          <div className="bg-indigo-50 border border-indigo-100 rounded-xl shadow-sm p-4 flex items-center gap-3">
+            <span className="text-2xl" aria-hidden="true">🌱</span>
+            <p className="text-sm font-medium text-indigo-700">
+              Todavía no registrás horas. ¡Arrancá hoy!
+            </p>
+          </div>
+        )}
+
         {/* Cabecera y Formulario */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           
@@ -288,6 +404,118 @@ export const MyTime: React.FC = () => {
                           <td className="py-3 px-4 font-semibold text-indigo-600">{Number(r.duration_decimal).toFixed(2)}h</td>
                           <td className="py-3 px-4 text-gray-500 truncate max-w-xs hidden sm:table-cell" title={r.description}>{r.description || '-'}</td>
                         </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* A2: Mis registros del mes (edición inline) */}
+            <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+                <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                  <CalendarClock className="w-5 h-5 text-indigo-600" />
+                  Mis registros del mes
+                </h2>
+                {editSuccess && <span className="text-sm font-medium text-emerald-600">{editSuccess}</span>}
+              </div>
+              {loadingRecords ? (
+                <div className="text-center py-8 text-gray-500">Cargando registros...</div>
+              ) : monthRecordsSorted.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">No tenés registros cargados este mes.</div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-gray-50 border-y border-gray-200 text-sm text-gray-600">
+                        <th className="py-3 px-4 font-medium">Fecha</th>
+                        <th className="py-3 px-4 font-medium">Cliente / Proyecto</th>
+                        <th className="py-3 px-4 font-medium">Tipo</th>
+                        <th className="py-3 px-4 font-medium">Horas</th>
+                        <th className="py-3 px-4 font-medium hidden sm:table-cell">Descripción</th>
+                        <th className="py-3 px-4 font-medium text-right">Editar</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100 text-sm">
+                      {monthRecordsSorted.map((r: any, i: number) => (
+                        editingId && r.id === editingId ? (
+                          <tr key={r.id} className="bg-indigo-50/60">
+                            <td colSpan={6} className="p-4">
+                              <form onSubmit={handleEditSave} className="space-y-3">
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Fecha</label>
+                                    <input type="date" required value={editForm.date} onChange={e => setEditForm(p => ({ ...p, date: e.target.value }))} className="w-full border rounded-lg p-2 text-sm" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Duración (horas)</label>
+                                    <input type="number" required step="0.5" min="0.5" max="24" value={editForm.duration_decimal} onChange={e => setEditForm(p => ({ ...p, duration_decimal: Number(e.target.value) }))} className="w-full border rounded-lg p-2 text-sm" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Tipo de Tarea</label>
+                                    <select className="w-full border rounded-lg p-2 text-sm bg-white" value={editForm.work_type} onChange={e => setEditForm(p => ({ ...p, work_type: e.target.value }))}>
+                                      <option value="project">Proyecto (Facturable)</option>
+                                      <option value="internal">Gestión Interna</option>
+                                      <option value="meeting">Reunión</option>
+                                      <option value="training">Capacitación</option>
+                                      <option value="other">Soporte/Otro</option>
+                                    </select>
+                                  </div>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Cliente</label>
+                                    <input type="text" required value={editForm.client_name} onChange={e => setEditForm(p => ({ ...p, client_name: e.target.value }))} className="w-full border rounded-lg p-2 text-sm" />
+                                  </div>
+                                  <div>
+                                    <label className="block text-xs font-medium text-gray-600 mb-1">Proyecto</label>
+                                    <input type="text" required value={editForm.project_name} onChange={e => setEditForm(p => ({ ...p, project_name: e.target.value }))} className="w-full border rounded-lg p-2 text-sm" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-medium text-gray-600 mb-1">Descripción / Notas</label>
+                                  <textarea value={editForm.description} onChange={e => setEditForm(p => ({ ...p, description: e.target.value }))} className="w-full border rounded-lg p-2 text-sm" rows={2} placeholder="Describe las tareas realizadas..." />
+                                </div>
+                                <div className="flex items-center justify-between gap-3 pt-2 border-t border-indigo-100">
+                                  <span className="text-sm font-medium text-red-600">{editError}</span>
+                                  <div className="flex gap-2">
+                                    <button type="button" onClick={cancelEdit} disabled={editSaving} className="px-4 py-1.5 text-sm text-gray-600 hover:bg-gray-100 rounded-lg font-medium transition disabled:opacity-50">
+                                      Cancelar
+                                    </button>
+                                    <button type="submit" disabled={editSaving} className="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium py-1.5 px-4 rounded-lg shadow-sm transition disabled:opacity-50">
+                                      {editSaving ? 'Guardando...' : 'Guardar Cambios'}
+                                    </button>
+                                  </div>
+                                </div>
+                              </form>
+                            </td>
+                          </tr>
+                        ) : (
+                          <tr key={r.id || i} className="hover:bg-gray-50">
+                            <td className="py-3 px-4 font-medium text-gray-900 whitespace-nowrap">{r.date}</td>
+                            <td className="py-3 px-4">
+                              {r.client_name}
+                              <span className="text-gray-400"> / </span>
+                              <span className="text-gray-500">{r.project_name}</span>
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap">{workTypeLabels[r.work_type] || r.work_type || '—'}</td>
+                            <td className="py-3 px-4 font-semibold text-indigo-600 whitespace-nowrap">{Number(r.duration_decimal).toFixed(2)}h</td>
+                            <td className="py-3 px-4 text-gray-500 truncate max-w-xs hidden sm:table-cell" title={r.description}>{r.description || '-'}</td>
+                            <td className="py-3 px-4 text-right">
+                              {r.id && (
+                                <button
+                                  onClick={() => startEdit(r)}
+                                  title="Editar registro"
+                                  aria-label="Editar registro"
+                                  className="p-1.5 rounded-lg border border-transparent hover:border-indigo-200 hover:bg-indigo-50 transition"
+                                >
+                                  ✏️
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        )
                       ))}
                     </tbody>
                   </table>

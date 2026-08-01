@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react'
+import { Copy } from 'lucide-react'
 import { useDataStore } from '../stores/dataStore'
 import { TimeRecord } from '../types'
 import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts'
@@ -129,7 +130,7 @@ const normalizeRevenue = (input: unknown): RevenueRow[] => {
 }
 
 export const Dashboard: React.FC = () => {
-  const { records, filters, setFilters, getFilteredRecords, clearFilters } = useDataStore()
+  const { records, filters, setFilters, getFilteredRecords, clearFilters, selectedSources, setSelectedSources } = useDataStore()
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false)
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
@@ -158,6 +159,8 @@ export const Dashboard: React.FC = () => {
   const [auditResults, setAuditResults] = useState<{ status: string; anomalies_found: { issue: string; user: string }[] } | null>(null)
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
   const [editingRecord, setEditingRecord] = useState<any | null>(null)
+  // A4: modo del modal de registro — 'edit' (PUT) o 'duplicate' (POST de un registro nuevo)
+  const [recordModalMode, setRecordModalMode] = useState<'edit' | 'duplicate'>('edit')
   const [currentPage, setCurrentPage] = useState<number>(1)
   const [isDarkMode, setIsDarkMode] = useState<boolean>(false)
   const [isCompareModalOpen, setIsCompareModalOpen] = useState<boolean>(false)
@@ -170,12 +173,12 @@ export const Dashboard: React.FC = () => {
   const isAdmin = (localStorage.getItem('mooving_user_role') || 'employee') === 'admin'
   const pageSize = 15
 
-  // ARCH-04: memoizar el resultado de filtrado. getFilteredRecords lee records
-  // y filters del store vía get(); recomputamos solo cuando esas entradas
-  // cambian, evitando arrays nuevos en cada render que re-renderizan hijos.
+  // ARCH-04: memoizar el resultado de filtrado. getFilteredRecords lee records,
+  // filters y selectedSources del store vía get(); recomputamos solo cuando esas
+  // entradas cambian, evitando arrays nuevos en cada render que re-renderizan hijos.
   const filteredRecords = useMemo(
     () => getFilteredRecords(),
-    [records, filters, getFilteredRecords]
+    [records, filters, selectedSources, getFilteredRecords]
   )
 
   // Senda AI action handler via MCP
@@ -321,6 +324,12 @@ export const Dashboard: React.FC = () => {
     })
     setCurrentPage(1)
   }, [selectedMonths, selectedEmployees, selectedClients, selectedProjects, selectedCategories, setFilters])
+
+  // A1: el filtro por fuente vive directo en el store (selectedSources); al
+  // cambiar, solo reseteamos la paginación de la tabla como el resto de filtros.
+  React.useEffect(() => {
+    setCurrentPage(1)
+  }, [selectedSources])
 
   // ARCH-04: KPIs agregados memoizados (una sola pasada por deps estables).
   const { totalHours, avgHours, uniqueEmployees, uniqueClients } = useMemo(() => {
@@ -732,6 +741,7 @@ export const Dashboard: React.FC = () => {
             selectedClients={selectedClients}
             selectedProjects={selectedProjects}
             selectedCategories={selectedCategories}
+            selectedSources={selectedSources}
             startDate={startDate}
             endDate={endDate}
             onMonthsChange={setSelectedMonths}
@@ -739,6 +749,7 @@ export const Dashboard: React.FC = () => {
             onClientsChange={setSelectedClients}
             onProjectsChange={setSelectedProjects}
             onCategoriesChange={setSelectedCategories}
+            onSourcesChange={setSelectedSources}
             onStartDateChange={handleStartDateChange}
             onEndDateChange={handleEndDateChange}
             onReset={handleResetFilters}
@@ -1245,12 +1256,22 @@ export const Dashboard: React.FC = () => {
                       </td>
                       <td className="px-6 py-3 text-gray-500">{record.date}</td>
                       <td className="px-6 py-3 text-center">
-                        <button 
-                          onClick={() => setEditingRecord(record)}
-                          className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-md text-xs font-medium transition"
-                        >
-                          ✏️ Editar
-                        </button>
+                        <div className="inline-flex items-center gap-2">
+                          <button
+                            onClick={() => { setRecordModalMode('edit'); setEditingRecord(record) }}
+                            className="text-indigo-600 hover:text-indigo-900 bg-indigo-50 hover:bg-indigo-100 px-3 py-1 rounded-md text-xs font-medium transition"
+                          >
+                            ✏️ Editar
+                          </button>
+                          {/* A4: duplicar registro — misma visibilidad que Editar (sin gating por rol) */}
+                          <button
+                            onClick={() => { setRecordModalMode('duplicate'); setEditingRecord(record) }}
+                            title="Duplicar registro"
+                            className="text-sky-600 hover:text-sky-900 bg-sky-50 hover:bg-sky-100 px-3 py-1 rounded-md text-xs font-medium transition inline-flex items-center gap-1"
+                          >
+                            <Copy size={12} /> Duplicar
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}
@@ -1317,9 +1338,14 @@ export const Dashboard: React.FC = () => {
           isOpen={!!editingRecord}
           onClose={() => setEditingRecord(null)}
           record={editingRecord}
+          mode={recordModalMode}
           onSuccess={() => {
             fetchRecords()
-            setAiMessage('✅ Registro actualizado correctamente')
+            setAiMessage(
+              recordModalMode === 'duplicate'
+                ? '✅ Registro duplicado correctamente'
+                : '✅ Registro actualizado correctamente'
+            )
             setTimeout(() => setAiMessage(null), 3000)
           }}
         />

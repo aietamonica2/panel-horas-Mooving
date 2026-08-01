@@ -69,6 +69,8 @@ export interface AppState {
   employees: Employee[]
   clients: Client[]
   filters: FilterState
+  /** Filtro por fuente de los registros (raw `source`; sin source ⇒ 'manual') */
+  selectedSources: string[]
   isLoading: boolean
   error: string | null
   version: string

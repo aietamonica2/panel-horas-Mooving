@@ -19,7 +19,8 @@ const mockRecords: TimeRecord[] = [
     work_type: 'project',
     description: 'Working on portal',
     created_at: '',
-    updated_at: ''
+    updated_at: '',
+    source: 'clockify'
   },
   {
     id: '2',
@@ -38,6 +39,26 @@ const mockRecords: TimeRecord[] = [
     description: 'Working on dashboard',
     created_at: '',
     updated_at: ''
+    // sin `source` a propósito: debe tratarse como 'manual'
+  },
+  {
+    id: '3',
+    tenant_id: 'default',
+    employee_id: 'emp3',
+    employee_name: 'Carla',
+    client_id: 'cli3',
+    client_name: 'Senda',
+    project_id: 'proj3',
+    project_name: 'Senda Bot',
+    duration_decimal: 2.5,
+    duration_hours: 2,
+    duration_minutes: 30,
+    date: '2026-07-20',
+    work_type: 'internal',
+    description: 'AI logged hours',
+    created_at: '',
+    updated_at: '',
+    source: 'senda_ai'
   }
 ]
 
@@ -45,6 +66,7 @@ describe('dataStore Filters', () => {
   beforeEach(() => {
     useDataStore.setState({
       records: mockRecords,
+      selectedSources: [],
       filters: {
         dateRangeStart: '',
         dateRangeEnd: '',
@@ -83,5 +105,59 @@ describe('dataStore Filters', () => {
     const filtered = useDataStore.getState().getFilteredRecords()
     expect(filtered).toHaveLength(1)
     expect(filtered[0].project_id).toBe('proj1')
+  })
+
+  describe('source filter (selectedSources)', () => {
+    it('returns all records when no source is selected', () => {
+      const filtered = useDataStore.getState().getFilteredRecords()
+      expect(filtered).toHaveLength(3)
+    })
+
+    it('filters records by a single source', () => {
+      useDataStore.getState().setSelectedSources(['clockify'])
+      const filtered = useDataStore.getState().getFilteredRecords()
+      expect(filtered).toHaveLength(1)
+      expect(filtered[0].id).toBe('1')
+      expect(filtered[0].source).toBe('clockify')
+    })
+
+    it('filters records by multiple sources', () => {
+      useDataStore.getState().setSelectedSources(['clockify', 'senda_ai'])
+      const filtered = useDataStore.getState().getFilteredRecords()
+      expect(filtered).toHaveLength(2)
+      expect(filtered.map(r => r.id).sort()).toEqual(['1', '3'])
+    })
+
+    it('treats records without source as manual', () => {
+      useDataStore.getState().setSelectedSources(['manual'])
+      const filtered = useDataStore.getState().getFilteredRecords()
+      expect(filtered).toHaveLength(1)
+      expect(filtered[0].id).toBe('2')
+    })
+
+    it('returns no records for a source with no matches', () => {
+      useDataStore.getState().setSelectedSources(['zendesk'])
+      const filtered = useDataStore.getState().getFilteredRecords()
+      expect(filtered).toHaveLength(0)
+    })
+
+    it('combines source filter with other filters', () => {
+      useDataStore.getState().setFilters({ employees: ['emp1'] })
+      useDataStore.getState().setSelectedSources(['clockify'])
+      expect(useDataStore.getState().getFilteredRecords()).toHaveLength(1)
+
+      // emp1 tiene source clockify, así que filtrar emp1 + manual no matchea nada
+      useDataStore.getState().setSelectedSources(['manual'])
+      expect(useDataStore.getState().getFilteredRecords()).toHaveLength(0)
+    })
+
+    it('clearFilters resets selectedSources', () => {
+      useDataStore.getState().setSelectedSources(['clockify'])
+      expect(useDataStore.getState().getFilteredRecords()).toHaveLength(1)
+
+      useDataStore.getState().clearFilters()
+      expect(useDataStore.getState().selectedSources).toEqual([])
+      expect(useDataStore.getState().getFilteredRecords()).toHaveLength(3)
+    })
   })
 })

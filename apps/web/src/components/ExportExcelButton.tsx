@@ -1,7 +1,9 @@
 /**
- * Export CSV Button Component (Epic 5 - Exportación a Excel y CSV)
- * Generates and downloads the full filtered time records as a clean CSV file
- * (UTF-8 with BOM, every column quoted and protected against formula injection).
+ * Export Excel Button Component (Epic 5 - Exportación a Excel)
+ * Generates and downloads the full filtered time records as a native .xlsx
+ * workbook (SheetJS). The library is loaded on demand via dynamic import so it
+ * ships in its own chunk and never inflates the initial bundle. Text cells are
+ * still protected against formula injection (also exploitable in Excel).
  */
 
 import React from 'react'
@@ -14,9 +16,10 @@ interface ExportExcelButtonProps {
 }
 
 /**
- * Neutraliza la inyección de fórmulas CSV: una celda cuyo texto empieza con
- * `=`, `+`, `-`, `@`, tab o retorno de carro (CR) puede ejecutarse como fórmula
- * al abrir el archivo en Excel / Google Sheets. Se le antepone una comilla
+ * Neutraliza la inyección de fórmulas: una celda de texto cuyo contenido
+ * empieza con `=`, `+`, `-`, `@`, tab o retorno de carro (CR) puede
+ * interpretarse como fórmula al abrir/copiar el archivo en Excel o Google
+ * Sheets (aplica también a .xlsx, no solo a CSV). Se le antepone una comilla
  * simple (`'`) para forzar que la aplicación la trate como texto plano.
  */
 const sanitizeCell = (value: unknown): string => {
@@ -24,44 +27,54 @@ const sanitizeCell = (value: unknown): string => {
   return /^[=+\-@\t\r]/.test(str) ? `'${str}` : str
 }
 
-/**
- * Devuelve un campo CSV seguro y consistente: primero neutraliza fórmulas y
- * luego lo envuelve en comillas dobles, duplicando las comillas internas
- * (`"` -> `""`). Se aplica a TODAS las columnas para un escapado uniforme.
- */
-const csvField = (value: unknown): string => `"${sanitizeCell(value).replace(/"/g, '""')}"`
+/** Anchos de columna (en caracteres) para la hoja "Registros". */
+const COLUMN_WIDTHS = [
+  { wch: 12 }, // Fecha
+  { wch: 22 }, // Empleado
+  { wch: 22 }, // Cliente
+  { wch: 26 }, // Proyecto
+  { wch: 12 }, // Tipo
+  { wch: 8 },  // Horas
+  { wch: 42 }, // Descripción
+  { wch: 10 }, // Fuente
+  { wch: 11 }, // Facturable
+]
 
-export const ExportExcelButton: React.FC<ExportExcelButtonProps> = ({ records, filename = 'reporte_horas_mooving.csv' }) => {
-  const handleExport = () => {
+export const ExportExcelButton: React.FC<ExportExcelButtonProps> = ({ records, filename = 'reporte_horas_mooving.xlsx' }) => {
+  const handleExport = async () => {
     if (records.length === 0) return
 
-    // UTF-8 BOM for Excel compatibility with special characters in Spanish
-    const BOM = '\uFEFF'
-    const headers = ['Fecha', 'Empleado ID', 'Empleado', 'Cliente', 'Proyecto', 'Tipo de Trabajo', 'Horas Decim.', 'Facturable', 'Descripción', 'Fuente']
+    // Import dinámico: SheetJS queda en un chunk separado que el navegador
+    // descarga recién al primer click de exportación.
+    const XLSX = await import('xlsx')
 
-    const rows = records.map(r => [
-      r.date,
-      r.employee_id || '',
-      r.employee_name || '',
-      r.client_name || '',
-      r.project_name || '',
-      r.work_type,
-      (r.duration_decimal || 0).toFixed(2),
-      (r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')) ? 'Sí' : 'No',
-      r.description || '',
-      r.source || 'manual'
-    ].map(csvField))
+    const headers = ['Fecha', 'Empleado', 'Cliente', 'Proyecto', 'Tipo', 'Horas', 'Descripción', 'Fuente', 'Facturable']
 
-    const csvContent = BOM + [headers.map(csvField).join(','), ...rows.map(row => row.join(','))].join('\n')
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.setAttribute('download', filename)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-    URL.revokeObjectURL(url)
+    const rows: (string | number)[][] = records.map(r => [
+      sanitizeCell(r.date),
+      sanitizeCell(r.employee_name || ''),
+      sanitizeCell(r.client_name || ''),
+      sanitizeCell(r.project_name || ''),
+      sanitizeCell(r.work_type),
+      // Horas como número real (no string) para que Excel pueda sumar/filtrar
+      Math.round((r.duration_decimal || 0) * 100) / 100,
+      sanitizeCell(r.description || ''),
+      sanitizeCell(r.source || 'manual'),
+      (r.is_billable === 1 || r.is_billable === true || (r.is_billable === undefined && r.work_type === 'project')) ? 'Sí' : 'No'
+    ])
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows])
+    ws['!cols'] = COLUMN_WIDTHS
+
+    // Formato numérico de dos decimales para la columna Horas (índice 5)
+    for (let i = 0; i < rows.length; i++) {
+      const cell = ws[XLSX.utils.encode_cell({ r: i + 1, c: 5 })]
+      if (cell && cell.t === 'n') cell.z = '0.00'
+    }
+
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, 'Registros')
+    XLSX.writeFile(wb, filename)
   }
 
   return (
@@ -69,10 +82,10 @@ export const ExportExcelButton: React.FC<ExportExcelButtonProps> = ({ records, f
       onClick={handleExport}
       disabled={records.length === 0}
       className="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-medium py-2 px-4 rounded-lg shadow-sm transition text-sm disabled:opacity-50"
-      title="Exportar registros del período a CSV"
+      title="Exportar registros del período a Excel (.xlsx)"
     >
       <FileSpreadsheet className="w-4 h-4" />
-      <span>Exportar a CSV</span>
+      <span>Exportar a Excel</span>
     </button>
   )
 }
