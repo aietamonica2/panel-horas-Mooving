@@ -79,7 +79,10 @@ describe('FEAT-02 MCP approval workflow (multi-tenant safe)', () => {
     const { c, calls } = makeFakeContext('tenant-A')
     await (TOOL_REGISTRY as any).approve_time_record({ id: 'rec_1' }, c)
 
-    const last = calls[calls.length - 1]
+    // N4: tras el UPDATE la tool escribe una entrada de auditoría (audit_logs),
+    // así que localizamos el UPDATE por su SQL en vez de asumir que es la última query.
+    const last = calls.find((k) => k.sql.includes("status = 'approved'"))!
+    expect(last, 'approve_time_record should run the status UPDATE').toBeTruthy()
     expect(last.sql).toContain("status = 'approved'")
     expect(last.sql).toContain('WHERE id = ? AND company_id = ?')
     expect(last.params).toEqual(['rec_1', 'tenant-A'])
@@ -89,7 +92,9 @@ describe('FEAT-02 MCP approval workflow (multi-tenant safe)', () => {
     const { c, calls } = makeFakeContext('tenant-A')
     await (TOOL_REGISTRY as any).reject_time_record({ id: 'rec_2' }, c)
 
-    const last = calls[calls.length - 1]
+    // N4: idem (b) — el UPDATE ya no es necesariamente la última query.
+    const last = calls.find((k) => k.sql.includes("status = 'rejected'"))!
+    expect(last, 'reject_time_record should run the status UPDATE').toBeTruthy()
     expect(last.sql).toContain("status = 'rejected'")
     expect(last.sql).toContain('WHERE id = ? AND company_id = ?')
     expect(last.params).toEqual(['rec_2', 'tenant-A'])
@@ -99,7 +104,9 @@ describe('FEAT-02 MCP approval workflow (multi-tenant safe)', () => {
     const { c, calls } = makeFakeContext('tenant-A')
     await (TOOL_REGISTRY as any).reject_time_record({ id: 'rec_3', reason: 'Horas duplicadas' }, c)
 
-    const last = calls[calls.length - 1]
+    // N4: idem (b) — el UPDATE ya no es necesariamente la última query.
+    const last = calls.find((k) => k.sql.includes("status = 'rejected'"))!
+    expect(last, 'reject_time_record should run the status UPDATE').toBeTruthy()
     expect(last.sql).toContain("status = 'rejected'")
     expect(last.sql).toContain('description')
     expect(last.sql).toContain('company_id = ?')
@@ -119,22 +126,26 @@ describe('FEAT-02 MCP approval workflow (multi-tenant safe)', () => {
       expect(last.params).not.toContain('otro-tenant')
     }
 
-    // approve_time_record
+    // approve_time_record (N4: el UPDATE se localiza por SQL; luego hay auditoría)
     {
       const { c, calls } = makeFakeContext('tenant-A')
       await (TOOL_REGISTRY as any).approve_time_record({ id: 'rec_1', company_id: 'otro-tenant' }, c)
-      const last = calls[calls.length - 1]
+      const last = calls.find((k) => k.sql.includes("status = 'approved'"))!
       expect(last.params).toEqual(['rec_1', 'tenant-A'])
       expect(last.params).not.toContain('otro-tenant')
+      // Ninguna query (incl. auditoría) liga el tenant del body.
+      expect(calls.every((k) => !k.params.includes('otro-tenant'))).toBe(true)
     }
 
-    // reject_time_record
+    // reject_time_record (N4: idem)
     {
       const { c, calls } = makeFakeContext('tenant-A')
       await (TOOL_REGISTRY as any).reject_time_record({ id: 'rec_2', company_id: 'otro-tenant' }, c)
-      const last = calls[calls.length - 1]
+      const last = calls.find((k) => k.sql.includes("status = 'rejected'"))!
       expect(last.params).toEqual(['rec_2', 'tenant-A'])
       expect(last.params).not.toContain('otro-tenant')
+      // Ninguna query (incl. auditoría) liga el tenant del body.
+      expect(calls.every((k) => !k.params.includes('otro-tenant'))).toBe(true)
     }
 
     // approve_all_pending

@@ -123,8 +123,10 @@ describe('set_employee_rate — sólo admin', () => {
     expect(res.success).toBe(true)
     expect(res.hourly_rate_usd).toBe(75)
 
-    const last = calls[calls.length - 1]
-    expect(last.sql).toContain('UPDATE employees SET hourly_rate_usd')
+    // N4: tras el UPDATE la tool escribe una entrada de auditoría (audit_logs),
+    // así que localizamos el UPDATE por su SQL en vez de asumir que es la última query.
+    const last = calls.find((k) => k.sql.includes('UPDATE employees SET hourly_rate_usd'))!
+    expect(last, 'set_employee_rate should run the rate UPDATE').toBeTruthy()
     expect(last.sql).toContain('company_id = ?')
     expect(last.params).toEqual([75, 'emp_9', 'tenant-A'])
   })
@@ -136,7 +138,9 @@ describe('set_employee_rate — sólo admin', () => {
       c
     )
     expect(res.hourly_rate_usd).toBe(0)
-    expect(calls[calls.length - 1].params[0]).toBe(0)
+    // N4: el UPDATE ya no es necesariamente la última query (auditoría posterior).
+    const update = calls.find((k) => k.sql.includes('UPDATE employees SET hourly_rate_usd'))!
+    expect(update.params[0]).toBe(0)
   })
 })
 

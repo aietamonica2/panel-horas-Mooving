@@ -7,6 +7,10 @@ import {
   loadTemplate,
   buildEmployeeHoursResolver,
 } from './email_templates';
+// N3: lógica de sync de Zendesk compartida con el cron diario (cron/zendesk_sync.ts).
+import { syncZendeskTickets } from './zendesk';
+// N4: auditoría best-effort de escrituras (nunca rompe el flujo principal).
+import { logAudit, actorFromAuth } from '../lib/audit';
 
 /**
  * FEAT-01 — Visibilidad por cartera para Coordinadores.
@@ -49,6 +53,29 @@ const DEFAULT_INACTIVITY_DAYS = 3;
 
 // Remitente por defecto de las alertas de inactividad si no hay ALERT_FROM_EMAIL.
 const ALERT_FROM_FALLBACK = 'alertas@moovingtech.com';
+
+/**
+ * N4: describe un time_record para el summary de auditoría, p.ej.
+ * "5.5h de Bautista Barrio (2026-07-15)". Best-effort: si el registro no existe
+ * o la consulta falla (stub de test, tabla vacía), devuelve null y el llamador
+ * usa un fallback con el id. Nunca lanza.
+ */
+async function describeTimeRecordForAudit(
+  db: D1Database,
+  company_id: string,
+  id: string
+): Promise<string | null> {
+  try {
+    const row: any = await db
+      .prepare('SELECT employee_id, employee_name, duration_decimal, date FROM time_records WHERE id = ? AND company_id = ?')
+      .bind(id, company_id)
+      .first();
+    if (!row) return null;
+    return `${row.duration_decimal}h de ${row.employee_name || row.employee_id} (${row.date})`;
+  } catch {
+    return null;
+  }
+}
 
 /** Deriva un primer nombre "lindo" (capitalizado) desde "nombre.apellido" o "Nombre Apellido". */
 function firstNameFrom(name: string): string {
@@ -334,6 +361,23 @@ export const TOOL_REGISTRY = {
       'UPDATE employees SET hourly_rate_usd = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?'
     ).bind(rate, employee_id, company_id).run();
 
+    // N4: auditoría best-effort (nunca rompe el flujo principal). Se intenta
+    // resolver el nombre del empleado sólo para un summary más legible.
+    let rateEmpName: string | null = null;
+    try {
+      const row: any = await db.prepare('SELECT name FROM employees WHERE id = ? AND company_id = ?')
+        .bind(employee_id, company_id).first();
+      rateEmpName = row?.name || null;
+    } catch { /* best-effort */ }
+    await logAudit(db, {
+      company_id,
+      ...actorFromAuth(auth),
+      action: 'update',
+      entity: 'employee',
+      entity_id: employee_id,
+      summary: `Actualizó valor hora de ${rateEmpName || employee_id} a US$ ${rate}/h`,
+    });
+
     return { success: true, employee_id, hourly_rate_usd: rate };
   },
 
@@ -396,6 +440,7 @@ export const TOOL_REGISTRY = {
     const id = crypto.randomUUID();
     const durationHour = Math.floor(duration_decimal || 0);
     const durationMin = Math.round(((duration_decimal || 0) % 1) * 60);
+    const recordDate = date || new Date().toISOString().split('T')[0];
 
     await db.prepare(`
       INSERT INTO time_records (
@@ -407,9 +452,19 @@ export const TOOL_REGISTRY = {
       id, company_id, employee_id, employee_name,
       client_id, client_name, project_id, project_name,
       duration_decimal, durationHour, durationMin,
-      date || new Date().toISOString().split('T')[0], 
+      recordDate,
       work_type || 'project', description || '', 'senda_ai'
     ).run();
+
+    // N4: auditoría best-effort (logAudit nunca rompe el flujo principal).
+    await logAudit(db, {
+      company_id,
+      ...actorFromAuth(c.get('auth')),
+      action: 'create',
+      entity: 'time_record',
+      entity_id: id,
+      summary: `Creó registro ${duration_decimal}h de ${employee_name || employee_id} (${recordDate})`,
+    });
 
     return {
       success: true,
@@ -663,6 +718,18 @@ export const TOOL_REGISTRY = {
     const company_id = c.get('auth')?.company_id || 'mooving-default';
     await db.prepare("UPDATE time_records SET status = 'approved', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?")
       .bind(id, company_id).run();
+
+    // N4: auditoría best-effort (nunca rompe el flujo principal).
+    const detail = await describeTimeRecordForAudit(db, company_id, id);
+    await logAudit(db, {
+      company_id,
+      ...actorFromAuth(c.get('auth')),
+      action: 'update',
+      entity: 'time_record',
+      entity_id: id,
+      summary: detail ? `Aprobó registro ${detail}` : `Aprobó registro ${id}`,
+    });
+
     return { success: true };
   },
 
@@ -683,6 +750,20 @@ export const TOOL_REGISTRY = {
       await db.prepare("UPDATE time_records SET status = 'rejected', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND company_id = ?")
         .bind(id, company_id).run();
     }
+
+    // N4: auditoría best-effort (nunca rompe el flujo principal).
+    const detail = await describeTimeRecordForAudit(db, company_id, id);
+    await logAudit(db, {
+      company_id,
+      ...actorFromAuth(c.get('auth')),
+      action: 'update',
+      entity: 'time_record',
+      entity_id: id,
+      summary:
+        (detail ? `Rechazó registro ${detail}` : `Rechazó registro ${id}`) +
+        (reason ? ` — Motivo: ${reason}` : ''),
+    });
+
     return { success: true };
   },
 
@@ -1014,6 +1095,10 @@ export const TOOL_REGISTRY = {
     };
   },
 
+  // N3: la implementación real vive en syncZendeskTickets (mcp/zendesk.ts) y es
+  // COMPARTIDA con el cron diario handleZendeskSyncCron (cron/zendesk_sync.ts).
+  // La tool conserva su contrato original: lanza error si faltan credenciales
+  // (el cron, en cambio, hace no-op graceful).
   sync_zendesk_tickets: async (params: any, c: HonoContext) => {
     const db = c.env.DB;
     const company_id = c.get('auth')?.company_id || 'mooving-default';
@@ -1025,123 +1110,7 @@ export const TOOL_REGISTRY = {
       throw new Error('Faltan credenciales de Zendesk en las variables de entorno (ZENDESK_SUBDOMAIN, ZENDESK_EMAIL, ZENDESK_API_TOKEN).');
     }
 
-    const authStr = btoa(`${email}/token:${token}`);
-    const url = `https://${subdomain}.zendesk.com/api/v2/search.json?query=type:ticket status:solved&include=users`;
-
-    let zendeskData;
-    try {
-      const resp = await fetch(url, {
-        headers: {
-          'Authorization': `Basic ${authStr}`,
-          'Accept': 'application/json'
-        }
-      });
-      if (!resp.ok) {
-        throw new Error(`Zendesk API error: ${resp.status} ${resp.statusText}`);
-      }
-      zendeskData = await resp.json() as any;
-    } catch (err: any) {
-      console.error('Error fetching from Zendesk:', err);
-      throw new Error('No se pudo conectar con Zendesk: ' + err.message);
-    }
-
-    const tickets = zendeskData.results || [];
-    const usersList: any[] = zendeskData.users || [];
-    const usersMap = new Map<number, { name: string; email: string }>();
-    usersList.forEach(u => {
-      if (u.id) {
-        usersMap.set(u.id, { name: u.name || 'Agente Zendesk', email: u.email || '' });
-      }
-    });
-
-    // Fetch existing employees & aliases for smart matching
-    const empRes = await db.prepare(`SELECT id, name, email FROM employees WHERE company_id = ?`).bind(company_id).all();
-    const existingEmployees = (empRes.results || []) as any[];
-    
-    const aliasRes = await db.prepare(`SELECT alias_email, alias_name, employee_id FROM employee_aliases WHERE company_id = ?`).bind(company_id).all();
-    const existingAliases = (aliasRes.results || []) as any[];
-
-    let inserted = 0;
-    let total_hours = 0;
-
-    for (const ticket of tickets) {
-      const id = 'zen_' + ticket.id;
-      const duration = 1.0; // 1h por ticket resuelto
-      const desc = `Resolución Ticket #${ticket.id} [Zendesk]: ${ticket.subject}`;
-      const dateStr = ticket.updated_at ? ticket.updated_at.split('T')[0] : new Date().toISOString().split('T')[0];
-
-      // Resolve assignee
-      const assigneeInfo = ticket.assignee_id ? usersMap.get(ticket.assignee_id) : null;
-      const assigneeEmail = (assigneeInfo?.email || '').toLowerCase().trim();
-      const assigneeName = (assigneeInfo?.name || 'Agente Soporte').trim();
-
-      let targetEmpId = '';
-      let targetEmpName = '';
-
-      // 1. Check exact email match in employees
-      if (assigneeEmail) {
-        const matchByEmail = existingEmployees.find(e => (e.email || '').toLowerCase().trim() === assigneeEmail);
-        if (matchByEmail) {
-          targetEmpId = matchByEmail.id;
-          targetEmpName = matchByEmail.name;
-        }
-      }
-
-      // 2. Check alias table
-      if (!targetEmpId && assigneeEmail) {
-        const matchAlias = existingAliases.find(a => (a.alias_email || '').toLowerCase().trim() === assigneeEmail);
-        if (matchAlias) {
-          const emp = existingEmployees.find(e => e.id === matchAlias.employee_id);
-          if (emp) {
-            targetEmpId = emp.id;
-            targetEmpName = emp.name;
-          }
-        }
-      }
-
-      // 3. Check exact name match in employees
-      if (!targetEmpId && assigneeName) {
-        const matchByName = existingEmployees.find(e => (e.name || '').toLowerCase().trim() === assigneeName.toLowerCase());
-        if (matchByName) {
-          targetEmpId = matchByName.id;
-          targetEmpName = matchByName.name;
-        }
-      }
-
-      // Fallback: Use assignee name or email directly if unlinked
-      if (!targetEmpId) {
-        targetEmpId = assigneeEmail ? `zen_user_${assigneeEmail.replace(/[^a-zA-Z0-9]/g, '_')}` : `zen_agent_${ticket.assignee_id || 'soporte'}`;
-        targetEmpName = assigneeName || assigneeEmail || 'Agente Soporte';
-      }
-
-      try {
-        await db.prepare(`
-          INSERT OR IGNORE INTO time_records (
-            id, company_id, employee_id, employee_name, client_id, client_name,
-            project_id, project_name, duration_decimal, duration_hours, duration_minutes,
-            date, work_type, description, source
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).bind(
-          id, company_id, targetEmpId, targetEmpName,
-          'cli_varios', 'Varios', 'proj_support', 'Soporte Técnico',
-          duration, Math.floor(duration), Math.round((duration % 1) * 60),
-          dateStr, 'other', desc, 'zendesk'
-        ).run();
-        inserted++;
-        total_hours += duration;
-      } catch (err) {
-        console.error('Error inserting zendesk sync record:', err);
-      }
-    }
-
-    return {
-      success: true,
-      message: `Tickets de soporte procesados e importados de Zendesk para el tenant ${company_id}.`,
-      records_fetched: tickets.length,
-      records_inserted: inserted,
-      total_hours: total_hours,
-      source: 'zendesk'
-    };
+    return syncZendeskTickets(db, { subdomain, email, token }, company_id);
   },
 
   get_unlinked_external_users: async (params: any, c: HonoContext) => {
@@ -2144,7 +2113,61 @@ export const TOOL_REGISTRY = {
       company_id, template_key, subject, body
     ).run();
 
+    // N4: auditoría best-effort (nunca rompe el flujo principal).
+    await logAudit(db, {
+      company_id,
+      ...actorFromAuth(auth),
+      action: 'update',
+      entity: 'email_template',
+      entity_id: template_key,
+      summary: `Editó plantilla de email "${TEMPLATE_META[template_key as keyof typeof TEMPLATE_META]?.label || template_key}"`,
+    });
+
     return { success: true, template_key, subject, body, is_default: false };
+  },
+
+  // -------------------------------------------------------------------------
+  // N4 — get_audit_log: historial de auditoría ("quién cambió qué y cuándo").
+  // SÓLO admin (mismo patrón de gating que set_employee_rate): cualquier otro
+  // rol recibe { success:false, error:'No autorizado' } sin tocar la DB.
+  // Params opcionales: limit (default 100, máx 500), entity, action.
+  // Devuelve { entries: [...] } ordenado por created_at DESC, SIEMPRE scopeado
+  // al company_id del principal (MT-02: tenant-from-principal).
+  // -------------------------------------------------------------------------
+  get_audit_log: async (params: any, c: HonoContext) => {
+    const db = c.env.DB;
+    const auth = c.get('auth');
+    const role = auth?.role || '';
+    if (role !== 'admin') {
+      return { success: false, error: 'No autorizado' };
+    }
+
+    const company_id = auth?.company_id || 'mooving-default';
+
+    // limit: default 100, tope 500, saneado a entero positivo.
+    let limit = Number(params?.limit);
+    if (!isFinite(limit) || limit <= 0) limit = 100;
+    limit = Math.min(Math.floor(limit), 500);
+
+    let query = 'SELECT * FROM audit_logs WHERE company_id = ?';
+    const queryParams: any[] = [company_id];
+
+    if (params?.entity) {
+      query += ' AND entity = ?';
+      queryParams.push(String(params.entity));
+    }
+    if (params?.action) {
+      query += ' AND action = ?';
+      queryParams.push(String(params.action));
+    }
+
+    // rowid como desempate: created_at (datetime('now')) tiene precisión de
+    // segundos y varias entradas pueden compartir el mismo timestamp.
+    query += ' ORDER BY created_at DESC, rowid DESC LIMIT ?';
+    queryParams.push(limit);
+
+    const { results } = await db.prepare(query).bind(...queryParams).all();
+    return { entries: results || [] };
   },
 };
 

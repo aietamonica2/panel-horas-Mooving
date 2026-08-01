@@ -8,10 +8,10 @@ import { HonoContext, ApiResponse, CloudflareEnv } from './types'
 import { handleBulkLoadCron } from './cron/bulk_load'
 import { handleEmailRemindersCron } from './cron/email_reminders'
 import { handleInactivityCron } from './cron/inactivity'
-
-// API_VERSION: única fuente de verdad interna para el campo `version` de las
-// respuestas. Mantener en sync con /VERSION (raíz del repo).
-const API_VERSION = 'v2.2.4'
+import { handleZendeskSyncCron } from './cron/zendesk_sync'
+// B1: la versión sale SIEMPRE de src/version.ts (única fuente de verdad,
+// en sync con /VERSION en la raíz del repo).
+import { APP_VERSION } from './version'
 
 const app = new Hono<{ Bindings: CloudflareEnv }>()
 
@@ -32,11 +32,11 @@ app.get('/', (c) => {
   const response: ApiResponse = {
     success: true,
     data: {
-      message: `Panel Horas API ${API_VERSION}`,
+      message: `Panel Horas API v${APP_VERSION}`,
       endpoints: ['/api/health', '/api/data/records', '/api/data/upload'],
     },
     timestamp: new Date().toISOString(),
-    version: API_VERSION,
+    version: APP_VERSION,
   }
   return c.json(response)
 })
@@ -47,7 +47,7 @@ app.notFound((c) => {
     success: false,
     error: 'Not found',
     timestamp: new Date().toISOString(),
-    version: API_VERSION,
+    version: APP_VERSION,
   }, 404)
 })
 
@@ -58,7 +58,7 @@ app.onError((err, c) => {
     success: false,
     error: err instanceof Error ? err.message : 'Internal server error',
     timestamp: new Date().toISOString(),
-    version: API_VERSION,
+    version: APP_VERSION,
   }, 500)
 })
 
@@ -66,7 +66,8 @@ app.onError((err, c) => {
  * Cloudflare Workers scheduled trigger.
  * Routes to the appropriate handler based on the trigger (cron expression /
  * trigger time). Keep these in sync with `[triggers] crons` in wrangler.toml:
- *   - Day 28 of month at 12:00 UTC   → Email reminders (syncs Clockify first)
+ *   - Day 28 of month at 12:00 UTC    → Email reminders (syncs Clockify first)
+ *   - Weekdays (Mon–Fri) at 10:30 UTC → Zendesk tickets sync (daily import)
  *   - Weekdays (Mon–Fri) at 09:00 UTC → Inactivity alerts (auto-send)
  *   - Tuesdays at 08:00 UTC           → Bulk load cron (default fallback)
  */
@@ -85,6 +86,19 @@ export async function scheduled(
     ctx.waitUntil(
       handleEmailRemindersCron(env).catch((err) =>
         console.error('[Scheduled] Email reminders cron error:', err)
+      )
+    );
+    return;
+  }
+
+  // Route: Weekdays (Mon–Fri) at 10:30 UTC → Zendesk tickets sync.
+  // Matched by the exact cron expression (precise) with an hour-based fallback,
+  // same pattern as the inactivity branch below.
+  if (event.cron === '30 10 * * 1-5' || hour === 10) {
+    console.log('[Scheduled] Triggering Zendesk-sync cron (weekdays 10:30 UTC)');
+    ctx.waitUntil(
+      handleZendeskSyncCron(env).catch((err) =>
+        console.error('[Scheduled] Zendesk-sync cron error:', err)
       )
     );
     return;

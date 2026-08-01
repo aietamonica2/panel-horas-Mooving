@@ -22,6 +22,19 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    // B3: 'hidden' genera los sourcemaps para debugging pero no los referencia
+    // desde los bundles públicos (no se descargan ni exponen en producción).
+    sourcemap: 'hidden',
+    rollupOptions: {
+      output: {
+        // B3: separa las libs pesadas del chunk principal. recharts (~400KB) y
+        // react solo cambian al actualizar deps, así el navegador los cachea
+        // entre deploys y el chunk de la app queda mucho más liviano.
+        manualChunks: {
+          recharts: ['recharts'],
+          react: ['react', 'react-dom'],
+        },
+      },
+    },
   },
 })

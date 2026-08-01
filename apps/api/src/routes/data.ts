@@ -8,12 +8,14 @@ import { zValidator } from '@hono/zod-validator'
 import { z } from 'zod'
 import { HonoContext, ApiResponse, TimeRecordPayload } from '../types'
 import { validateTimeRecord } from '../lib/policyValidation'
+import { logAudit, actorFromAuth } from '../lib/audit'
+// B1: la versión sale SIEMPRE de src/version.ts (única fuente de verdad,
+// en sync con /VERSION en la raíz del repo).
+import { APP_VERSION } from '../version'
 
 export const dataRouter = new Hono()
 
-// DATA_API_VERSION: única fuente de verdad para el campo `version` de las
-// respuestas de este router. Mantener en sync con /VERSION (raíz del repo).
-const DATA_API_VERSION = 'v2.2.4'
+const DATA_API_VERSION = APP_VERSION
 
 // Validation schema for time records
 const TimeRecordSchema = z.object({
@@ -163,6 +165,16 @@ dataRouter.post(
         resolveIsBillable(data), data.rate_usd ?? 0, data.amount_usd ?? 0, data.status ?? 'approved'
       ).run()
 
+      // N4: auditoría best-effort (logAudit nunca rompe el flujo principal).
+      await logAudit(c.env.DB, {
+        company_id,
+        ...actorFromAuth(authCtx),
+        action: 'create',
+        entity: 'time_record',
+        entity_id: id,
+        summary: `Creó registro ${data.duration_decimal}h de ${data.employee_name} (${data.date})`,
+      })
+
       return c.json({
         success: true,
         data: { id, message: 'Registro creado exitosamente' },
@@ -254,6 +266,16 @@ dataRouter.put(
         id, company_id
       ).run()
 
+      // N4: auditoría best-effort (logAudit nunca rompe el flujo principal).
+      await logAudit(c.env.DB, {
+        company_id,
+        ...actorFromAuth(authCtx),
+        action: 'update',
+        entity: 'time_record',
+        entity_id: id,
+        summary: `Editó registro ${data.duration_decimal}h de ${data.employee_name} (${data.date})`,
+      })
+
       return c.json({ success: true, timestamp: new Date().toISOString(), version: DATA_API_VERSION })
     } catch (error) {
       console.error(error)
@@ -285,7 +307,30 @@ dataRouter.delete('/records/:id', async (c: HonoContext): Promise<Response> => {
       }
     }
 
+    // N4: leemos el registro ANTES de borrarlo, sólo para armar el summary de
+    // auditoría. Best-effort: si falla, el summary cae al id.
+    let deletedInfo: any = null
+    try {
+      deletedInfo = await c.env.DB
+        .prepare('SELECT employee_id, employee_name, duration_decimal, date FROM time_records WHERE id = ? AND company_id = ?')
+        .bind(id, company_id)
+        .first()
+    } catch { /* best-effort */ }
+
     await c.env.DB.prepare('DELETE FROM time_records WHERE id = ? AND company_id = ?').bind(id, company_id).run()
+
+    // N4: auditoría best-effort (logAudit nunca rompe el flujo principal).
+    await logAudit(c.env.DB, {
+      company_id,
+      ...actorFromAuth(authCtx),
+      action: 'delete',
+      entity: 'time_record',
+      entity_id: id,
+      summary: deletedInfo
+        ? `Eliminó registro ${deletedInfo.duration_decimal}h de ${deletedInfo.employee_name || deletedInfo.employee_id} (${deletedInfo.date})`
+        : `Eliminó registro ${id}`,
+    })
+
     return c.json({ success: true, timestamp: new Date().toISOString(), version: DATA_API_VERSION })
   } catch (error) {
     console.error(error)

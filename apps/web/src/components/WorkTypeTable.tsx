@@ -1,17 +1,40 @@
 /**
- * WorkType Table Component (B9-FIX Generic Refactor)
- * Renders employee vs month breakdown for any specific work_type (internal, meeting, training, etc.)
+ * WorkType Table Component (B2 — tabla genérica consolidada)
+ *
+ * Renderiza el desglose Empleado × Mes para un tipo de trabajo (internal,
+ * meeting, training, etc.). Reemplaza a las antiguas InternalTasksTable y
+ * MeetingsTable, que eran ~95% idénticas entre sí.
+ *
+ * Es un componente "tonto": recibe registros (opcionalmente los filtra por
+ * work_type) y, si el contenedor lo pide, muestra una fila de chips con un
+ * desglose por sub-categoría ya calculado (p.ej. las sub-categorías de tareas
+ * internas que computa TimeBagSection).
  */
 
 import React from 'react'
 import { TimeRecord } from '../types'
+import { formatMonth } from '../utils/formatMonth'
+
+export interface SubcategoryBreakdownItem {
+  label: string
+  hours: number
+  count: number
+  color: string
+}
 
 interface WorkTypeTableProps {
   records: TimeRecord[]
-  workType?: 'internal' | 'meeting' | 'training' | 'project' | 'other'
+  /** Si se indica, filtra `records` por work_type; si no, los usa tal cual (ya pre-filtrados). */
+  workType?: TimeRecord['work_type']
   title: string
   icon?: string
+  /** Color de acento para los valores de horas y el total. */
   accentColor?: string
+  /** Texto del pie, p.ej. "Total de horas en tareas internas". */
+  footerLabel?: string
+  /** Chips opcionales de desglose por sub-categoría (calculado por el contenedor). */
+  breakdown?: SubcategoryBreakdownItem[]
+  breakdownTitle?: string
 }
 
 const MOOVING_COLORS = {
@@ -26,18 +49,15 @@ interface EmployeeMonthData {
   total: number
 }
 
-const MONTHS_ES: Record<string, string> = {
-  '01': 'Ene', '02': 'Feb', '03': 'Mar', '04': 'Abr',
-  '05': 'May', '06': 'Jun', '07': 'Jul', '08': 'Ago',
-  '09': 'Sep', '10': 'Oct', '11': 'Nov', '12': 'Dic'
-}
-
 export const WorkTypeTable: React.FC<WorkTypeTableProps> = ({
   records,
   workType,
   title,
   icon = '📋',
-  accentColor = '#6366f1'
+  accentColor = '#6366f1',
+  footerLabel = 'Total de horas',
+  breakdown,
+  breakdownTitle = 'Desglose por sub-categoría',
 }) => {
   const filteredRecords = workType ? records.filter(r => r.work_type === workType) : records
 
@@ -70,91 +90,121 @@ export const WorkTypeTable: React.FC<WorkTypeTableProps> = ({
       }
 
       const employeeMonths = employeeData.get(employee)!
-      const current = employeeMonths.get(month) || 0
-      employeeMonths.set(month, current + record.duration_decimal)
+      employeeMonths.set(month, (employeeMonths.get(month) || 0) + record.duration_decimal)
 
-      const currentMonth = monthTotals.get(month) || 0
-      monthTotals.set(month, currentMonth + record.duration_decimal)
+      monthTotals.set(month, (monthTotals.get(month) || 0) + record.duration_decimal)
     })
 
     const months = Array.from(allMonths).sort()
-
-    const employees: EmployeeMonthData[] = Array.from(employeeData.entries()).map(
-      ([employee, monthsMap]) => {
-        const total = Array.from(monthsMap.values()).reduce((sum, h) => sum + h, 0)
-        return { employee, months: monthsMap, total }
-      }
-    ).sort((a, b) => b.total - a.total)
+    const employees: EmployeeMonthData[] = Array.from(employeeData.entries())
+      .map(([employee, monthMap]) => ({
+        employee,
+        months: monthMap,
+        total: Array.from(monthMap.values()).reduce((a, b) => a + b, 0),
+      }))
+      .sort((a, b) => b.total - a.total)
 
     return { employees, months, monthTotals }
   }
 
   const { employees, months, monthTotals } = aggregateData()
-  const grandTotal = Array.from(monthTotals.values()).reduce((sum, h) => sum + h, 0)
-
-  const formatMonth = (ym: string) => {
-    const [year, month] = ym.split('-')
-    return `${MONTHS_ES[month] || month} ${year?.slice(2) || ''}`
-  }
+  const grandTotal = Array.from(monthTotals.values()).reduce((a, b) => a + b, 0)
 
   return (
-    <div className="bg-white rounded-xl shadow-md p-6 border-t-4" style={{ borderColor: accentColor }}>
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-bold flex items-center gap-2" style={{ color: MOOVING_COLORS.primary }}>
+    <div className="bg-white rounded-xl shadow-md overflow-hidden">
+      <div className="px-6 py-4 border-b" style={{ borderColor: MOOVING_COLORS.border }}>
+        <h3 className="text-lg font-semibold flex items-center gap-2" style={{ color: MOOVING_COLORS.primary }}>
           <span>{icon}</span> {title}
         </h3>
-        <span className="text-sm font-semibold px-3 py-1 bg-gray-100 rounded-full text-gray-700">
-          Total: {grandTotal.toFixed(1)}h
-        </span>
       </div>
 
+      {/* Desglose por sub-categoría (opcional) */}
+      {breakdown && breakdown.length > 0 && (
+        <div className="px-6 py-4 border-b" style={{ borderColor: MOOVING_COLORS.border }}>
+          <p className="text-sm font-semibold mb-3" style={{ color: MOOVING_COLORS.primary }}>
+            {breakdownTitle}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {breakdown.map(({ label, hours, count, color }) => (
+              <div
+                key={label}
+                className="flex items-center gap-2 rounded-full px-3 py-1.5 bg-gray-50 dark:bg-slate-700/40"
+                style={{ border: `1px solid ${color}33` }}
+              >
+                <span className="inline-block w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
+                <span className="text-xs font-medium text-gray-700 dark:text-gray-200">{label}</span>
+                <span className="text-xs font-bold" style={{ color }}>{hours.toFixed(1)}h</span>
+                <span className="text-[11px] text-gray-400">({count})</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr style={{ background: accentColor, color: 'white' }}>
-              <th className="px-4 py-3 text-left font-semibold rounded-tl-lg">Empleado</th>
-              {months.map(m => (
-                <th key={m} className="px-3 py-3 text-center font-semibold whitespace-nowrap">
-                  {formatMonth(m)}
+        <table className="w-full text-sm">
+          <thead style={{ backgroundColor: MOOVING_COLORS.lightBg }}>
+            <tr>
+              <th className="px-6 py-3 text-left font-semibold" style={{ color: MOOVING_COLORS.primary }}>
+                Empleado
+              </th>
+              {months.map(month => (
+                <th
+                  key={month}
+                  className="px-4 py-3 text-center font-semibold whitespace-nowrap"
+                  style={{ color: MOOVING_COLORS.primary }}
+                >
+                  {formatMonth(month)}
                 </th>
               ))}
-              <th className="px-4 py-3 text-right font-semibold rounded-tr-lg">Total</th>
+              <th className="px-6 py-3 text-center font-semibold" style={{ color: MOOVING_COLORS.primary }}>
+                Total
+              </th>
             </tr>
           </thead>
           <tbody>
-            {employees.map((emp, index) => (
+            {employees.map((emp, idx) => (
               <tr
                 key={emp.employee}
-                className={index % 2 === 0 ? 'bg-white' : 'bg-slate-50'}
-                style={{ borderBottom: `1px solid ${MOOVING_COLORS.border}` }}
+                style={{
+                  backgroundColor: idx % 2 === 0 ? '#fff' : MOOVING_COLORS.lightBg,
+                  borderBottom: `1px solid ${MOOVING_COLORS.border}`,
+                }}
               >
-                <td className="px-4 py-3 font-medium text-gray-900">{emp.employee}</td>
-                {months.map(m => {
-                  const hours = emp.months.get(m) || 0
-                  return (
-                    <td key={m} className="px-3 py-3 text-center text-gray-600">
-                      {hours > 0 ? `${hours.toFixed(1)}h` : '-'}
-                    </td>
-                  )
-                })}
-                <td className="px-4 py-3 text-right font-bold text-gray-900">
+                <td className="px-6 py-3 font-medium text-gray-900">{emp.employee}</td>
+                {months.map(month => (
+                  <td key={`${emp.employee}-${month}`} className="px-4 py-3 text-center">
+                    <span style={{ color: accentColor, fontWeight: '600' }}>
+                      {(emp.months.get(month) || 0).toFixed(1)}h
+                    </span>
+                  </td>
+                ))}
+                <td className="px-6 py-3 text-center font-bold" style={{ color: accentColor }}>
                   {emp.total.toFixed(1)}h
                 </td>
               </tr>
             ))}
-            <tr className="bg-slate-100 font-bold border-t-2 border-slate-300">
-              <td className="px-4 py-3 text-gray-900">Total General</td>
-              {months.map(m => (
-                <td key={m} className="px-3 py-3 text-center text-gray-900">
-                  {(monthTotals.get(m) || 0).toFixed(1)}h
+            {/* Total Row */}
+            <tr style={{ backgroundColor: MOOVING_COLORS.lightBg, fontWeight: 'bold' }}>
+              <td className="px-6 py-3">Total por Mes</td>
+              {months.map(month => (
+                <td key={`total-${month}`} className="px-4 py-3 text-center">
+                  <span style={{ color: accentColor }}>
+                    {(monthTotals.get(month) || 0).toFixed(1)}h
+                  </span>
                 </td>
               ))}
-              <td className="px-4 py-3 text-right text-gray-900">
+              <td className="px-6 py-3 text-center" style={{ color: accentColor }}>
                 {grandTotal.toFixed(1)}h
               </td>
             </tr>
           </tbody>
         </table>
+      </div>
+      <div className="px-6 py-4 bg-gray-50 text-sm text-gray-600">
+        <p>
+          {footerLabel}: <strong style={{ color: accentColor }}>{grandTotal.toFixed(1)}h</strong> en {employees.length} empleados
+        </p>
       </div>
     </div>
   )

@@ -28,5 +28,9 @@ ALERT_FROM_EMAIL = "notificaciones@mooving.cloud"
 # Cron 3 ("0 9 * * 1-5"):  Inactivity alerts — weekdays (Mon–Fri) at 09:00 UTC. Auto-sends
 #                          alerts to employees with no hours in the last INACTIVITY_DAYS
 #                          days (default 3, configurable via the INACTIVITY_DAYS var).
+# Cron 4 ("30 10 * * 1-5"): Zendesk tickets sync — weekdays (Mon–Fri) at 10:30 UTC.
+#                          Imports solved Zendesk tickets as time records (1h per
+#                          ticket). Graceful no-op if the ZENDESK_* credentials
+#                          (Worker secrets) are not configured.
 [triggers]
-crons = ["0 8 * * 2", "0 12 28 * *", "0 9 * * 1-5"]
+crons = ["0 8 * * 2", "0 12 28 * *", "0 9 * * 1-5", "30 10 * * 1-5"]

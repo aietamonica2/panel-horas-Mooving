@@ -16,8 +16,8 @@ import { TimeBagSection } from './TimeBagSection'
 import { EmployeeWorkloadBreakdown } from './EmployeeWorkloadBreakdown'
 import { ClientMonthlyDistribution } from './ClientMonthlyDistribution'
 import { EmployeeAvailability } from './EmployeeAvailability'
-import { BagOfHoursTable } from './BagOfHoursTable'
 import { AnalyticsCharts } from './AnalyticsCharts'
+import { ClientRankingMoM } from './ClientRankingMoM'
 import { QuickLogModal } from './QuickLogModal'
 import { EditRecordModal } from './EditRecordModal'
 import { EmailRemindersModal } from './EmailRemindersModal'
@@ -391,6 +391,9 @@ export const Dashboard: React.FC = () => {
     const daysInMonth = new Date(y, mo + 1, 0).getDate()
     const totalBiz = countBiz(1, daysInMonth)
     const remainingBiz = countBiz(today, daysInMonth) // incluye hoy
+    // N6: días hábiles TRANSCURRIDOS del mes (hoy incluido) para la card de
+    // Capacidad del Equipo: esperado a la fecha vs registrado del mes.
+    const elapsedBiz = countBiz(1, today)
 
     // U5: el forecast es una métrica de EQUIPO, así que usa `records` sin filtrar
     // tanto en el numerador (horas del mes) como en el denominador (capacidad del
@@ -411,6 +414,13 @@ export const Dashboard: React.FC = () => {
     const expectedFull = teamDaily * totalBiz
     const pctOfExpected = expectedFull > 0 ? (forecastTotal / expectedFull) * 100 : null
 
+    // N6: Capacidad del Equipo a la fecha (mes en curso). Misma base de EQUIPO
+    // que el forecast (`records` sin filtrar + capacidad diaria de activos):
+    // esperado a la fecha = Σ daily_hours_expected × días hábiles transcurridos.
+    const expectedToDate = teamDaily * elapsedBiz
+    const capacityDelta = registered - expectedToDate
+    const capacityPct = expectedToDate > 0 ? (registered / expectedToDate) * 100 : null
+
     return {
       monthKey,
       registered,
@@ -420,6 +430,10 @@ export const Dashboard: React.FC = () => {
       totalBiz,
       teamDaily,
       pctOfExpected,
+      elapsedBiz,
+      expectedToDate,
+      capacityDelta,
+      capacityPct,
       hasData: monthRecords.length > 0,
     }
   }, [records, allEmployeesList, employeeCapacities])
@@ -828,6 +842,46 @@ export const Dashboard: React.FC = () => {
             </div>
             <p className="text-xs text-gray-400 mt-4">en cartera</p>
           </div>
+
+          {/* N6: Capacidad del Equipo — mes en curso, métrica de EQUIPO (records
+              sin filtrar, igual que el forecast): registradas vs esperadas a la
+              fecha (Σ daily_hours_expected × días hábiles transcurridos). */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 hover:shadow-lg transition">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-gray-500 dark:text-gray-300 text-sm font-medium">Capacidad del Equipo</p>
+                <p
+                  className={`text-4xl font-bold mt-2 ${
+                    forecast.capacityPct === null
+                      ? 'text-gray-400 dark:text-gray-500'
+                      : forecast.capacityPct >= 90
+                        ? 'text-emerald-600 dark:text-emerald-400'
+                        : forecast.capacityPct >= 70
+                          ? 'text-amber-600 dark:text-amber-400'
+                          : 'text-red-600 dark:text-red-400'
+                  }`}
+                  title={`Horas registradas del mes vs esperadas a la fecha (${forecast.elapsedBiz} días hábiles transcurridos, hoy incluido)`}
+                >
+                  {forecast.capacityPct !== null ? `${forecast.capacityPct.toFixed(0)}%` : '—'}
+                </p>
+              </div>
+              <div className="text-4xl">🎯</div>
+            </div>
+            <p className="text-xs text-gray-400 mt-4">
+              {forecast.registered.toFixed(1)}h registradas vs {forecast.expectedToDate.toFixed(1)}h esperadas · {fmtMonthKey(forecast.monthKey)}
+            </p>
+            {forecast.expectedToDate > 0 && (
+              <p
+                className={`text-xs mt-1 font-semibold ${
+                  forecast.capacityDelta >= 0
+                    ? 'text-emerald-600 dark:text-emerald-400'
+                    : 'text-red-600 dark:text-red-400'
+                }`}
+              >
+                Δ {forecast.capacityDelta >= 0 ? '+' : ''}{forecast.capacityDelta.toFixed(1)}h · {forecast.elapsedBiz} días hábiles transcurridos
+              </p>
+            )}
+          </div>
         </div>
 
         {/* Forecast de cierre de mes (E0-07 / E3-02) */}
@@ -1167,13 +1221,6 @@ export const Dashboard: React.FC = () => {
           </div>
         )}
 
-        {/* Bag of Hours Table - NEW in Phase 2 */}
-        {records.length > 0 && (
-          <div className="mt-8">
-            <BagOfHoursTable records={filteredRecords} />
-          </div>
-        )}
-
         {/* Client Contracts & Retainers (Epic 4) */}
         {records.length > 0 && (
           <div className="mt-8">
@@ -1185,6 +1232,14 @@ export const Dashboard: React.FC = () => {
         {records.length > 0 && (
           <div className="mt-8">
             <AnalyticsCharts records={filteredRecords} />
+          </div>
+        )}
+
+        {/* N1: Ranking de clientes MoM — métrica de equipo del mes corriente,
+            alimentado con `records` SIN filtrar (no depende de los filtros). */}
+        {records.length > 0 && (
+          <div className="mt-8">
+            <ClientRankingMoM records={records} />
           </div>
         )}
 

@@ -1,12 +1,26 @@
 /**
  * Time Bag Section Component
  * Displays internal tasks and team meetings hours
+ *
+ * B2: ambas tablas (internas y reuniones) se renderizan con el componente
+ * genérico WorkTypeTable (reemplaza a InternalTasksTable/MeetingsTable).
+ * N2: incluye un gráfico apilado mensual (proyecto vs overhead vs capacitación).
  */
 
 import React from 'react'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts'
 import { TimeRecord } from '../types'
-import { InternalTasksTable } from './InternalTasksTable'
-import { MeetingsTable } from './MeetingsTable'
+import { WorkTypeTable } from './WorkTypeTable'
+import { formatMonth } from '../utils/formatMonth'
 
 interface TimeBagSectionProps {
   records: TimeRecord[]
@@ -88,6 +102,40 @@ function summarizeInternalSubcategories(
     .map(cat => ({ cat, hours: hoursByCat.get(cat) || 0, count: countByCat.get(cat) || 0 }))
 }
 
+// --- Composición mensual (N2) ---------------------------------------------
+// La sección recibe TODOS los registros filtrados del Dashboard (todos los
+// work_type); acá se apilan por mes: proyecto vs overhead (internal + meeting)
+// vs capacitación (training).
+interface MonthlyCompositionRow {
+  month: string // YYYY-MM
+  proyecto: number
+  overhead: number
+  capacitacion: number
+}
+
+/** Agrupa horas por mes en las tres series del gráfico apilado. */
+function buildMonthlyComposition(records: TimeRecord[]): MonthlyCompositionRow[] {
+  const byMonth = new Map<string, MonthlyCompositionRow>()
+  records.forEach(r => {
+    const month = r.date.substring(0, 7) // YYYY-MM
+    if (!byMonth.has(month)) {
+      byMonth.set(month, { month, proyecto: 0, overhead: 0, capacitacion: 0 })
+    }
+    const row = byMonth.get(month)!
+    if (r.work_type === 'project') {
+      row.proyecto += r.duration_decimal
+    } else if (r.work_type === 'internal' || r.work_type === 'meeting') {
+      row.overhead += r.duration_decimal
+    } else if (r.work_type === 'training') {
+      row.capacitacion += r.duration_decimal
+    }
+    // work_type 'other' queda fuera de las tres series definidas
+  })
+  return Array.from(byMonth.values())
+    .filter(row => row.proyecto > 0 || row.overhead > 0 || row.capacitacion > 0)
+    .sort((a, b) => a.month.localeCompare(b.month))
+}
+
 export const TimeBagSection: React.FC<TimeBagSectionProps> = ({ records }) => {
   // Filter records by work type
   const internalTasks = records.filter(r => r.work_type === 'internal')
@@ -100,6 +148,9 @@ export const TimeBagSection: React.FC<TimeBagSectionProps> = ({ records }) => {
 
   // Desglose de tareas internas por sub-categoría (derivado de la descripción)
   const internalBreakdown = summarizeInternalSubcategories(internalTasks)
+
+  // Composición mensual apilada: proyecto vs overhead vs capacitación (N2)
+  const monthlyComposition = buildMonthlyComposition(records)
 
   // Only show section if there's data
   if (internalTasks.length === 0 && meetings.length === 0) {
@@ -169,6 +220,47 @@ export const TimeBagSection: React.FC<TimeBagSectionProps> = ({ records }) => {
         </div>
       </div>
 
+      {/* Composición Mensual Apilada (N2) */}
+      {monthlyComposition.length > 0 && (
+        <div className="bg-white rounded-xl shadow-md p-6 mb-8">
+          <h3 className="text-lg font-semibold mb-1" style={{ color: MOOVING_COLORS.primary }}>
+            📊 Composición mensual
+          </h3>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+            Horas de proyecto vs overhead (internas + reuniones) vs capacitación por mes
+          </p>
+          <ResponsiveContainer width="100%" height={280}>
+            <BarChart data={monthlyComposition} margin={{ top: 10, right: 20, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={MOOVING_COLORS.border} />
+              <XAxis dataKey="month" tickFormatter={formatMonth} stroke={MOOVING_COLORS.primary} />
+              <YAxis
+                stroke={MOOVING_COLORS.primary}
+                label={{ value: 'Horas', angle: -90, position: 'insideLeft' }}
+              />
+              <Tooltip
+                labelFormatter={(label: string | number) => formatMonth(String(label))}
+                formatter={(value: number | string) => `${Number(value).toFixed(1)}h`}
+                contentStyle={{
+                  backgroundColor: '#fff',
+                  border: `2px solid ${MOOVING_COLORS.secondary}`,
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+                }}
+              />
+              <Legend />
+              <Bar dataKey="proyecto" name="Proyecto" stackId="mes" fill={MOOVING_COLORS.primary} />
+              <Bar
+                dataKey="overhead"
+                name="Overhead (internas + reuniones)"
+                stackId="mes"
+                fill={MOOVING_COLORS.secondary}
+              />
+              <Bar dataKey="capacitacion" name="Capacitación" stackId="mes" fill={MOOVING_COLORS.info} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
       {/* Desglose de Tareas Internas por Sub-categoría */}
       {internalBreakdown.length > 0 && (
         <div className="bg-white dark:bg-slate-800 rounded-xl shadow-md p-6 mb-8">
@@ -204,17 +296,35 @@ export const TimeBagSection: React.FC<TimeBagSectionProps> = ({ records }) => {
         </div>
       )}
 
-      {/* Internal Tasks Table */}
+      {/* Internal Tasks Table (B2: tabla genérica) */}
       {internalTasks.length > 0 && (
         <div className="mb-8">
-          <InternalTasksTable records={internalTasks} />
+          <WorkTypeTable
+            records={internalTasks}
+            title="Tareas Internas por Empleado y Mes"
+            icon="⚙️"
+            accentColor={MOOVING_COLORS.internalColor}
+            footerLabel="Total de horas en tareas internas"
+            breakdown={internalBreakdown.map(({ cat, hours, count }) => ({
+              label: cat,
+              hours,
+              count,
+              color: SUBCATEGORY_COLORS[cat] || MOOVING_COLORS.internalColor,
+            }))}
+          />
         </div>
       )}
 
-      {/* Meetings Table */}
+      {/* Meetings Table (B2: tabla genérica) */}
       {meetings.length > 0 && (
         <div className="mb-8">
-          <MeetingsTable records={meetings} />
+          <WorkTypeTable
+            records={meetings}
+            title="Reuniones de Equipo por Empleado y Mes"
+            icon="👥"
+            accentColor={MOOVING_COLORS.meetingColor}
+            footerLabel="Total de horas en reuniones"
+          />
         </div>
       )}
 
