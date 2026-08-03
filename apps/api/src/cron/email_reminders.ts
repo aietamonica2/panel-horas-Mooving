@@ -14,6 +14,8 @@
 
 import { Env } from '../types';
 import { loadTemplate, renderTemplate, buildEmployeeHoursResolver } from '../mcp/email_templates';
+// B5: resolvedor canónico de identidad → time_records.employee_key en la ingesta.
+import { loadIdentityResolver } from '../lib/identity';
 
 /**
  * Sends an email via SendGrid API v3.
@@ -141,6 +143,12 @@ async function syncClockifyForTenant(
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '');
 
+  // B5: padrón (employees + aliases) cargado UNA vez por sync, no por fila.
+  // Resuelve el employees.id canónico (employee_key) de cada entrada de Clockify;
+  // NULL si el userName no matchea ninguna ficha (nunca se inventa).
+  const resolveIdentity = await loadIdentityResolver(db, companyId);
+  const empKeyCache: Record<string, string | null> = {};
+
   let inserted = 0;
   let totalHours = 0;
   let page = 1;
@@ -185,6 +193,11 @@ async function syncClockifyForTenant(
         : now.toISOString().split('T')[0];
 
       const employeeName = entry.userName || 'Desconocido';
+      // B5: employee_key canónico (memoizado por nombre para no re-resolver por fila).
+      if (!(employeeName in empKeyCache)) {
+        empKeyCache[employeeName] = resolveIdentity(sanitizeId(employeeName), employeeName);
+      }
+      const employeeKey = empKeyCache[employeeName];
       const clientName = entry.clientName || 'Sin Cliente';
       const projectName = entry.projectName || 'Sin Proyecto';
       const desc = entry.description || '';
@@ -209,16 +222,17 @@ async function syncClockifyForTenant(
         const res = await db
           .prepare(
             `INSERT OR IGNORE INTO time_records (
-              id, company_id, employee_id, employee_name, client_id, client_name,
+              id, company_id, employee_id, employee_name, employee_key, client_id, client_name,
               project_id, project_name, duration_decimal, duration_hours, duration_minutes,
               date, work_type, description, source
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
           )
           .bind(
             id,
             companyId,
             sanitizeId(employeeName),
             employeeName,
+            employeeKey,
             sanitizeId(clientName),
             clientName,
             sanitizeId(projectName),
@@ -333,9 +347,11 @@ export async function handleEmailRemindersCron(env: Env): Promise<void> {
     // Fetch hours per employee for the current month + aliases, for a ROBUST match
     // (mismo resolvedor que get_email_reminder_drafts). Sin esto varias personas
     // recibían "0h" en el mail automático por diferencias de formato/acentos.
+    // B5: employee_key (identidad canónica) sumado al SELECT/GROUP BY para que el
+    // resolvedor matchee directo por employees.id cuando está seteado.
     const { results: records } = await db
       .prepare(
-        'SELECT employee_id, employee_name, SUM(duration_decimal) as total_hours FROM time_records WHERE company_id = ? AND date LIKE ? GROUP BY employee_id, employee_name',
+        'SELECT employee_id, employee_name, employee_key, SUM(duration_decimal) as total_hours FROM time_records WHERE company_id = ? AND date LIKE ? GROUP BY employee_id, employee_name, employee_key',
       )
       .bind(companyId, `${targetMonth}-%`)
       .all();

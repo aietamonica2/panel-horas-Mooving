@@ -130,31 +130,13 @@ const normalizeRevenue = (input: unknown): RevenueRow[] => {
 }
 
 export const Dashboard: React.FC = () => {
-  const { records, filters, setFilters, getFilteredRecords, clearFilters, selectedSources, setSelectedSources } = useDataStore()
+  // B7: los filtros viven SOLO en el store (única fuente de verdad). El Dashboard
+  // no mantiene useState espejo ni useEffect de sincronización: lee `filters` y
+  // los componentes de filtrado (FilterPanel) mutan el store directamente.
+  const { records, filters, getFilteredRecords } = useDataStore()
   const [csvFile, setCsvFile] = useState<File | null>(null)
   const [isQuickLogOpen, setIsQuickLogOpen] = useState(false)
   const [isEmailModalOpen, setIsEmailModalOpen] = useState(false)
-
-  
-  // Multi-select filter states
-  const [selectedMonths, setSelectedMonths] = useState<string[]>([])
-  const [selectedEmployees, setSelectedEmployees] = useState<string[]>([])
-  const [selectedClients, setSelectedClients] = useState<string[]>([])
-  const [selectedProjects, setSelectedProjects] = useState<string[]>([])
-  const [selectedCategories, setSelectedCategories] = useState<string[]>(['project', 'internal', 'meeting', 'training', 'other'])
-  // Date Range filter state
-  const [startDate, setStartDate] = useState<string>('')
-  const [endDate, setEndDate] = useState<string>('')
-
-  const handleStartDateChange = (date: string) => {
-    setStartDate(date)
-    setFilters({ dateRangeStart: date })
-  }
-
-  const handleEndDateChange = (date: string) => {
-    setEndDate(date)
-    setFilters({ dateRangeEnd: date })
-  }
   const [aiMessage, setAiMessage] = useState<string | null>(null)
   const [auditResults, setAuditResults] = useState<{ status: string; anomalies_found: { issue: string; user: string }[] } | null>(null)
   const [isAuditModalOpen, setIsAuditModalOpen] = useState(false)
@@ -173,12 +155,13 @@ export const Dashboard: React.FC = () => {
   const isAdmin = (localStorage.getItem('mooving_user_role') || 'employee') === 'admin'
   const pageSize = 15
 
-  // ARCH-04: memoizar el resultado de filtrado. getFilteredRecords lee records,
-  // filters y selectedSources del store vía get(); recomputamos solo cuando esas
-  // entradas cambian, evitando arrays nuevos en cada render que re-renderizan hijos.
+  // ARCH-04 + B7: memoizar el resultado de filtrado por rendimiento, pero SIN
+  // duplicar lógica: el memo invoca getFilteredRecords() del store, que a su vez
+  // delega en applyFilters() (única implementación del filtrado). Recomputamos
+  // solo cuando cambian records o filters, evitando arrays nuevos en cada render.
   const filteredRecords = useMemo(
     () => getFilteredRecords(),
-    [records, filters, selectedSources, getFilteredRecords]
+    [records, filters, getFilteredRecords]
   )
 
   // Senda AI action handler via MCP
@@ -225,18 +208,6 @@ export const Dashboard: React.FC = () => {
     } finally {
       setTimeout(() => setAiMessage(null), 6000)
     }
-  }
-
-  // Reset filters
-  const handleResetFilters = () => {
-    setSelectedMonths([])
-    setSelectedEmployees([])
-    setSelectedClients([])
-    setSelectedProjects([])
-    setSelectedCategories(['project', 'internal', 'meeting', 'training', 'other'])
-    setStartDate('')
-    setEndDate('')
-    clearFilters()
   }
 
   const [allEmployeesList, setAllEmployeesList] = useState<{ id: string; name: string; is_active?: number }[]>([])
@@ -313,23 +284,14 @@ export const Dashboard: React.FC = () => {
     }
   }, [isDarkMode])
 
-  // Sync state filters to Zustand store (consolidated to prevent cascading re-renders)
-  React.useEffect(() => {
-    setFilters({
-      months: selectedMonths,
-      employees: selectedEmployees,
-      clients: selectedClients,
-      projects: selectedProjects,
-      workTypes: selectedCategories
-    })
-    setCurrentPage(1)
-  }, [selectedMonths, selectedEmployees, selectedClients, selectedProjects, selectedCategories, setFilters])
-
-  // A1: el filtro por fuente vive directo en el store (selectedSources); al
-  // cambiar, solo reseteamos la paginación de la tabla como el resto de filtros.
+  // B7: los filtros ya viven solo en el store, así que acá no hay nada que
+  // sincronizar. Único efecto derivado: al cambiar CUALQUIER filtro (meses,
+  // empleados, clientes, proyectos, categorías, fuentes o rango de fechas) se
+  // resetea la paginación de la tabla. `filters` cambia de identidad en cada
+  // setFilters/clearFilters, por lo que basta con observarlo.
   React.useEffect(() => {
     setCurrentPage(1)
-  }, [selectedSources])
+  }, [filters])
 
   // ARCH-04: KPIs agregados memoizados (una sola pasada por deps estables).
   const { totalHours, avgHours, uniqueEmployees, uniqueClients } = useMemo(() => {
@@ -747,28 +709,8 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
 
-        {records.length > 0 && (
-          <FilterPanel
-            records={records}
-            selectedMonths={selectedMonths}
-            selectedEmployees={selectedEmployees}
-            selectedClients={selectedClients}
-            selectedProjects={selectedProjects}
-            selectedCategories={selectedCategories}
-            selectedSources={selectedSources}
-            startDate={startDate}
-            endDate={endDate}
-            onMonthsChange={setSelectedMonths}
-            onEmployeesChange={setSelectedEmployees}
-            onClientsChange={setSelectedClients}
-            onProjectsChange={setSelectedProjects}
-            onCategoriesChange={setSelectedCategories}
-            onSourcesChange={setSelectedSources}
-            onStartDateChange={handleStartDateChange}
-            onEndDateChange={handleEndDateChange}
-            onReset={handleResetFilters}
-          />
-        )}
+        {/* B7: FilterPanel consume el store directamente (cero props espejo) */}
+        {records.length > 0 && <FilterPanel />}
 
         {/* Inactivity Alert Banner (Epic 1) */}
         <InactivityAlertBanner

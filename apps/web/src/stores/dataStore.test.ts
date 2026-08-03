@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { useDataStore } from './dataStore'
-import { TimeRecord } from '../types'
+import { useDataStore, applyFilters, createInitialFilters, DEFAULT_WORK_TYPES } from './dataStore'
+import { FilterState, TimeRecord } from '../types'
 
 const mockRecords: TimeRecord[] = [
   {
@@ -62,20 +62,24 @@ const mockRecords: TimeRecord[] = [
   }
 ]
 
+// Baseline sin NINGÚN filtro activo (workTypes: [] ⇒ sin filtro por categoría),
+// equivalente al estado que usaban estos tests antes de la consolidación B7.
+const emptyFilters = (): FilterState => ({
+  dateRangeStart: '',
+  dateRangeEnd: '',
+  employees: [],
+  clients: [],
+  projects: [],
+  workTypes: [],
+  months: [],
+  sources: []
+})
+
 describe('dataStore Filters', () => {
   beforeEach(() => {
     useDataStore.setState({
       records: mockRecords,
-      selectedSources: [],
-      filters: {
-        dateRangeStart: '',
-        dateRangeEnd: '',
-        employees: [],
-        clients: [],
-        projects: [],
-        workTypes: [],
-        months: []
-      }
+      filters: emptyFilters()
     })
   })
 
@@ -107,14 +111,14 @@ describe('dataStore Filters', () => {
     expect(filtered[0].project_id).toBe('proj1')
   })
 
-  describe('source filter (selectedSources)', () => {
+  describe('source filter (filters.sources)', () => {
     it('returns all records when no source is selected', () => {
       const filtered = useDataStore.getState().getFilteredRecords()
       expect(filtered).toHaveLength(3)
     })
 
     it('filters records by a single source', () => {
-      useDataStore.getState().setSelectedSources(['clockify'])
+      useDataStore.getState().setFilters({ sources: ['clockify'] })
       const filtered = useDataStore.getState().getFilteredRecords()
       expect(filtered).toHaveLength(1)
       expect(filtered[0].id).toBe('1')
@@ -122,42 +126,124 @@ describe('dataStore Filters', () => {
     })
 
     it('filters records by multiple sources', () => {
-      useDataStore.getState().setSelectedSources(['clockify', 'senda_ai'])
+      useDataStore.getState().setFilters({ sources: ['clockify', 'senda_ai'] })
       const filtered = useDataStore.getState().getFilteredRecords()
       expect(filtered).toHaveLength(2)
       expect(filtered.map(r => r.id).sort()).toEqual(['1', '3'])
     })
 
     it('treats records without source as manual', () => {
-      useDataStore.getState().setSelectedSources(['manual'])
+      useDataStore.getState().setFilters({ sources: ['manual'] })
       const filtered = useDataStore.getState().getFilteredRecords()
       expect(filtered).toHaveLength(1)
       expect(filtered[0].id).toBe('2')
     })
 
     it('returns no records for a source with no matches', () => {
-      useDataStore.getState().setSelectedSources(['zendesk'])
+      useDataStore.getState().setFilters({ sources: ['zendesk'] })
       const filtered = useDataStore.getState().getFilteredRecords()
       expect(filtered).toHaveLength(0)
     })
 
     it('combines source filter with other filters', () => {
       useDataStore.getState().setFilters({ employees: ['emp1'] })
-      useDataStore.getState().setSelectedSources(['clockify'])
+      useDataStore.getState().setFilters({ sources: ['clockify'] })
       expect(useDataStore.getState().getFilteredRecords()).toHaveLength(1)
 
       // emp1 tiene source clockify, así que filtrar emp1 + manual no matchea nada
-      useDataStore.getState().setSelectedSources(['manual'])
+      useDataStore.getState().setFilters({ sources: ['manual'] })
       expect(useDataStore.getState().getFilteredRecords()).toHaveLength(0)
     })
 
-    it('clearFilters resets selectedSources', () => {
-      useDataStore.getState().setSelectedSources(['clockify'])
+    it('clearFilters resets the sources filter', () => {
+      useDataStore.getState().setFilters({ sources: ['clockify'] })
       expect(useDataStore.getState().getFilteredRecords()).toHaveLength(1)
 
       useDataStore.getState().clearFilters()
-      expect(useDataStore.getState().selectedSources).toEqual([])
+      expect(useDataStore.getState().filters.sources).toEqual([])
       expect(useDataStore.getState().getFilteredRecords()).toHaveLength(3)
+    })
+  })
+
+  // B7: cobertura del estado consolidado — todos los filtros viven en filters
+  describe('consolidated filter state (B7)', () => {
+    it('filters records by work type (categorías)', () => {
+      useDataStore.getState().setFilters({ workTypes: ['internal'] })
+      const filtered = useDataStore.getState().getFilteredRecords()
+      expect(filtered).toHaveLength(1)
+      expect(filtered[0].work_type).toBe('internal')
+    })
+
+    it('empty workTypes means no category filtering (legacy quirk preserved)', () => {
+      useDataStore.getState().setFilters({ workTypes: [] })
+      expect(useDataStore.getState().getFilteredRecords()).toHaveLength(3)
+    })
+
+    it('filters records by date range (start and end inclusive)', () => {
+      useDataStore.getState().setFilters({ dateRangeStart: '2026-06-01' })
+      expect(useDataStore.getState().getFilteredRecords().map(r => r.id).sort()).toEqual(['2', '3'])
+
+      useDataStore.getState().setFilters({ dateRangeEnd: '2026-06-15' })
+      const filtered = useDataStore.getState().getFilteredRecords()
+      expect(filtered).toHaveLength(1)
+      expect(filtered[0].id).toBe('2')
+    })
+
+    it('filters records by full month key YYYY-MM', () => {
+      useDataStore.getState().setFilters({ months: ['2026-05'] })
+      const filtered = useDataStore.getState().getFilteredRecords()
+      expect(filtered).toHaveLength(1)
+      expect(filtered[0].id).toBe('1')
+    })
+
+    it('setFilters merges partially without clobbering other filters', () => {
+      useDataStore.getState().setFilters({ employees: ['emp1', 'emp2'] })
+      useDataStore.getState().setFilters({ months: ['2026-05', '2026-06'] })
+      const { filters } = useDataStore.getState()
+      expect(filters.employees).toEqual(['emp1', 'emp2'])
+      expect(filters.months).toEqual(['2026-05', '2026-06'])
+      expect(useDataStore.getState().getFilteredRecords().map(r => r.id).sort()).toEqual(['1', '2'])
+    })
+
+    it('clearFilters restores the full initial filter state (workTypes back to default)', () => {
+      useDataStore.getState().setFilters({
+        employees: ['emp1'],
+        clients: ['cli1'],
+        projects: ['proj1'],
+        months: ['2026-05'],
+        workTypes: ['internal'],
+        sources: ['clockify'],
+        dateRangeStart: '2026-01-01',
+        dateRangeEnd: '2026-12-31'
+      })
+      useDataStore.getState().clearFilters()
+
+      const { filters } = useDataStore.getState()
+      expect(filters).toEqual(createInitialFilters())
+      expect(filters.workTypes).toEqual(DEFAULT_WORK_TYPES)
+      // Con el default (todas las categorías seleccionadas) no se excluye ningún registro
+      expect(useDataStore.getState().getFilteredRecords()).toHaveLength(3)
+    })
+
+    it('default workTypes includes every known category', () => {
+      expect(DEFAULT_WORK_TYPES).toEqual(['project', 'internal', 'meeting', 'training', 'other'])
+      // createInitialFilters devuelve copias frescas (sin aliasing mutable)
+      const a = createInitialFilters()
+      const b = createInitialFilters()
+      expect(a.workTypes).toEqual(b.workTypes)
+      expect(a.workTypes).not.toBe(b.workTypes)
+    })
+
+    it('applyFilters is the single shared implementation used by getFilteredRecords', () => {
+      const filters: FilterState = { ...emptyFilters(), employees: ['emp3'], sources: ['senda_ai'] }
+      // Función pura: mismo resultado con los mismos inputs, sin tocar el store
+      const pure = applyFilters(mockRecords, filters)
+      expect(pure.map(r => r.id)).toEqual(['3'])
+
+      useDataStore.getState().setFilters({ employees: ['emp3'], sources: ['senda_ai'] })
+      expect(useDataStore.getState().getFilteredRecords()).toEqual(pure)
+      // No muta el array original
+      expect(mockRecords).toHaveLength(3)
     })
   })
 })

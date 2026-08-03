@@ -54,14 +54,22 @@ export interface DashboardMetrics {
   team_availability_hours: number
 }
 
+/**
+ * B7: única fuente de verdad de TODOS los filtros del Dashboard.
+ * Vive completa en el store (useDataStore.filters); ningún componente
+ * mantiene copias locales sincronizadas.
+ */
 export interface FilterState {
   dateRangeStart: string
   dateRangeEnd: string
   employees: string[]
   clients: string[]
   projects: string[]
+  /** Categorías (work_type). Por defecto TODAS seleccionadas; [] ⇒ sin filtro. */
   workTypes: string[]
   months: string[]
+  /** Filtro por fuente de los registros (raw `source`; sin source ⇒ 'manual') */
+  sources: string[]
 }
 
 export interface AppState {
@@ -69,8 +77,6 @@ export interface AppState {
   employees: Employee[]
   clients: Client[]
   filters: FilterState
-  /** Filtro por fuente de los registros (raw `source`; sin source ⇒ 'manual') */
-  selectedSources: string[]
   isLoading: boolean
   error: string | null
   version: string

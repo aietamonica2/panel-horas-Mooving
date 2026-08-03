@@ -11,6 +11,10 @@ import {
 import { syncZendeskTickets } from './zendesk';
 // N4: auditoría best-effort de escrituras (nunca rompe el flujo principal).
 import { logAudit, actorFromAuth } from '../lib/audit';
+// B5: resolvedor canónico de identidad (employees.id) para time_records.employee_key.
+// Las ingestas lo usan al insertar; las lecturas prefieren employee_key con
+// fallback al matching viejo para registros históricos sin backfill.
+import { loadIdentityResolver, resolveEmployeeKeyForInsert } from '../lib/identity';
 
 /**
  * FEAT-01 — Visibilidad por cartera para Coordinadores.
@@ -112,9 +116,10 @@ function buildInactivityEmail(
 /**
  * Calcula los empleados INACTIVOS reales del tenant autenticado: empleados ACTIVOS
  * (is_active = 1) sin ningún registro de horas, o cuyo último registro es anterior
- * al corte de N días. Matchea horas por employee_id Y por employee_name porque los
- * distintos orígenes (Clockify/Zendesk/manual) guardan uno u otro. Siempre scopeado
- * por company_id del principal (MT-02: tenant-from-principal).
+ * al corte de N días. Matchea horas por employee_key (identidad canónica B5),
+ * y además por employee_id Y por employee_name porque los distintos orígenes
+ * (Clockify/Zendesk/manual) guardan uno u otro en registros aún sin backfill.
+ * Siempre scopeado por company_id del principal (MT-02: tenant-from-principal).
  *
  * Reutilizado por send_inactivity_alerts y get_inactivity_preview para garantizar
  * que la vista previa y el envío usen exactamente la misma lista.
@@ -147,16 +152,17 @@ async function computeInactiveEmployees(
     'SELECT id, name, email FROM employees WHERE company_id = ? AND is_active = 1'
   ).bind(company_id).all();
 
-  // 2. Última fecha con registro por empleado (por id y por nombre).
+  // 2. Última fecha con registro por empleado (por employee_key canónico —
+  //    B5, migración 0022 — y, para registros sin backfill, por id y por nombre).
   const { results: lastRecords } = await db.prepare(
-    'SELECT employee_id, employee_name, MAX(date) as last_date FROM time_records WHERE company_id = ? GROUP BY employee_id, employee_name'
+    'SELECT employee_id, employee_name, employee_key, MAX(date) as last_date FROM time_records WHERE company_id = ? GROUP BY employee_id, employee_name, employee_key'
   ).bind(company_id).all();
 
   const lastByKey: Record<string, string> = {};
   for (const r of (lastRecords || []) as any[]) {
     const d = r.last_date as string;
     if (!d) continue;
-    for (const raw of [r.employee_id, r.employee_name]) {
+    for (const raw of [r.employee_key, r.employee_id, r.employee_name]) {
       if (!raw) continue;
       const k = String(raw).toLowerCase();
       if (!lastByKey[k] || d > lastByKey[k]) lastByKey[k] = d;
@@ -437,6 +443,11 @@ export const TOOL_REGISTRY = {
         if (results.length > 0) project_name = results[0].name;
     }
 
+    // B5: employee_key = employees.id canónico (el employee_id que llega suele
+    // ser ya la ficha, pero igual se resuelve por id/alias/nombre). NULL si no
+    // resuelve — nunca se inventa.
+    const employee_key = await resolveEmployeeKeyForInsert(db, company_id, employee_id, employee_name);
+
     const id = crypto.randomUUID();
     const durationHour = Math.floor(duration_decimal || 0);
     const durationMin = Math.round(((duration_decimal || 0) % 1) * 60);
@@ -444,12 +455,12 @@ export const TOOL_REGISTRY = {
 
     await db.prepare(`
       INSERT INTO time_records (
-        id, company_id, employee_id, employee_name, client_id, client_name,
+        id, company_id, employee_id, employee_name, employee_key, client_id, client_name,
         project_id, project_name, duration_decimal, duration_hours, duration_minutes,
         date, work_type, description, source
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).bind(
-      id, company_id, employee_id, employee_name,
+      id, company_id, employee_id, employee_name, employee_key,
       client_id, client_name, project_id, project_name,
       duration_decimal, durationHour, durationMin,
       recordDate,
@@ -530,12 +541,17 @@ export const TOOL_REGISTRY = {
     const durationHour = Math.floor(duration_decimal || 0);
     const durationMin = Math.round(((duration_decimal || 0) % 1) * 60);
 
+    // B5: todas las filas del lote son del MISMO empleado → se carga el padrón
+    // (employees + aliases) UNA sola vez y se resuelve una sola vez, no por fila.
+    const resolveIdentity = await loadIdentityResolver(db, company_id);
+    const employee_key = resolveIdentity(employee_id, employee_name);
+
     let inserted = 0;
-    
+
     // Iterate over dates using UTC
     for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
       const dayOfWeek = d.getUTCDay();
-      
+
       if (targetDays) {
         if (!targetDays.includes(dayOfWeek)) continue;
       } else {
@@ -547,18 +563,18 @@ export const TOOL_REGISTRY = {
 
       await db.prepare(`
         INSERT INTO time_records (
-          id, company_id, employee_id, employee_name, client_id, client_name,
+          id, company_id, employee_id, employee_name, employee_key, client_id, client_name,
           project_id, project_name, duration_decimal, duration_hours, duration_minutes,
           date, work_type, description, source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        id, company_id, employee_id, employee_name,
+        id, company_id, employee_id, employee_name, employee_key,
         client_id, client_name, project_id, project_name,
         duration_decimal, durationHour, durationMin,
-        currentDateString, 
+        currentDateString,
         work_type || 'project', description || '', 'senda_ai_bulk'
       ).run();
-      
+
       inserted++;
     }
 
@@ -811,8 +827,20 @@ export const TOOL_REGISTRY = {
     // Assume 160h standard month for full time
     const expected_monthly_hours = 160;
 
-    let query = 'SELECT * FROM time_records WHERE company_id = ? AND employee_id = ?';
-    const queryParams: any[] = [company_id, employee_id];
+    // B5: el parámetro puede venir como id de ficha, alias o nombre en cualquier
+    // formato ("emp_admin_1", "monica-aieta", "Mónica Aieta"). Se resuelve a la
+    // identidad canónica con el resolvedor compartido (id exacto → alias → normKey)
+    // en vez de exigir igualdad exacta de employee_id.
+    const resolveIdentity = await loadIdentityResolver(db, company_id);
+    const rawTarget = String(employee_id ?? '');
+    const canonicalId = resolveIdentity(rawTarget, rawTarget);
+
+    // Se traen los registros del MES del tenant y se filtran por identidad en JS:
+    // matchean los registros cuyo employee_key ya es el canónico, los que tienen
+    // el id crudo/canónico exacto y los históricos sin backfill cuya identidad
+    // cruda resuelve al mismo empleado.
+    let query = 'SELECT * FROM time_records WHERE company_id = ?';
+    const queryParams: any[] = [company_id];
 
     if (month) {
       query += ' AND strftime("%Y-%m", date) = ?';
@@ -822,8 +850,19 @@ export const TOOL_REGISTRY = {
       query += ' AND strftime("%Y-%m", date) = strftime("%Y-%m", "now")';
     }
 
-    const { results } = await db.prepare(query).bind(...queryParams).all();
-    
+    const { results: monthRows } = await db.prepare(query).bind(...queryParams).all();
+
+    const results = ((monthRows || []) as any[]).filter((r: any) => {
+      // Match exacto por el parámetro crudo (comportamiento histórico).
+      if (rawTarget && r.employee_id === rawTarget) return true;
+      if (!canonicalId) return false;
+      // Identidad canónica: clave persistida, id crudo canónico o resolución
+      // de la identidad cruda del registro (alias / normKey).
+      if (r.employee_key === canonicalId) return true;
+      if (r.employee_id === canonicalId) return true;
+      return resolveIdentity(r.employee_id || '', r.employee_name || '') === canonicalId;
+    });
+
     const total_hours = results.reduce((acc: number, r: any) => acc + (r.duration_decimal || 0), 0);
     const unique_days = new Set(results.map((r: any) => r.date)).size;
     const avg_per_day = unique_days > 0 ? (total_hours / unique_days).toFixed(1) : 0;
@@ -836,6 +875,9 @@ export const TOOL_REGISTRY = {
     
     return {
       employee_id,
+      // B5: id canónico resuelto (employees.id) o null si el parámetro no matcheó
+      // ninguna ficha por id/alias/nombre.
+      resolved_employee_id: canonicalId,
       month_evaluated: month || 'current',
       total_hours_loaded: total_hours,
       expected_monthly_hours,
@@ -874,6 +916,10 @@ export const TOOL_REGISTRY = {
     // VARIAS fichas de empleado (por identidades duplicadas), y eso DUPLICABA horas
     // e ingresos. Con la subconsulta + LIMIT 1, `FROM time_records` produce
     // exactamente una fila por registro. COALESCE aplica la tarifa default.
+    //
+    // B5: la subconsulta PRIORIZA el match por employee_key (employees.id canónico,
+    // migración 0022) y recién después cae al matching viejo por employee_id /
+    // employee_name, para cubrir registros históricos todavía sin backfill.
     let query = `
       SELECT
         tr.employee_id       AS employee_id,
@@ -885,8 +931,8 @@ export const TOOL_REGISTRY = {
         COALESCE((
           SELECT e.hourly_rate_usd FROM employees e
           WHERE e.company_id = tr.company_id
-            AND (e.id = tr.employee_id OR e.name = tr.employee_name)
-          ORDER BY (e.id = tr.employee_id) DESC
+            AND (e.id = tr.employee_key OR e.id = tr.employee_id OR e.name = tr.employee_name)
+          ORDER BY (e.id = tr.employee_key) DESC, (e.id = tr.employee_id) DESC
           LIMIT 1
         ), ?) AS hourly_rate_usd
       FROM time_records tr
@@ -1011,6 +1057,12 @@ export const TOOL_REGISTRY = {
 
     const sanitizeId = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 
+    // B5: padrón (employees + aliases) cargado UNA vez por sync, no por fila.
+    // Con él se resuelve el employees.id canónico (employee_key) de cada entrada;
+    // si el userName de Clockify no matchea ninguna ficha, queda NULL.
+    const resolveIdentity = await loadIdentityResolver(db, company_id);
+    const empKeyCache: Record<string, string | null> = {};
+
     while (hasMore) {
       const reportRes = await fetch(`${REPORTS_URL}/workspaces/${targetWs.id}/reports/detailed`, {
         method: "POST",
@@ -1040,7 +1092,12 @@ export const TOOL_REGISTRY = {
         
         const employee_name = entry.userName || 'Desconocido';
         if (!empCache[employee_name]) empCache[employee_name] = sanitizeId(employee_name);
-        
+        // B5: employee_key canónico (memoizado por nombre para no re-resolver por fila).
+        if (!(employee_name in empKeyCache)) {
+          empKeyCache[employee_name] = resolveIdentity(empCache[employee_name], employee_name);
+        }
+        const employee_key = empKeyCache[employee_name];
+
         const client_name = entry.clientName || 'Sin Cliente';
         if (!cliCache[client_name]) cliCache[client_name] = sanitizeId(client_name);
         
@@ -1062,12 +1119,12 @@ export const TOOL_REGISTRY = {
           // Usamos INSERT OR IGNORE para no duplicar horas si ya existen
           const res = await db.prepare(`
             INSERT OR IGNORE INTO time_records (
-              id, company_id, employee_id, employee_name, client_id, client_name,
+              id, company_id, employee_id, employee_name, employee_key, client_id, client_name,
               project_id, project_name, duration_decimal, duration_hours, duration_minutes,
               date, work_type, description, source, is_billable
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `).bind(
-            id, company_id, empCache[employee_name], employee_name,
+            id, company_id, empCache[employee_name], employee_name, employee_key,
             cliCache[client_name], client_name, projCache[project_name], project_name,
             duration_decimal, Math.floor(duration_decimal), Math.round((duration_decimal % 1) * 60),
             dateStr, work_type, desc, 'clockify', work_type === 'project' ? 1 : 0
@@ -1674,8 +1731,10 @@ export const TOOL_REGISTRY = {
     // vs "juan-cruz"), por lo que normalizamos (minúsculas, sin acentos, sin
     // separadores) y además resolvemos vía employee_aliases. Sin esto varias
     // personas mostraban 0h en el borrador aunque tuvieran horas cargadas.
+    // B5: se agrega employee_key (identidad canónica) al SELECT/GROUP BY para
+    // que el resolvedor matchee directo por employees.id cuando está seteado.
     const { results: records } = await db.prepare(
-      'SELECT employee_id, employee_name, SUM(duration_decimal) as total_hours FROM time_records WHERE company_id = ? AND date LIKE ? GROUP BY employee_id, employee_name'
+      'SELECT employee_id, employee_name, employee_key, SUM(duration_decimal) as total_hours FROM time_records WHERE company_id = ? AND date LIKE ? GROUP BY employee_id, employee_name, employee_key'
     ).bind(company_id, `${targetMonth}-%`).all();
 
     let aliasRows: any[] = [];

@@ -1,33 +1,20 @@
 /**
  * Filter Panel Component
  * Provides month, client, employee, project and source filtering controls with nested/reactive selections
+ *
+ * B7: el panel consume `useDataStore` DIRECTAMENTE (estado + setters) en vez de
+ * recibir 17+ props espejo desde el Dashboard. Elegimos store-directo porque es
+ * la opción con menos indirection: (a) el panel se usa en un único lugar
+ * (Dashboard), así que no necesita ser genérico vía props; (b) elimina al
+ * Dashboard como intermediario que solo re-empaquetaba estado del store — ese
+ * pasamanos era justamente la fuente del estado espejado y la sincronización
+ * frágil que señaló la auditoría; (c) el panel ya dependía del store
+ * (importaba getRecordSource), o sea que la "independencia" por props era ilusoria.
  */
 
 import React, { useMemo } from 'react'
-import { TimeRecord } from '../types'
-import { getRecordSource } from '../stores/dataStore'
+import { getRecordSource, useDataStore } from '../stores/dataStore'
 import { MultiSelectDropdown } from './MultiSelectDropdown'
-
-interface FilterPanelProps {
-  records: TimeRecord[]
-  selectedMonths: string[]
-  selectedEmployees: string[]
-  selectedClients: string[]
-  selectedProjects: string[]
-  selectedCategories: string[]
-  selectedSources: string[]
-  startDate?: string
-  endDate?: string
-  onMonthsChange: (months: string[]) => void
-  onEmployeesChange: (employees: string[]) => void
-  onClientsChange: (clients: string[]) => void
-  onProjectsChange: (projects: string[]) => void
-  onCategoriesChange: (categories: string[]) => void
-  onSourcesChange: (sources: string[]) => void
-  onStartDateChange?: (date: string) => void
-  onEndDateChange?: (date: string) => void
-  onReset: () => void
-}
 
 const MONTHS_ES = {
   '01': 'Enero',
@@ -58,39 +45,33 @@ const SOURCE_LABELS_ES: Record<string, string> = {
 const getSourceLabel = (source: string): string =>
   SOURCE_LABELS_ES[source] || (source ? source.charAt(0).toUpperCase() + source.slice(1) : 'Manual')
 
-export const FilterPanel: React.FC<FilterPanelProps> = ({
-  records,
-  selectedMonths,
-  selectedEmployees,
-  selectedClients,
-  selectedProjects,
-  selectedCategories,
-  selectedSources,
-  startDate = '',
-  endDate = '',
-  onMonthsChange,
-  onEmployeesChange,
-  onClientsChange,
-  onProjectsChange,
-  onCategoriesChange,
-  onSourcesChange,
-  onStartDateChange,
-  onEndDateChange,
-  onReset,
-}) => {
+export const FilterPanel: React.FC = () => {
+  const { records, filters, setFilters, clearFilters } = useDataStore()
+
+  // Alias locales de LECTURA (no son estado propio): el estado vive en el store.
+  const {
+    months: selectedMonths,
+    employees: selectedEmployees,
+    clients: selectedClients,
+    projects: selectedProjects,
+    workTypes: selectedCategories,
+    sources: selectedSources,
+    dateRangeStart: startDate,
+    dateRangeEnd: endDate,
+  } = filters
+
   // Category toggle helper
   const handleCategoryToggle = (category: string) => {
     const updated = selectedCategories.includes(category)
       ? selectedCategories.filter(c => c !== category)
       : [...selectedCategories, category]
-    onCategoriesChange(updated)
+    setFilters({ workTypes: updated })
   }
 
-  // Date Presets helper
+  // Date Presets helper (una sola llamada a setFilters por preset)
   const applyPreset = (preset: 'thisMonth' | 'last7' | 'last30' | 'clear') => {
     if (preset === 'clear') {
-      if (onStartDateChange) onStartDateChange('')
-      if (onEndDateChange) onEndDateChange('')
+      setFilters({ dateRangeStart: '', dateRangeEnd: '' })
       return
     }
 
@@ -101,26 +82,20 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
     const todayStr = `${yyyy}-${mm}-${dd}`
 
     if (preset === 'thisMonth') {
-      const firstDay = `${yyyy}-${mm}-01`
-      if (onStartDateChange) onStartDateChange(firstDay)
-      if (onEndDateChange) onEndDateChange(todayStr)
+      setFilters({ dateRangeStart: `${yyyy}-${mm}-01`, dateRangeEnd: todayStr })
     } else if (preset === 'last7') {
       const past = new Date(today)
       past.setDate(past.getDate() - 7)
-      const pastStr = past.toISOString().split('T')[0]
-      if (onStartDateChange) onStartDateChange(pastStr)
-      if (onEndDateChange) onEndDateChange(todayStr)
+      setFilters({ dateRangeStart: past.toISOString().split('T')[0], dateRangeEnd: todayStr })
     } else if (preset === 'last30') {
       const past = new Date(today)
       past.setDate(past.getDate() - 30)
-      const pastStr = past.toISOString().split('T')[0]
-      if (onStartDateChange) onStartDateChange(pastStr)
-      if (onEndDateChange) onEndDateChange(todayStr)
+      setFilters({ dateRangeStart: past.toISOString().split('T')[0], dateRangeEnd: todayStr })
     }
   }
 
   // Reactive selection logic for nested selections:
-  
+
   // 1. Available Months: filtered by selected employees, selected clients, selected projects and selected sources
   const availableMonthsOptions = useMemo(() => {
     let filtered = records
@@ -271,7 +246,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
             <input
               type="date"
               value={startDate}
-              onChange={(e) => onStartDateChange && onStartDateChange(e.target.value)}
+              onChange={(e) => setFilters({ dateRangeStart: e.target.value })}
               className="px-2 py-1 bg-white border border-slate-300 rounded text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               title="Fecha Desde"
             />
@@ -279,7 +254,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
             <input
               type="date"
               value={endDate}
-              onChange={(e) => onEndDateChange && onEndDateChange(e.target.value)}
+              onChange={(e) => setFilters({ dateRangeEnd: e.target.value })}
               className="px-2 py-1 bg-white border border-slate-300 rounded text-xs text-slate-700 focus:outline-none focus:ring-1 focus:ring-indigo-500"
               title="Fecha Hasta"
             />
@@ -326,7 +301,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           label="📅 Meses"
           options={availableMonthsOptions}
           selectedValues={selectedMonths}
-          onChange={onMonthsChange}
+          onChange={(months) => setFilters({ months })}
           placeholder="Todos los meses"
         />
 
@@ -335,7 +310,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           label="🏢 Clientes"
           options={availableClientsOptions}
           selectedValues={selectedClients}
-          onChange={onClientsChange}
+          onChange={(clients) => setFilters({ clients })}
           placeholder="Todos los clientes"
           showSearch
         />
@@ -345,7 +320,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           label="👥 Empleados"
           options={availableEmployeesOptions}
           selectedValues={selectedEmployees}
-          onChange={onEmployeesChange}
+          onChange={(employees) => setFilters({ employees })}
           placeholder="Todos los empleados"
           showSearch
         />
@@ -355,7 +330,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           label="📂 Proyectos"
           options={availableProjectsOptions}
           selectedValues={selectedProjects}
-          onChange={onProjectsChange}
+          onChange={(projects) => setFilters({ projects })}
           placeholder="Todos los proyectos"
           showSearch
         />
@@ -365,7 +340,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
           label="🔌 Fuente"
           options={availableSourcesOptions}
           selectedValues={selectedSources}
-          onChange={onSourcesChange}
+          onChange={(sources) => setFilters({ sources })}
           placeholder="Todas las fuentes"
         />
 
@@ -402,7 +377,7 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         <div className="mt-4 pt-4 border-t border-gray-100 flex justify-end">
           <button
             type="button"
-            onClick={onReset}
+            onClick={clearFilters}
             className="px-4 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-xs font-semibold transition flex items-center gap-1.5"
           >
             🔄 Restablecer Filtros

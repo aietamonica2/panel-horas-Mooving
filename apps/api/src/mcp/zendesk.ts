@@ -13,6 +13,8 @@
  *     (no-op graceful).
  */
 
+import { buildIdentityResolver } from '../lib/identity'
+
 export interface ZendeskCredentials {
   subdomain: string
   email: string
@@ -77,6 +79,11 @@ export async function syncZendeskTickets(
   const aliasRes = await db.prepare(`SELECT alias_email, alias_name, employee_id FROM employee_aliases WHERE company_id = ?`).bind(company_id).all()
   const existingAliases = (aliasRes.results || []) as any[]
 
+  // B5: resolvedor canónico construido UNA vez por sync con el padrón ya cargado
+  // (no consulta la DB por fila). Setea time_records.employee_key; si el agente
+  // no matchea ninguna ficha (id sintético zen_user_/zen_agent_), queda NULL.
+  const resolveIdentity = buildIdentityResolver(existingEmployees, existingAliases)
+
   let inserted = 0
   let total_hours = 0
 
@@ -130,15 +137,21 @@ export async function syncZendeskTickets(
       targetEmpName = assigneeName || assigneeEmail || 'Agente Soporte'
     }
 
+    // B5: employee_key canónico. Si los pasos 1–3 ya resolvieron una ficha real,
+    // el resolvedor la confirma por id exacto; si quedó el id sintético, todavía
+    // puede resolver por alias/normKey (p.ej. "Monica Aieta" vs "Mónica Aieta").
+    // NULL si no hay match — nunca se inventa.
+    const employeeKey = resolveIdentity(targetEmpId, targetEmpName, assigneeEmail)
+
     try {
       await db.prepare(`
         INSERT OR IGNORE INTO time_records (
-          id, company_id, employee_id, employee_name, client_id, client_name,
+          id, company_id, employee_id, employee_name, employee_key, client_id, client_name,
           project_id, project_name, duration_decimal, duration_hours, duration_minutes,
           date, work_type, description, source
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        id, company_id, targetEmpId, targetEmpName,
+        id, company_id, targetEmpId, targetEmpName, employeeKey,
         'cli_varios', 'Varios', 'proj_support', 'Soporte Técnico',
         duration, Math.floor(duration), Math.round((duration % 1) * 60),
         dateStr, 'other', desc, 'zendesk'

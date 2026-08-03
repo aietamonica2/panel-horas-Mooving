@@ -104,34 +104,33 @@ export async function loadTemplate(
   return { subject: def.subject, body: def.body, is_default: true };
 }
 
-/**
- * Normaliza un identificador de persona: minúsculas, sin acentos y sin
- * separadores (punto, espacio, guion, guion bajo, arroba). Así "juan.cruz",
- * "juan-cruz", "Juan Cruz" y "JUANCRUZ" colapsan al mismo valor.
- */
-export function normKey(s: string): string {
-  return (s || '')
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
-    .replace(/[.\s_@-]+/g, '');
-}
+// B5: normKey vive ahora en el módulo compartido de identidad (lib/identity.ts),
+// junto al resolvedor canónico. Se RE-EXPORTA desde acá para no romper los
+// imports existentes de este archivo.
+import { normKey } from '../lib/identity';
+export { normKey } from '../lib/identity';
 
 /**
  * Construye un resolvedor robusto de horas mensuales por empleado. Los registros
  * de Clockify/Zendesk suelen quedar bajo un identificador con otro formato que la
- * ficha del empleado, por lo que el match contempla: id exacto, nombre/id
- * normalizado, local-part del email, y resolución vía employee_aliases.
+ * ficha del empleado, por lo que el match contempla: employee_key canónico (B5,
+ * si la fila lo trae), id exacto, nombre/id normalizado, local-part del email, y
+ * resolución vía employee_aliases.
  *
  * Compartido por get_email_reminder_drafts (envío manual) y el cron mensual, para
  * que ambos caminos calculen las horas idéntico y nadie reciba "0h" teniendo horas.
  *
- * @param monthRecords filas {employee_id, employee_name, total_hours} del mes.
+ * @param monthRecords filas {employee_id, employee_name, employee_key?, total_hours} del mes.
  * @param aliasRows    filas {alias_email, alias_name, employee_id}.
  * @returns (emp {id,name,email}) => total de horas del mes para ese empleado.
  */
 export function buildEmployeeHoursResolver(
-  monthRecords: Array<{ employee_id?: string; employee_name?: string; total_hours?: number }>,
+  monthRecords: Array<{
+    employee_id?: string;
+    employee_name?: string;
+    employee_key?: string | null;
+    total_hours?: number;
+  }>,
   aliasRows: Array<{ alias_email?: string; alias_name?: string; employee_id?: string }>
 ): (emp: { id?: string; name?: string; email?: string }) => number {
   const aliasToEmp: Record<string, string> = {};
@@ -149,6 +148,9 @@ export function buildEmployeeHoursResolver(
       const rNameNorm = normKey(r.employee_name || '');
       const canonical = aliasToEmp[rIdNorm] || aliasToEmp[rNameNorm];
       const matches =
+        // B5: match directo por la clave canónica persistida (employee_key),
+        // cuando la fila agregada la trae (registros ya backfilleados/ingestas nuevas).
+        (!!r.employee_key && r.employee_key === emp.id) ||
         (!!r.employee_id && r.employee_id === emp.id) ||
         rNameNorm === empNorm || rIdNorm === empNorm ||
         (!!emailLocal && (rNameNorm === emailLocal || rIdNorm === emailLocal)) ||

@@ -9,6 +9,8 @@ import { z } from 'zod'
 import { HonoContext, ApiResponse, TimeRecordPayload } from '../types'
 import { validateTimeRecord } from '../lib/policyValidation'
 import { logAudit, actorFromAuth } from '../lib/audit'
+// B5: resolvedor canónico de identidad → time_records.employee_key (migración 0022).
+import { loadIdentityResolver, resolveEmployeeKeyForInsert } from '../lib/identity'
 // B1: la versión sale SIEMPRE de src/version.ts (única fuente de verdad,
 // en sync con /VERSION en la raíz del repo).
 import { APP_VERSION } from '../version'
@@ -71,6 +73,9 @@ dataRouter.post(
       const warnings: Array<{ index: number; warnings: string[] }> = []
       let inserted = 0
 
+      // B5: padrón (employees + aliases) cargado UNA vez por upload, no por fila.
+      const resolveIdentity = await loadIdentityResolver(c.env.DB, company_id)
+
       for (let index = 0; index < data.records.length; index++) {
         const record = data.records[index]
 
@@ -83,16 +88,19 @@ dataRouter.post(
           warnings.push({ index, warnings: validation.warnings })
         }
 
+        // B5: employees.id canónico (id exacto → alias → normKey); NULL si no resuelve.
+        const employeeKey = resolveIdentity(record.employee_id, record.employee_name)
+
         // DATA-06: persist billable flag, USD rate/amount and approval status.
         const id = crypto.randomUUID()
         await c.env.DB.prepare(`
           INSERT INTO time_records (
-            id, company_id, employee_id, employee_name, client_id, client_name,
+            id, company_id, employee_id, employee_name, employee_key, client_id, client_name,
             project_id, project_name, duration_decimal, duration_hours, duration_minutes,
             date, work_type, description, is_billable, rate_usd, amount_usd, status, source
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).bind(
-          id, company_id, record.employee_id, record.employee_name,
+          id, company_id, record.employee_id, record.employee_name, employeeKey,
           record.client_id, record.client_name, record.project_id, record.project_name,
           record.duration_decimal, Math.floor(record.duration_decimal),
           Math.round((record.duration_decimal % 1) * 60),
@@ -152,15 +160,21 @@ dataRouter.post(
 
       const id = crypto.randomUUID()
 
+      // B5: employee_key = employees.id canónico (el employee_id que llega suele ser
+      // ya la ficha; igual se resuelve por id/alias/nombre). NULL si no resuelve.
+      const employeeKey = await resolveEmployeeKeyForInsert(
+        c.env.DB, company_id, data.employee_id, data.employee_name
+      )
+
       // DATA-06: persist billable flag, USD rate/amount and approval status.
       await c.env.DB.prepare(`
         INSERT INTO time_records (
-          id, company_id, employee_id, employee_name, client_id, client_name, project_id, project_name,
+          id, company_id, employee_id, employee_name, employee_key, client_id, client_name, project_id, project_name,
           duration_decimal, duration_hours, duration_minutes, date, work_type, description, source,
           is_billable, rate_usd, amount_usd, status
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).bind(
-        id, company_id, data.employee_id, data.employee_name, data.client_id, data.client_name, data.project_id, data.project_name,
+        id, company_id, data.employee_id, data.employee_name, employeeKey, data.client_id, data.client_name, data.project_id, data.project_name,
         data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || '', data.source || 'manual',
         resolveIsBillable(data), data.rate_usd ?? 0, data.amount_usd ?? 0, data.status ?? 'approved'
       ).run()
@@ -253,15 +267,21 @@ dataRouter.put(
         return c.json({ success: false, error: 'No tienes permisos para editar' }, 403)
       }
 
+      // B5: re-resolver employee_key por si la edición cambió el empleado del
+      // registro (id exacto → alias → normKey; NULL si no resuelve).
+      const employeeKey = await resolveEmployeeKeyForInsert(
+        c.env.DB, company_id, data.employee_id, data.employee_name
+      )
+
       // U7: recomputar is_billable según el (posiblemente nuevo) work_type, para
       // que reclasificar de proyecto a interno deje de contar como facturable.
       await c.env.DB.prepare(`
         UPDATE time_records SET
-          employee_id = ?, employee_name = ?, client_id = ?, client_name = ?, project_id = ?, project_name = ?,
+          employee_id = ?, employee_name = ?, employee_key = ?, client_id = ?, client_name = ?, project_id = ?, project_name = ?,
           duration_decimal = ?, duration_hours = ?, duration_minutes = ?, date = ?, work_type = ?, description = ?, is_billable = ?
         WHERE id = ? AND company_id = ?
       `).bind(
-        data.employee_id, data.employee_name, data.client_id, data.client_name, data.project_id, data.project_name,
+        data.employee_id, data.employee_name, employeeKey, data.client_id, data.client_name, data.project_id, data.project_name,
         data.duration_decimal, Math.floor(data.duration_decimal), Math.round((data.duration_decimal % 1) * 60), data.date, data.work_type, data.description || '', resolveIsBillable(data),
         id, company_id
       ).run()
